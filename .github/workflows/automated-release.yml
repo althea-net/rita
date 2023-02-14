@@ -1,0 +1,130 @@
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - "Beta*" # Push events to matching Beta* eg Beta20rc11
+
+name: Automated release build
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build and upload release assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Cross
+        run: |
+          cargo install cross
+
+      - name: Build release binary rita x86_64 musl
+        run: |
+          cargo clean
+          cross build --target x86_64-unknown-linux-musl --release --all --bin rita
+
+      # now that the code has built create the release and start uploading
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload rita client x86_64
+        id: upload-rita-client-x86
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/x86_64-unknown-linux-musl/release/rita
+          asset_name: rita-${{ github.ref }}-x86_64
+          asset_content_type: application/bin
+
+      - name: Build release binary rita MIPS musl
+        run: |
+          cargo clean
+          cross build --target mips-unknown-linux-musl --release --all --bin rita
+
+      - name: Upload rita client MIPS musl
+        id: upload-rita-client-mips
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/mips-unknown-linux-musl/release/rita
+          asset_name: rita-${{ github.ref }}-mips
+          asset_content_type: application/bin
+
+      - name: Build release binary rita MIPSEL musl
+        run: |
+          cargo clean
+          cross build --target mipsel-unknown-linux-musl --release --all --bin rita
+
+      - name: Upload rita client MIPSEL musl
+        id: upload-rita-client-mipsel
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/mipsel-unknown-linux-musl/release/rita
+          asset_name: rita-${{ github.ref }}-mipsel
+          asset_content_type: application/bin
+
+      - name: Build release binary rita ARMv7 musl
+        run: |
+          cargo clean
+          cross build --target armv7-unknown-linux-musleabihf --release --all --bin rita
+
+      - name: Upload rita client ARMv7 musl
+        id: upload-rita-client-armv7
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/armv7-unknown-linux-musleabihf/release/rita
+          asset_name: rita-${{ github.ref }}-armv7
+          asset_content_type: application/bin
+
+      - name: Build release binary rita ARM64 musl
+        run: |
+          cargo clean
+          cross build --target aarch64-unknown-linux-musl --release --all --bin rita
+
+      - name: Upload rita client ARM64 musl
+        id: upload-rita-client-arm64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/aarch64-unknown-linux-musl/release/rita
+          asset_name: rita-${{ github.ref }}-armv64
+          asset_content_type: application/bin
+
+      - name: Build release binary for Rita exit
+        run: |
+          cargo clean
+          cargo build --release --all --bin rita_exit
+
+      - name: Upload rita exit gnu
+        id: upload-rita-exit-x86_64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/release/rita_exit
+          asset_name: rita-exit-${{ github.ref }}-x86_64
+          asset_content_type: application/bin
