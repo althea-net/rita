@@ -94,10 +94,10 @@ pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), I
 fn write_all_spinlock_internal(
     stream: &mut TcpStream,
     buffer: &[u8],
-    depth: u8,
+    depth: usize,
 ) -> Result<(), IoError> {
     assert!(!buffer.is_empty());
-    if depth > 100 {
+    if depth > 1_000_000 {
         return Err(IoError::new(
             std::io::ErrorKind::WriteZero,
             AntennaForwardingError::SpaceAllocationError,
