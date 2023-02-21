@@ -153,7 +153,7 @@ fn main() {
 
     // Setup database for ipv6
     if let Err(e) = initialize_exisitng_clients_ipv6() {
-        panic!("Unable to run database initialization with {:?}", e);
+        error!("Unable to run database initialization with {:?}", e);
     }
 
     let system = actix_async::System::new();
