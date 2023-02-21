@@ -7,7 +7,7 @@ use althea_kernel_interface::KernelInterfaceError;
 use oping::PingError;
 
 #[derive(Debug)]
-pub enum AntennaForwardingError {
+pub enum AntennaForwardingClientError {
     IPSetupError,
     AntennaNotFound,
     IPNotSupported,
@@ -16,28 +16,28 @@ pub enum AntennaForwardingError {
     PingError(PingError),
 }
 
-impl From<KernelInterfaceError> for AntennaForwardingError {
+impl From<KernelInterfaceError> for AntennaForwardingClientError {
     fn from(error: KernelInterfaceError) -> Self {
-        AntennaForwardingError::KernelInterfaceError(error)
+        AntennaForwardingClientError::KernelInterfaceError(error)
     }
 }
-impl From<PingError> for AntennaForwardingError {
+impl From<PingError> for AntennaForwardingClientError {
     fn from(error: PingError) -> Self {
-        AntennaForwardingError::PingError(error)
+        AntennaForwardingClientError::PingError(error)
     }
 }
 
-impl Display for AntennaForwardingError {
+impl Display for AntennaForwardingClientError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            AntennaForwardingError::IPSetupError => write!(f, "IP setup failed",),
-            AntennaForwardingError::AntennaNotFound => write!(f, "Failed to find Antenna!",),
-            AntennaForwardingError::IPNotSupported => write!(f, "Not supported!",),
-            AntennaForwardingError::BlacklistedAddress => write!(f, "Blacklisted address!",),
-            AntennaForwardingError::KernelInterfaceError(e) => write!(f, "{e}"),
-            AntennaForwardingError::PingError(e) => write!(f, "{e}"),
+            AntennaForwardingClientError::IPSetupError => write!(f, "IP setup failed",),
+            AntennaForwardingClientError::AntennaNotFound => write!(f, "Failed to find Antenna!",),
+            AntennaForwardingClientError::IPNotSupported => write!(f, "Not supported!",),
+            AntennaForwardingClientError::BlacklistedAddress => write!(f, "Blacklisted address!",),
+            AntennaForwardingClientError::KernelInterfaceError(e) => write!(f, "{e}"),
+            AntennaForwardingClientError::PingError(e) => write!(f, "{e}"),
         }
     }
 }
 
-impl Error for AntennaForwardingError {}
+impl Error for AntennaForwardingClientError {}

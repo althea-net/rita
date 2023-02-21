@@ -6,10 +6,13 @@ use std::{
 use crate::{ForwardingProtocolError, ForwardingProtocolMessage};
 
 #[derive(Debug)]
-pub enum AntennaForwardingError {
+pub enum AntennaForwardingProtocolError {
     SpaceAllocationError,
     ConnectionDownError,
-    EndNotFoundError,
+    EndNotFoundError {
+        messages: Vec<ForwardingProtocolMessage>,
+        remaining_bytes: Vec<u8>,
+    },
     DoubleReadFailure {
         a: ForwardingProtocolError,
         b: ForwardingProtocolError,
@@ -22,27 +25,27 @@ pub enum AntennaForwardingError {
     MessageWriteError(std::io::Error),
 }
 
-impl From<std::io::Error> for AntennaForwardingError {
+impl From<std::io::Error> for AntennaForwardingProtocolError {
     fn from(error: std::io::Error) -> Self {
-        AntennaForwardingError::MessageWriteError(error)
+        AntennaForwardingProtocolError::MessageWriteError(error)
     }
 }
 
-impl Display for AntennaForwardingError {
+impl Display for AntennaForwardingProtocolError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            AntennaForwardingError::SpaceAllocationError => {
+            AntennaForwardingProtocolError::SpaceAllocationError => {
                 write!(f, "Operating system won't allocate buffer space",)
             }
-            AntennaForwardingError::ConnectionDownError => write!(f, "Probably a dead connection",),
-            AntennaForwardingError::EndNotFoundError => {
+            AntennaForwardingProtocolError::ConnectionDownError => write!(f, "Probably a dead connection",),
+            AntennaForwardingProtocolError::EndNotFoundError { .. } => {
                 write!(f, "Never found the end of the message",)
             }
-            AntennaForwardingError::DoubleReadFailure { a, b } => {
+            AntennaForwardingProtocolError::DoubleReadFailure { a, b } => {
                 write!(f, "Double read failure {a:?} {b:?}")
             }
-            AntennaForwardingError::ImpossibleError => write!(f, "Impossible error",),
-            AntennaForwardingError::UnparsedBytesError {
+            AntennaForwardingProtocolError::ImpossibleError => write!(f, "Impossible error",),
+            AntennaForwardingProtocolError::UnparsedBytesError {
                 messages,
                 remaining_bytes,
             } => {
@@ -51,9 +54,9 @@ impl Display for AntennaForwardingError {
                     "Unparsed bytes! Messages {messages:#X?} Remaining bytes {remaining_bytes:#X?}"
                 )
             }
-            AntennaForwardingError::MessageWriteError(e) => write!(f, "{e}"),
+            AntennaForwardingProtocolError::MessageWriteError(e) => write!(f, "{e}"),
         }
     }
 }
 
-impl Error for AntennaForwardingError {}
+impl Error for AntennaForwardingProtocolError {}

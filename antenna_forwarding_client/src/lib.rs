@@ -11,6 +11,7 @@ use althea_kernel_interface::KernelInterface;
 use althea_kernel_interface::LinuxCommandRunner;
 use althea_types::Identity;
 use althea_types::WgKey;
+use antenna_forwarding_protocol::AntennaForwardingProtocolError;
 use antenna_forwarding_protocol::process_streams;
 use antenna_forwarding_protocol::write_all_spinlock;
 use antenna_forwarding_protocol::ExternalStream;
@@ -32,7 +33,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 mod error;
-pub use error::AntennaForwardingError;
+pub use error::AntennaForwardingClientError;
 
 lazy_static! {
     pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
@@ -243,10 +244,11 @@ fn forward_connections(
     server_stream: TcpStream,
     first_round_input: &[ForwardingProtocolMessage],
 ) {
-    trace!("Forwarding connections!");
+    info!("Forwarding connections!");
     let mut server_stream = server_stream;
     let mut streams: HashMap<u64, ExternalStream> = HashMap::new();
     let mut last_message = Instant::now();
+    let mut remaining_bytes = Vec::new();
     process_messages(
         first_round_input,
         &mut streams,
@@ -255,28 +257,91 @@ fn forward_connections(
         antenna_sockaddr,
     );
 
-    while let Ok(vec) = ForwardingProtocolMessage::read_messages(&mut server_stream) {
-        if !vec.is_empty() {
-            trace!("In forwarding loop! got {} messages", vec.len());
-        }
-        process_streams(&mut streams, &mut server_stream);
-        let should_shutdown = process_messages(
-            &vec,
-            &mut streams,
+    info!("About to enter forwarding connections loop");
+    loop {
+        match ForwardingProtocolMessage::read_messages_internal(
             &mut server_stream,
-            &mut last_message,
-            antenna_sockaddr,
-        );
-        if should_shutdown {
-            break;
-        }
+            remaining_bytes.clone(),
+            Vec::new(),
+            0,
+            None,
+        ) {
+            Ok(vec) => {
+                // reset remaining bytes on success
+                remaining_bytes = Vec::new();
 
-        if Instant::now() - last_message > FORWARD_TIMEOUT {
-            error!("Fowarding session timed out!");
-            break;
+                if !vec.is_empty() {
+                    trace!("In forwarding loop! got {} messages", vec.len());
+                }
+                process_streams(&mut streams, &mut server_stream);
+                let should_shutdown = process_messages(
+                    &vec,
+                    &mut streams,
+                    &mut server_stream,
+                    &mut last_message,
+                    antenna_sockaddr,
+                );
+                if should_shutdown {
+                    error!("Got shutdown in good case");
+                    break;
+                }
+
+                if Instant::now() - last_message > FORWARD_TIMEOUT {
+                    error!("Fowarding session timed out!");
+                    break;
+                }
+            }
+            Err(AntennaForwardingProtocolError::EndNotFoundError {
+                messages,
+                remaining_bytes: local_remaining,
+            }) => {
+                info!("Forward setting up");
+                remaining_bytes = local_remaining;
+                process_streams(&mut streams, &mut server_stream);
+                let should_shutdown = process_messages(
+                    &messages,
+                    &mut streams,
+                    &mut server_stream,
+                    &mut last_message,
+                    antenna_sockaddr,
+                );
+                if should_shutdown {
+                    error!("Got shutdown in try again case");
+                    break;
+                }
+
+                if Instant::now() - last_message > FORWARD_TIMEOUT {
+                    error!("Fowarding session timed out!");
+                    break;
+                }
+            }
+            Err(_e) => {
+                info!("Forward with other error");
+                remaining_bytes = Vec::new();
+                
+                // process what we can in the error case
+                process_streams(&mut streams, &mut server_stream);
+                let should_shutdown = process_messages(
+                    &Vec::new(),
+                    &mut streams,
+                    &mut server_stream,
+                    &mut last_message,
+                    antenna_sockaddr,
+                );
+                if should_shutdown {
+                    error!("Got shutdown in other error case");
+                    break;
+                }
+
+                if Instant::now() - last_message > FORWARD_TIMEOUT {
+                    error!("Fowarding session timed out!");
+                    break;
+                }
+            }
         }
         thread::sleep(SPINLOCK_TIME);
     }
+    info!("Leaving forward connections loop!")
 }
 
 /// handles the setup of networking to the selected antenna, including finding it and the like
@@ -285,7 +350,7 @@ fn setup_networking<S: ::std::hash::BuildHasher>(
     antenna_ip: IpAddr,
     antenna_port: u16,
     interfaces: &HashSet<String, S>,
-) -> Result<SocketAddr, AntennaForwardingError> {
+) -> Result<SocketAddr, AntennaForwardingClientError> {
     match find_antenna(antenna_ip, interfaces) {
         Ok(_iface) => {}
         Err(e) => {
@@ -303,7 +368,7 @@ fn setup_networking<S: ::std::hash::BuildHasher>(
 fn find_antenna<S: ::std::hash::BuildHasher>(
     target_ip: IpAddr,
     interfaces: &HashSet<String, S>,
-) -> Result<String, AntennaForwardingError> {
+) -> Result<String, AntennaForwardingClientError> {
     check_blacklist(target_ip)?;
     let our_ip = get_local_ip(target_ip)?;
     for iface in interfaces {
@@ -351,7 +416,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
                 if let Some(code) = r.status.code() {
                     if code == 512 {
                         error!("Failed to add route");
-                        return Err(AntennaForwardingError::IPSetupError);
+                        return Err(AntennaForwardingClientError::IPSetupError);
                     }
                 }
                 trace!("added route with {:?}", r);
@@ -378,12 +443,12 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
             }
         }
     }
-    Err(AntennaForwardingError::AntennaNotFound)
+    Err(AntennaForwardingClientError::AntennaNotFound)
 }
 
 /// Generates a random non overlapping ip within a /24 subnet of the provided
 /// target antenna ip.
-fn get_local_ip(target_ip: IpAddr) -> Result<IpAddr, AntennaForwardingError> {
+fn get_local_ip(target_ip: IpAddr) -> Result<IpAddr, AntennaForwardingClientError> {
     match target_ip {
         IpAddr::V4(address) => {
             let mut rng = rand::thread_rng();
@@ -399,7 +464,7 @@ fn get_local_ip(target_ip: IpAddr) -> Result<IpAddr, AntennaForwardingError> {
             Ok(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]).into())
         }
         //IpAddr::V6(_address) => Err(format_err!("Not supported!")),
-        IpAddr::V6(_address) => Err(AntennaForwardingError::IPNotSupported),
+        IpAddr::V6(_address) => Err(AntennaForwardingClientError::IPNotSupported),
     }
 }
 
@@ -407,12 +472,12 @@ const IP_BLACKLIST: [Ipv4Addr; 2] = [Ipv4Addr::new(192, 168, 10, 0), Ipv4Addr::n
 
 /// Checks the forwarding ip blacklist, these are ip's that we don't
 /// want the forwarding client working on
-fn check_blacklist(ip: IpAddr) -> Result<(), AntennaForwardingError> {
+fn check_blacklist(ip: IpAddr) -> Result<(), AntennaForwardingClientError> {
     match ip {
         IpAddr::V4(address) => {
             for ip in IP_BLACKLIST.iter() {
                 if compare_ipv4_octets(*ip, address) {
-                    return Err(AntennaForwardingError::BlacklistedAddress);
+                    return Err(AntennaForwardingClientError::BlacklistedAddress);
                 }
             }
             Ok(())
@@ -434,7 +499,7 @@ fn send_error_message(server_stream: &mut TcpStream, message: String) {
     let _res = server_stream.shutdown(Shutdown::Both);
 }
 
-fn cleanup_interface(iface: &str) -> Result<(), AntennaForwardingError> {
+fn cleanup_interface(iface: &str) -> Result<(), AntennaForwardingClientError> {
     let values = KI.get_ip_from_iface(iface)?;
     for (ip, netmask) in values {
         // we only clean up very specific routes, this doesn't prevent us from causing problems
