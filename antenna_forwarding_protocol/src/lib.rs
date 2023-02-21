@@ -105,6 +105,7 @@ fn write_all_spinlock_internal(
     }
 
     stream.set_nonblocking(true)?;
+    stream.set_nodelay(true)?;
     let res = stream.write(buffer);
     match res {
         Ok(bytes) => {
