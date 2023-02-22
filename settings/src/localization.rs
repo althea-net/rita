@@ -1,9 +1,5 @@
 use phonenumber::PhoneNumber;
 
-fn default_wyre_enabled() -> bool {
-    false
-}
-
 fn default_display_currency_symbol() -> bool {
     true
 }
@@ -14,10 +10,6 @@ fn default_support_number() -> PhoneNumber {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct LocalizationSettings {
-    /// A flag indicating whether or not the dashboard should give users the option to purchase
-    /// cryptocurrency through Wyre as part of the funding flow.
-    #[serde(default = "default_wyre_enabled")]
-    pub wyre_enabled: bool,
     /// If we should display the $ symbol or just the DAI star symbol next
     /// to the balance, designed to help manage how prominently we want the cryptocurrency
     /// aspect of Althea to be displayed to the user.
@@ -33,7 +25,6 @@ pub struct LocalizationSettings {
 impl Default for LocalizationSettings {
     fn default() -> LocalizationSettings {
         LocalizationSettings {
-            wyre_enabled: default_wyre_enabled(),
             display_currency_symbol: default_display_currency_symbol(),
             support_number: default_support_number(),
         }

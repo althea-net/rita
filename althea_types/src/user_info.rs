@@ -1,5 +1,3 @@
-use crate::{ContactType, Identity};
-use clarity::Address;
 use std::net::Ipv4Addr;
 use std::time::SystemTime;
 
@@ -62,25 +60,4 @@ pub struct InstallationDetails {
     /// Time of install, this is set by the operator tools when it accepts
     /// the value because the router system clocks may be problematic.
     pub install_date: Option<SystemTime>,
-}
-
-/// This struct carries info to the operator tools
-/// to perform the registration request
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WyreReservationRequestCarrier {
-    /// the actual amount the user is requesting to deposit
-    pub amount: f32,
-    /// The address to deposit to, this is being replaced in Beta 17
-    /// to provide a full identity for easier router lookup
-    pub address: Option<Address>,
-    /// The id of the requesting router, only provided in Beta 17 and later
-    pub id: Option<Identity>,
-    pub contact_info: ContactType,
-    pub billing_details: BillingDetails,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WyreReservationResponse {
-    pub url: String,
-    pub reservation: String,
 }
