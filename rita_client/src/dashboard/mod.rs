@@ -188,7 +188,6 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                     )
                     .route("/wipe", web::post().to(wipe))
                     .route("/localization", web::get().to(get_localization))
-                    .route("/wyre_reservation", web::post().to(get_wyre_reservation))
                     .route(
                         "/installation_details",
                         web::post().to(set_installation_details),
