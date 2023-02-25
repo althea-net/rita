@@ -572,7 +572,7 @@ fn check_billing_update(current: Option<BillingDetails>, incoming: Option<Billin
 /// Merges an arbitrary settings string, after first filtering for several
 /// forbidden values
 fn merge_settings_safely(client_settings: &mut RitaClientSettings, new_settings: Value) {
-    trace!("Got new settings from server {:?}", new_settings);
+    info!("Got new settings from Op Tools {:?}", new_settings);
     // merge in arbitrary setting change string if it's not blank
     if new_settings != "" {
         if let Value::Object(map) = new_settings.clone() {
