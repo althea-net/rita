@@ -523,6 +523,44 @@ pub enum OperatorAction {
     },
 }
 
+impl Display for OperatorAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OperatorAction::ResetRouterPassword => write!(f, "Reset Router Password"),
+            OperatorAction::ResetWiFiPassword => write!(f, "Reset Wifi Password"),
+            OperatorAction::ResetShaper => write!(f, "Reset Traffic Shaper"),
+            OperatorAction::Reboot => write!(f, "Reboot"),
+            OperatorAction::UpdateV2 { instruction } => {
+                let upgrade = match instruction {
+                    UpdateType::Sysupgrade(_) => "Sysupgrade",
+                    UpdateType::Opkg(_) => "Opkg",
+                };
+                write!(f, "Update via {upgrade}")
+            }
+            OperatorAction::Update { instruction } => {
+                let upgrade = match instruction {
+                    UpdateTypeLegacy::Sysupgrade(_) => "Sysupgrade",
+                    UpdateTypeLegacy::Opkg(_) => "Opkg",
+                };
+                write!(f, "Update via {upgrade}")
+            }
+            OperatorAction::ChangeOperatorAddress { new_address } => {
+                let addr = match new_address {
+                    Some(a) => a.to_string(),
+                    None => "None".to_string(),
+                };
+                write!(f, "Change Operator Address to {addr}")
+            }
+            OperatorAction::SetMinGas { new_min_gas } => write!(f, "Set Min Gas to {new_min_gas}"),
+            OperatorAction::UpdateAuthorizedKeys {
+                add_list,
+                drop_list: _,
+            } => write!(f, "Update Authorized Keys with {add_list:?}"),
+            OperatorAction::SetWifi { token } => write!(f, "Set Wifi to {token:?}"),
+        }
+    }
+}
+
 /// Operator update that we get from the operator server during our checkin
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorUpdateMessage {
