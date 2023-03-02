@@ -97,8 +97,8 @@ pub async fn process_withdraws(bridge: &TokenBridgeCore) -> bool {
 /// We then rescue any stuck dai and send any eth that we have over to the xdai chain.
 pub async fn xdai_bridge(bridge: TokenBridgeCore) {
     let (our_dai_balance, our_usdc_balance, our_usdt_balance) = join3(
-        bridge.get_usdc_balance(),
         bridge.get_dai_balance(),
+        bridge.get_usdc_balance(),
         bridge.get_usdt_balance(),
     )
     .await;
@@ -129,6 +129,10 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
         return;
     }
 
+    info!(
+        "Our USDC balance is {} Our USDT balance is {} Minimum to convert is {}",
+        our_usdc_balance, our_usdt_balance, MINIMUM_USDC_TO_CONVERT
+    );
     let mut token_to_swap = None;
     if our_usdc_balance >= MINIMUM_USDC_TO_CONVERT.into() {
         token_to_swap = Some(*USDC_CONTRACT_ADDRESS);
@@ -144,7 +148,7 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
                 token,
                 *DAI_CONTRACT_ADDRESS,
                 None,
-                our_dai_balance,
+                our_dai_balance.clone(),
                 None,
                 None,
                 None,
@@ -159,9 +163,12 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
             res
         );
         detailed_state_change(DetailedBridgeState::Swap);
-        return;
     }
 
+    info!(
+        "Our dai balance {} minimum dai to send {}",
+        our_dai_balance, MINIMUM_DAI_TO_SEND
+    );
     if our_dai_balance >= MINIMUM_DAI_TO_SEND.into() {
         // transfer dai exchanged from eth during previous iterations
         let res = transfer_dai(bridge.clone(), our_dai_balance).await;

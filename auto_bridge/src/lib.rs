@@ -24,7 +24,7 @@ pub static UNISWAP_GAS_LIMIT: u128 = 150_000;
 pub static ERC20_GAS_LIMIT: u128 = 40_000;
 pub static XDAI_FUNDS_UNLOCK_GAS: u128 = 180_000;
 /// Minimum transfer is $5 dai which has 18 decimal precision
-pub static MINIMUM_DAI_TO_SEND: u128 = 10_000_000_000_000_000_000;
+pub static MINIMUM_DAI_TO_SEND: u128 = 2_000_000_000_000_000_000;
 /// Minimum transfer is $15 USDC which has 6 decimal precision
 pub static MINIMUM_USDC_TO_CONVERT: u128 = 15_000_000;
 
