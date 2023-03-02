@@ -134,13 +134,16 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
         our_usdc_balance, our_usdt_balance, MINIMUM_USDC_TO_CONVERT
     );
     let mut token_to_swap = None;
+    let mut token_amount = None;
     if our_usdc_balance >= MINIMUM_USDC_TO_CONVERT.into() {
         token_to_swap = Some(*USDC_CONTRACT_ADDRESS);
+        token_amount = Some(our_usdc_balance);
     } else if our_usdt_balance >= MINIMUM_USDC_TO_CONVERT.into() {
         token_to_swap = Some(get_usdt_address());
+        token_amount = Some(our_usdt_balance);
     }
 
-    if let Some(token) = token_to_swap {
+    if let (Some(token), Some(token_amount)) = (token_to_swap, token_amount) {
         let res = bridge
             .eth_web3
             .swap_uniswap_v3(
@@ -148,7 +151,7 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
                 token,
                 *DAI_CONTRACT_ADDRESS,
                 None,
-                our_dai_balance.clone(),
+                token_amount,
                 None,
                 None,
                 None,
@@ -159,8 +162,7 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
             .await;
         info!(
             "Swap from {} to dai on uniswap returned with {:?}",
-            get_usdt_address(),
-            res
+            token, res
         );
         detailed_state_change(DetailedBridgeState::Swap);
     }
