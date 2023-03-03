@@ -103,14 +103,12 @@ pub struct Tunnel {
     /// many or may not actually be set depending on if the host supports codel although
     /// all routers do only exits are in question
     pub speed_limit: Option<usize>,
-    /// If true this tunnel is for a light client and is working over ipv4 endpoints
-    pub light_client_details: Option<Ipv4Addr>,
     payment_state: PaymentState,
 }
 
 impl Display for Tunnel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Tunnel: IP: {} IFACE_NAME: {} IFIDX: {}, PORT: {} WG: {} ETH: {} MESH_IP: {} LAST_SEEN {}, SPEED_LIMIT {:?}, LC {:?}, PAYMENT_STATE: {:?}" , 
+        write!(f, "Tunnel: IP: {} IFACE_NAME: {} IFIDX: {}, PORT: {} WG: {} ETH: {} MESH_IP: {} LAST_SEEN {}, SPEED_LIMIT {:?}, PAYMENT_STATE: {:?}" , 
         self.ip,
         self.iface_name,
         self.listen_ifidx,
@@ -120,7 +118,6 @@ impl Display for Tunnel {
         self.neigh_id.global.mesh_ip,
         (Instant::now() - self.last_contact).as_secs(),
         self.speed_limit,
-        self.light_client_details,
         self.payment_state)
     }
 }
@@ -131,7 +128,6 @@ impl Tunnel {
         our_listen_port: u16,
         ifidx: u32,
         neigh_id: LocalIdentity,
-        light_client_details: Option<Ipv4Addr>,
     ) -> Result<Tunnel, RitaCommonError> {
         let speed_limit = None;
         let iface_name = KI.setup_wg_if()?;
@@ -153,7 +149,6 @@ impl Tunnel {
             own_ip_v2: network.mesh_ip_v2,
             external_nic: network.external_nic.clone(),
             settings_default_route: &mut network.last_default_route,
-            allowed_ipv4_address: light_client_details,
         };
 
         KI.open_tunnel(args)?;
@@ -169,18 +164,12 @@ impl Tunnel {
             last_contact: now,
             created: now,
             speed_limit,
-            light_client_details,
             // By default new tunnels are in paid state
             payment_state: PaymentState::Paid,
         };
 
-        match light_client_details {
-            None => {
-                // attach to babel
-                t.monitor()?;
-            }
-            Some(_) => {}
-        }
+        // attach to babel
+        t.monitor()?;
 
         Ok(t)
     }
@@ -218,32 +207,6 @@ impl Tunnel {
             return Err(e.into());
         }
         Ok(())
-    }
-
-    pub fn close_light_client_tunnel(&self) {
-        // there's a garbage collector function over in light_client_manager
-        // to handle the return of addresses it's less efficient than shooting
-        // off a message here but doesn't require conditional complication
-        if let Err(e) = KI.del_interface(&self.iface_name) {
-            error!("Failed to delete wg interface! {:?}", e);
-        }
-        // deletes the leftover iptables rule, be sure this matches the rule
-        // generated in light client manager exactly
-        let _res = KI.add_iptables_rule(
-            "iptables",
-            &[
-                "-D",
-                "FORWARD",
-                "-i",
-                &self.iface_name,
-                "--src",
-                &format!("{}/32", self.light_client_details.unwrap()),
-                "--dst",
-                "192.168.20.0/24",
-                "-j",
-                "ACCEPT",
-            ],
-        );
     }
 }
 
@@ -419,7 +382,6 @@ impl TunnelManager {
         their_localid: LocalIdentity,
         peer: Peer,
         our_port: u16,
-        light_client_details: Option<Ipv4Addr>,
     ) -> Result<(Tunnel, bool), RitaCommonError> {
         info!("getting existing tunnel or opening a new one");
         // ifidx must be a part of the key so that we can open multiple tunnels
@@ -541,7 +503,6 @@ impl TunnelManager {
             our_port,
             peer.ifidx,
             their_localid,
-            light_client_details,
         )?;
 
         self.tunnels
@@ -557,16 +518,9 @@ fn create_new_tunnel(
     our_port: u16,
     ifidx: u32,
     their_localid: LocalIdentity,
-    light_client_details: Option<Ipv4Addr>,
 ) -> Result<(Identity, Tunnel), RitaCommonError> {
     // Create new tunnel
-    let tunnel = Tunnel::new(
-        peer_ip,
-        our_port,
-        ifidx,
-        their_localid,
-        light_client_details,
-    );
+    let tunnel = Tunnel::new(peer_ip, our_port, ifidx, their_localid);
     let tunnel = match tunnel {
         Ok(tunnel) => {
             trace!("Tunnel {:?} is open", tunnel);
@@ -728,8 +682,7 @@ pub fn get_test_id() -> Identity {
     }
 }
 
-pub fn get_test_tunnel(ip: Ipv4Addr, light: bool) -> Tunnel {
-    let light_client_details = if light { Some(ip) } else { None };
+pub fn get_test_tunnel(ip: Ipv4Addr) -> Tunnel {
     Tunnel {
         ip: ip.into(),
         iface_name: "iface".to_string(),
@@ -743,7 +696,6 @@ pub fn get_test_tunnel(ip: Ipv4Addr, light: bool) -> Tunnel {
         last_contact: Instant::now(),
         created: Instant::now(),
         speed_limit: None,
-        light_client_details,
         payment_state: PaymentState::Paid,
     }
 }
@@ -792,7 +744,7 @@ pub mod tests {
             .tunnels
             .entry(id)
             .or_insert_with(Vec::new)
-            .push(get_test_tunnel("0.0.0.0".parse().unwrap(), false));
+            .push(get_test_tunnel("0.0.0.0".parse().unwrap()));
         {
             let existing_tunnel =
                 get_mut_tunnel_by_ifidx(0u32, tunnel_manager.tunnels.get_mut(&id).unwrap())

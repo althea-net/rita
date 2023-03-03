@@ -260,7 +260,12 @@ fn receive_im_here(
 }
 
 /// Send UDP hello message over IPV6
-pub fn send_hello(msg: &Hello, socket: &UdpSocket, send_addr: SocketAddr, sender_wgport: u16) {
+pub fn send_hello(
+    msg: &Hello,
+    socket: &UdpSocket,
+    send_addr: SocketAddr,
+    sender_wgport: u16,
+) -> Result<(), RitaCommonError> {
     trace!("Sending a Hello message");
 
     let message = PeerMessage::Hello {
@@ -270,8 +275,12 @@ pub fn send_hello(msg: &Hello, socket: &UdpSocket, send_addr: SocketAddr, sender
     };
     let encoded_message = PeerMessage::encode(&message).to_vec();
     let result = socket.send_to(&encoded_message, send_addr);
-    if result.is_err() {
-        info!("Sending Hello message failed with {:?}", result);
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            warn!("Sending Hello message failed with {:?}", e);
+            Err(e.into())
+        }
     }
 }
 
@@ -337,11 +346,11 @@ pub fn receive_hello() {
                         };
 
                         let tunnel =
-                            tm_identity_callback(IdentityCallback::new(their_id, peer, None, None));
+                            tm_identity_callback(IdentityCallback::new(their_id, peer, None));
                         let tunnel = match tunnel {
-                            Some(val) => val,
-                            None => {
-                                error!("Tunnel Open failure from peer listener");
+                            Ok(val) => val,
+                            Err(e) => {
+                                error!("Tunnel Open failure from peer listener {:?}", e);
                                 return;
                             }
                         };
@@ -359,12 +368,14 @@ pub fn receive_hello() {
                         };
 
                         let response_hello = Hello::new(our_id, peer, true);
-                        send_hello(
+                        if let Err(e) = send_hello(
                             &response_hello,
                             &listen_interface.linklocal_socket,
                             sock_addr,
                             sender_wgport,
-                        );
+                        ) {
+                            error!("Error sending hello to {:?}", e);
+                        }
 
                         //we received a hello response message
                     } else {
@@ -373,12 +384,13 @@ pub fn receive_hello() {
                             my_id.wg_port
                         );
                         let their_id = my_id;
-                        tm_identity_callback(IdentityCallback::new(
+                        if let Err(e) = tm_identity_callback(IdentityCallback::new(
                             their_id,
                             peer_to_send,
                             Some(sender_wgport),
-                            None,
-                        ));
+                        )) {
+                            error!("Failed to open tunnel! {:?}", e);
+                        }
                     }
                 }
                 Err(e) => {

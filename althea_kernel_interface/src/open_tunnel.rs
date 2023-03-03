@@ -1,6 +1,6 @@
 use crate::{DefaultRoute, KernelInterface, KernelInterfaceError};
 use althea_types::WgKey;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
 pub fn to_wg_local(ip: &IpAddr) -> IpAddr {
@@ -72,9 +72,6 @@ pub struct TunnelOpenArgs<'a> {
     /// the default route that we use to get to the internet if we are a gateway, only used to handle
     /// default route considerations on the gateway
     pub settings_default_route: &'a mut Option<DefaultRoute>,
-    /// a single ipv4 address that we may allow to access this tunnel, used by light clients (aka phones) for
-    /// their special case ipv4 only tunnels
-    pub allowed_ipv4_address: Option<Ipv4Addr>,
 }
 
 impl dyn KernelInterface {
@@ -91,10 +88,7 @@ impl dyn KernelInterface {
             }
         };
 
-        let allowed_addresses = match args.allowed_ipv4_address {
-            None => "::/0".to_string(),
-            Some(_) => "::/0,0.0.0.0/0".to_string(),
-        };
+        let allowed_addresses = "::/0".to_string();
 
         let socket_connect_str = socket_to_string(&args.endpoint, phy_name);
         trace!("socket conenct string: {}", socket_connect_str);
@@ -289,7 +283,6 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         own_ip_v2: None,
         external_nic: None,
         settings_default_route: &mut Some(def_route),
-        allowed_ipv4_address: None,
     };
 
     KI.open_tunnel(args).unwrap();

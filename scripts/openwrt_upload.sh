@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -eux
-export TARGET=x86_64
-export TRIPLE=x86_64-unknown-linux-musl
-export ROUTER_IP=atl-woodland-building-d-bak
+export TARGET=ipq40xx
+export TRIPLE=armv7-unknown-linux-musleabihf
+export ROUTER_IP=test-hap
 bash scripts/openwrt_build_$TARGET.sh
 set +e
 ssh root@$ROUTER_IP killall -9 rita

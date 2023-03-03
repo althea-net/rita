@@ -70,10 +70,10 @@ pub async fn hello_response(item: Json<LocalIdentity>, req: HttpRequest) -> Http
         ifidx: 0, // only works because we lookup ifname in kernel interface
     };
 
-    let tunnel = tm_identity_callback(IdentityCallback::new(their_id, peer, None, None));
+    let tunnel = tm_identity_callback(IdentityCallback::new(their_id, peer, None));
     let tunnel = match tunnel {
-        Some(val) => val,
-        None => {
+        Ok(val) => val,
+        Err(_) => {
             return HttpResponse::build(StatusCode::from_u16(400u16).unwrap())
                 .json("Tunnel open failure")
         }

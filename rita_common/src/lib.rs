@@ -21,7 +21,6 @@ pub static DROPBEAR_AUTHORIZED_KEYS: &str = "/etc/dropbear/authorized_keys";
 pub mod blockchain_oracle;
 pub mod dashboard;
 pub mod debt_keeper;
-pub mod hello_handler;
 pub mod logging;
 pub mod middleware;
 pub mod network_endpoints;

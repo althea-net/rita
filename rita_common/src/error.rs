@@ -5,6 +5,7 @@ use std::{
 };
 
 use althea_kernel_interface::KernelInterfaceError;
+use awc::error::{JsonPayloadError, SendRequestError};
 use babel_monitor::structs::BabelMonitorError;
 use compressed_log::builder::LoggerError;
 use log::SetLoggerError;
@@ -29,6 +30,8 @@ pub enum RitaCommonError {
     SysTimeError(SystemTimeError),
     OldSendRequestError(String),
     BincodeError(Box<bincode::ErrorKind>),
+    SendRequestError(SendRequestError),
+    JsonPayloadError(JsonPayloadError),
 }
 
 impl From<LoggerError> for RitaCommonError {
@@ -72,6 +75,16 @@ impl From<std::boxed::Box<bincode::ErrorKind>> for RitaCommonError {
         RitaCommonError::BincodeError(error)
     }
 }
+impl From<SendRequestError> for RitaCommonError {
+    fn from(error: SendRequestError) -> Self {
+        RitaCommonError::SendRequestError(error)
+    }
+}
+impl From<JsonPayloadError> for RitaCommonError {
+    fn from(error: JsonPayloadError) -> Self {
+        RitaCommonError::JsonPayloadError(error)
+    }
+}
 
 impl Display for RitaCommonError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
@@ -102,7 +115,8 @@ impl Display for RitaCommonError {
             RitaCommonError::SysTimeError(a) => write!(f, "{a}",),
             RitaCommonError::OldSendRequestError(e) => write!(f, "{e}"),
             RitaCommonError::BincodeError(e) => write!(f, "{e}"),
-
+            RitaCommonError::SendRequestError(e) => write!(f, "{e}"),
+            RitaCommonError::JsonPayloadError(e) => write!(f, "{e}"),
         }
     }
 }

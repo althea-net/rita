@@ -73,20 +73,13 @@ pub fn tm_trigger_gc(
 fn unmonitor_tunnels(to_delete: HashMap<Identity, Vec<Tunnel>>) {
     for (_ident, tunnels) in to_delete {
         for tunnel in tunnels {
-            match tunnel.light_client_details {
-                None => {
-                    // In the same spirit, we return the port to the free port pool only after tunnel
-                    // deletion goes well.
-                    if let Err(e) = tunnel.unmonitor() {
-                        error!(
-                            "Tunnel unmonitor failed during gc, garbage idle tunnel! {:?}",
-                            e
-                        );
-                    }
-                }
-                Some(_) => {
-                    tunnel.close_light_client_tunnel();
-                }
+            // In the same spirit, we return the port to the free port pool only after tunnel
+            // deletion goes well.
+            if let Err(e) = tunnel.unmonitor() {
+                error!(
+                    "Tunnel unmonitor failed during gc, garbage idle tunnel! {:?}",
+                    e
+                );
             }
         }
     }

@@ -1,7 +1,6 @@
-use crate::peer_listener::structs::Peer;
 use crate::tunnel_manager::Tunnel;
+use crate::{peer_listener::structs::Peer, RitaCommonError};
 use althea_types::LocalIdentity;
-use std::net::Ipv4Addr;
 
 use super::{tm_get_port, TUNNEL_MANAGER};
 
@@ -10,7 +9,6 @@ pub struct IdentityCallback {
     pub local_identity: LocalIdentity,
     pub peer: Peer,
     pub our_port: Option<u16>,
-    pub light_client_details: Option<Ipv4Addr>,
 }
 
 impl IdentityCallback {
@@ -18,13 +16,11 @@ impl IdentityCallback {
         local_identity: LocalIdentity,
         peer: Peer,
         our_port: Option<u16>,
-        light_client_details: Option<Ipv4Addr>,
     ) -> IdentityCallback {
         IdentityCallback {
             local_identity,
             peer,
             our_port,
-            light_client_details,
         }
     }
 }
@@ -35,7 +31,7 @@ impl IdentityCallback {
 /// in the case that we have attempted to contact a neighbor we have already sent them a port that
 /// we now must attach to their tunnel entry. If we also return a bool for if the tunnel already
 /// exists
-pub fn tm_identity_callback(msg: IdentityCallback) -> Option<(Tunnel, bool)> {
+pub fn tm_identity_callback(msg: IdentityCallback) -> Result<(Tunnel, bool), RitaCommonError> {
     info!("Tm identity callback with msg: {:?}", msg);
     let our_port = match msg.our_port {
         Some(port) => port,
@@ -43,17 +39,5 @@ pub fn tm_identity_callback(msg: IdentityCallback) -> Option<(Tunnel, bool)> {
     };
     // must be called after tm_get_port to avoid a deadlock
     let mut tunnel_manager = TUNNEL_MANAGER.write().unwrap();
-    let res = tunnel_manager.open_tunnel(
-        msg.local_identity,
-        msg.peer,
-        our_port,
-        msg.light_client_details,
-    );
-    match res {
-        Ok(res) => Some(res),
-        Err(e) => {
-            error!("Open Tunnel failed with {:?}", e);
-            None
-        }
-    }
+    tunnel_manager.open_tunnel(msg.local_identity, msg.peer, our_port)
 }
