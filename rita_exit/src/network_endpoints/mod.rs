@@ -49,7 +49,7 @@ fn secure_setup_return(
 }
 
 enum DecryptResult {
-    Success(ExitClientIdentity),
+    Success(Box<ExitClientIdentity>),
     Failure(Result<Json<EncryptedExitState>, RitaExitError>),
 }
 
@@ -117,7 +117,7 @@ fn decrypt_exit_client_id(
         }
     };
 
-    DecryptResult::Success(decrypted_id)
+    DecryptResult::Success(Box::new(decrypted_id))
 }
 
 pub async fn secure_setup_request(
@@ -157,7 +157,7 @@ pub async fn secure_setup_request(
 
     let remote_mesh_ip = remote_mesh_socket.ip();
     if remote_mesh_ip == client_mesh_ip {
-        let result = signup_client(client).await;
+        let result = signup_client(*client).await;
         match result {
             Ok(exit_state) => HttpResponse::Ok().json(secure_setup_return(
                 exit_state,
@@ -204,7 +204,7 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
                 .json(format!("Error getting database connection: {e:?}"))
         }
     };
-    let state = match client_status(decrypted_id, &conn) {
+    let state = match client_status(*decrypted_id, &conn) {
         Ok(state) => state,
         Err(e) => {
             error!(
