@@ -94,7 +94,7 @@ fn main() {
     // this just returns a number at the moment, which must be 12 until more test instances are added
     println!("Routes Test: {res2}");
 
-    if res1 != 16 || res2 != 12 {
+    if res1 != 49 || res2 != 42 {
         std::process::exit(1);
     }
 }
@@ -103,16 +103,18 @@ fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     /*
     These are connected as such:
     A---------B
-     \       /|
-      \     / |
-       \   /  |
-        \ /   |
-         X    |
-        / \   |
-       /   \  |
-      /     \ |
-     /       \|
-    D---------C
+    |         |
+    |         |
+    |         |
+    |         |
+    |         |
+    C         D---------G
+    |\        |
+    |  \      |
+    |    \    |
+    |      \  |
+    |        \|
+    E         F
     */
     let testa = Namespace {
         name: "n-1".to_string(),
@@ -122,28 +124,53 @@ fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     let testb = Namespace {
         name: "n-2".to_string(),
         id: 2,
-        cost: 40,
+        cost: 500,
     };
     let testc = Namespace {
         name: "n-3".to_string(),
         id: 3,
-        cost: 10,
+        cost: 15,
     };
     let testd = Namespace {
         name: "n-4".to_string(),
         id: 4,
-        cost: 60,
+        cost: 10,
+    };
+    let teste = Namespace {
+        name: "n-5".to_string(),
+        id: 5,
+        cost: 40,
+    };
+    let testf = Namespace {
+        name: "n-6".to_string(),
+        id: 6,
+        cost: 20,
+    };
+    let testg = Namespace {
+        name: "n-7".to_string(),
+        id: 7,
+        cost: 15,
     };
 
     let nsinfo = NamespaceInfo {
-        names: vec![testa.clone(), testb.clone(), testc.clone(), testd.clone()],
+        names: vec![
+            testa.clone(),
+            testb.clone(),
+            testc.clone(),
+            testd.clone(),
+            teste.clone(),
+            testf.clone(),
+            testg.clone(),
+        ],
         linked: vec![
             // arbitrary connections
             (testa.clone(), testb.clone()),
-            (testb.clone(), testc.clone()),
             (testa.clone(), testc.clone()),
-            (testc.clone(), testd.clone()),
             (testb.clone(), testd.clone()),
+            (testc.clone(), teste.clone()),
+            (testc.clone(), testf.clone()),
+            (testd.clone(), testf.clone()),
+            (testd.clone(), testg.clone()),
         ],
     };
     // This is a Hashmap that contains the key namespace, and how it connects to each node in the network as its values.
@@ -154,7 +181,10 @@ fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
         destination: [
             (testb.clone(), (0, testb.clone())),
             (testc.clone(), (0, testc.clone())),
-            (testd.clone(), (10, testc.clone())),
+            (testd.clone(), (35, testc.clone())),
+            (teste.clone(), (15, testc.clone())),
+            (testf.clone(), (15, testc.clone())),
+            (testg.clone(), (45, testc.clone())),
         ]
         .iter()
         .cloned()
@@ -163,8 +193,11 @@ fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     let testb_routes = RouteHop {
         destination: [
             (testa.clone(), (0, testa.clone())),
-            (testc.clone(), (0, testc.clone())),
+            (testc.clone(), (25, testa.clone())),
             (testd.clone(), (0, testd.clone())),
+            (teste.clone(), (40, testa.clone())),
+            (testf.clone(), (10, testd.clone())),
+            (testg.clone(), (10, testd.clone())),
         ]
         .iter()
         .cloned()
@@ -173,8 +206,11 @@ fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     let testc_routes = RouteHop {
         destination: [
             (testa.clone(), (0, testa.clone())),
-            (testb.clone(), (0, testb.clone())),
-            (testd.clone(), (0, testd.clone())),
+            (testb.clone(), (25, testa.clone())),
+            (testd.clone(), (20, testf.clone())),
+            (teste.clone(), (0, teste.clone())),
+            (testf.clone(), (0, testf.clone())),
+            (testg.clone(), (30, testf.clone())),
         ]
         .iter()
         .cloned()
@@ -182,9 +218,51 @@ fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let testd_routes = RouteHop {
         destination: [
-            (testa.clone(), (10, testc.clone())),
+            (testa.clone(), (35, testf.clone())),
             (testb.clone(), (0, testb.clone())),
+            (testc.clone(), (20, testf.clone())),
+            (teste.clone(), (35, testf.clone())),
+            (testf.clone(), (0, testf.clone())),
+            (testg.clone(), (0, testg.clone())),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+    };
+    let teste_routes = RouteHop {
+        destination: [
+            (testa.clone(), (15, testc.clone())),
+            (testb.clone(), (40, testc.clone())),
             (testc.clone(), (0, testc.clone())),
+            (testd.clone(), (35, testc.clone())),
+            (testf.clone(), (15, testc.clone())),
+            (testg.clone(), (45, testc.clone())),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+    };
+    let testf_routes = RouteHop {
+        destination: [
+            (testa.clone(), (15, testc.clone())),
+            (testb.clone(), (10, testd.clone())),
+            (testc.clone(), (0, testc.clone())),
+            (testd.clone(), (0, testd.clone())),
+            (teste.clone(), (15, testc.clone())),
+            (testg.clone(), (10, testd.clone())),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+    };
+    let testg_routes = RouteHop {
+        destination: [
+            (testa.clone(), (45, testd.clone())),
+            (testb.clone(), (10, testd.clone())),
+            (testc.clone(), (30, testd.clone())),
+            (testd.clone(), (0, testd.clone())),
+            (teste.clone(), (45, testd.clone())),
+            (testf.clone(), (10, testd.clone())),
         ]
         .iter()
         .cloned()
@@ -195,6 +273,9 @@ fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     expected_routes.insert(testb, testb_routes);
     expected_routes.insert(testc, testc_routes);
     expected_routes.insert(testd, testd_routes);
+    expected_routes.insert(teste, teste_routes);
+    expected_routes.insert(testf, testf_routes);
+    expected_routes.insert(testg, testg_routes);
 
     (nsinfo, expected_routes)
 }

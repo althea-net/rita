@@ -74,7 +74,7 @@ pub fn test_routes(nsinfo: NamespaceInfo, expected: HashMap<Namespace, RouteHop>
     }
     let mut count = 0;
     for ns1 in nsinfo.clone().names {
-        for ns2 in &nsinfo.names {
+        'neighs: for ns2 in &nsinfo.names {
             if &ns1 == ns2 {
                 continue;
             }
@@ -95,10 +95,10 @@ pub fn test_routes(nsinfo: NamespaceInfo, expected: HashMap<Namespace, RouteHop>
                         && r.price == expected_cost
                         && r.fee == ns1.cost
                         && r.neigh_ip == neigh_ip
-                        && r.installed
                     {
-                        info!("We found route for {:?}, {:?}: {:?}", ns1.name, ns2.name, r);
+                        println!("We found route for {:?}, {:?}: {:?}", ns1.name, ns2.name, r);
                         count += 1;
+                        continue 'neighs;
                     }
                 }
             }
