@@ -383,7 +383,7 @@ impl TunnelManager {
         peer: Peer,
         our_port: u16,
     ) -> Result<(Tunnel, bool), RitaCommonError> {
-        info!("getting existing tunnel or opening a new one");
+        trace!("getting existing tunnel or opening a new one");
         // ifidx must be a part of the key so that we can open multiple tunnels
         // if we have more than one physical connection to the same peer
         let key = their_localid.global;
@@ -430,7 +430,7 @@ impl TunnelManager {
                 // Unwrap is safe because we confirm membership
                 let tunnels = &self.tunnels[&key];
                 // Filter by Tunnel::ifidx
-                info!(
+                trace!(
                     "Got tunnels by key {:?}: {:?}. Ifidx is {}",
                     key, tunnels, peer.ifidx
                 );

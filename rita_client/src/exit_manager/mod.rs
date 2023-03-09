@@ -423,15 +423,15 @@ async fn exit_general_details_request(exit: String) -> Result<(), RitaClientErro
         }
     };
 
-    info!("Getting details for exit: {:?}", exit);
+    trace!("Getting details for exit: {:?}", exit);
     let current_exit_ip =
         get_selected_exit_ip(exit.clone()).expect("There should be a selected ip here");
 
-    info!("Current exit ip is : {:?}", current_exit_ip);
+    trace!("Current exit ip is : {:?}", current_exit_ip);
 
     let endpoint = SocketAddr::new(current_exit_ip, current_exit.registration_port);
 
-    info!(
+    trace!(
         "sending exit general details request to {} with endpoint {:?}",
         exit, endpoint
     );

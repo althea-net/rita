@@ -454,7 +454,7 @@ fn get_exit_metrics(
 
     for ip in exit_list.exit_list.clone() {
         // All babel routes are advertised as /128, so we check if each 'single' ip is part of exit subnet
-        info!(
+        trace!(
             "Route hashmap: {:?}\n, ip mesh: {:?}\n",
             route_hashmap, ip.mesh_ip
         );

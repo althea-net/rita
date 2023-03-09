@@ -184,18 +184,18 @@ pub async fn tm_contact_peers(pl: PeerListener) {
     let rita_hello_port = network_settings.rita_hello_port;
     drop(network_settings);
 
-    info!("TunnelManager contacting peers");
+    trace!("TunnelManager contacting peers");
 
     let mut udp_peers_fut = Vec::new();
     let mut manual_peers_ip_fut = Vec::new();
     let mut manual_peers_dns_fut = Vec::new();
     for (_, peer) in pl.peers.iter() {
-        info!("contacting peer found by UDP {:?}", peer);
+        trace!("contacting peer found by UDP {:?}", peer);
         udp_peers_fut.push(tm_neighbor_inquiry_udp_peer(peer, &pl));
     }
     if is_gateway {
         for manual_peer in manual_peers.iter() {
-            info!("contacting manual peer {:?}", manual_peer);
+            trace!("contacting manual peer {:?}", manual_peer);
             let ip = manual_peer.parse::<IpAddr>();
 
             match ip {

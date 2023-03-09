@@ -48,7 +48,7 @@ fn listen_to_available_ifaces() {
         }
     }
 
-    info!(
+    trace!(
         "PEER LISTENER: Done listening, Our interface list looks like : {:?}",
         get_interfaces()
     );
@@ -60,7 +60,7 @@ pub fn peerlistener_tick() -> PeerListener {
     trace!("Starting PeerListener tick!");
 
     let pl = get_pl_copy();
-    info!("Received the PL struct: {:?}", pl);
+    trace!("Received the PL struct: {:?}", pl);
     let mut interfaces = get_interfaces();
 
     send_im_here(&mut interfaces);
@@ -77,7 +77,7 @@ pub fn peerlistener_tick() -> PeerListener {
     listen_to_available_ifaces();
 
     let pl = get_pl_copy();
-    info!("We set the PL struct to : {:?}", pl);
+    trace!("We set the PL struct to : {:?}", pl);
     pl
 }
 
@@ -170,10 +170,10 @@ impl ListenInterface {
 
 /// send UDP ImHere messages over IPV6 link local
 fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
-    info!("About to send ImHere messages");
+    trace!("About to send ImHere messages");
     for obj in interfaces.iter_mut() {
         let listen_interface = obj.1;
-        info!(
+        trace!(
             "Sending ImHere to {:?}, with ip {:?}",
             listen_interface.ifname, listen_interface.linklocal_ip
         );
@@ -189,18 +189,18 @@ fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
             );
         }
     }
-    info!("Done sending ImHere this tick");
+    trace!("Done sending ImHere this tick");
 }
 
 /// receive UDP ImHere messages over IPV6 link local
 fn receive_im_here(
     interfaces: &mut HashMap<String, ListenInterface>,
 ) -> (HashMap<IpAddr, Peer>, HashMap<SocketAddr, String>) {
-    info!("About to receive ImHere");
+    trace!("About to receive ImHere");
     let mut output = HashMap::<IpAddr, Peer>::new();
     let mut interface_map = HashMap::<SocketAddr, String>::new();
     for obj in interfaces.iter_mut() {
-        info!("PEER LISTENER: Looking at imHere on interface: {:?}", obj.0);
+        trace!("PEER LISTENER: Looking at imHere on interface: {:?}", obj.0);
         let listen_interface = obj.1;
         // Since the only datagrams we are interested in are very small (22 bytes plus overhead)
         // this buffer is kept intentionally small to discard larger packets earlier rather than later
@@ -251,8 +251,8 @@ fn receive_im_here(
             interface_map.insert(peer.contact_socket, listen_interface.ifname.clone());
         }
     }
-    info!("Done receiving im here messages");
-    info!(
+    trace!("Done receiving im here messages");
+    trace!(
         "Setting Peers and interface map to : {:?}\n\n {:?}",
         output, interface_map
     );
@@ -400,5 +400,5 @@ pub fn receive_hello() {
             };
         }
     }
-    info!("Done receiving hellos");
+    trace!("Done receiving hellos");
 }
