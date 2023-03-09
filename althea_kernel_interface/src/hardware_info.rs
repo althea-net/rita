@@ -202,7 +202,7 @@ fn get_load_avg() -> Result<(f32, f32, f32), Error> {
     ))
 }
 
-fn get_memory_info() -> Result<(u64, u64), Error> {
+pub fn get_memory_info() -> Result<(u64, u64), Error> {
     // memory info
     let lines = get_lines("/proc/meminfo")?;
     let mut lines = lines.iter();
