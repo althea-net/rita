@@ -52,6 +52,8 @@ pub struct ExitNetworkSettings {
     /// when this is set, clear out all ipv6 entries from database
     #[serde(default = "recompute_ipv6_default")]
     pub recompute_ipv6: bool,
+    /// password that operator tools uses to verify that this is an exit
+    pub pass: String,
 }
 
 fn recompute_ipv6_default() -> bool {
@@ -83,6 +85,7 @@ impl ExitNetworkSettings {
             magic_phone_number: None,
             cluster_exits: Vec::new(),
             recompute_ipv6: false,
+            pass: "some pass".into(),
         }
     }
 }

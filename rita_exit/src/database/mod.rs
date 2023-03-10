@@ -119,7 +119,10 @@ pub fn get_exit_info() -> ExitDetails {
 /// Handles a new client registration api call. Performs a geoip lookup
 /// on their registration ip to make sure that they are coming from a valid gateway
 /// ip and then sends out an email of phone message
-pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<RitaExitError>> {
+pub async fn signup_client(
+    client: ExitClientIdentity,
+    from_ops: bool,
+) -> Result<ExitState, Box<RitaExitError>> {
     info!("got setup request {:?}", client);
     let gateway_ip = get_gateway_ip_single(client.global.mesh_ip)?;
     info!("got gateway ip {:?}", client);
@@ -154,14 +157,8 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<
     let their_record = create_or_update_user_record(&conn, &client, user_country)?;
 
     // either update and grab an existing entry or create one
-    match (verify_status, EXIT_VERIF_SETTINGS.clone()) {
-        (true, Some(ExitVerifSettings::Email(mailer))) => {
-            handle_email_registration(&client, &their_record, &conn, mailer.email_cooldown as i64)
-        }
-        (true, Some(ExitVerifSettings::Phone(phone))) => {
-            handle_sms_registration(client, their_record, phone.auth_api_key).await
-        }
-        (true, None) => {
+    match (verify_status, EXIT_VERIF_SETTINGS.clone(), from_ops) {
+        (true, _, true) => {
             verify_client(&client, true, &conn)?;
             let client_internal_ip = match their_record.internal_ip.parse() {
                 Ok(ip) => ip,
@@ -177,7 +174,31 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<
                 message: "Registration OK".to_string(),
             })
         }
-        (false, _) => Ok(ExitState::Denied {
+
+        (true, None, false) => {
+            verify_client(&client, true, &conn)?;
+            let client_internal_ip = match their_record.internal_ip.parse() {
+                Ok(ip) => ip,
+                Err(e) => return Err(Box::new(RitaExitError::AddrParseError(e))),
+            };
+            let client_internet_ipv6_subnet = get_client_ipv6(&their_record)?;
+            Ok(ExitState::Registered {
+                our_details: ExitClientDetails {
+                    client_internal_ip,
+                    internet_ipv6_subnet: client_internet_ipv6_subnet,
+                },
+                general_details: get_exit_info(),
+                message: "Registration OK".to_string(),
+            })
+        }
+        (true, Some(ExitVerifSettings::Email(mailer)), false) => {
+            handle_email_registration(&client, &their_record, &conn, mailer.email_cooldown as i64)
+        }
+        (true, Some(ExitVerifSettings::Phone(phone)), false) => {
+            handle_sms_registration(client, their_record, phone.auth_api_key).await
+        }
+
+        (false, _, _) => Ok(ExitState::Denied {
             message: format!(
                 "This exit only accepts connections from {}",
                 display_hashset(&EXIT_ALLOWED_COUNTRIES),

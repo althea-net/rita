@@ -36,6 +36,7 @@ use rita_common::usage_tracker::save_usage_on_shutdown;
 use rita_common::utils::env_vars_contains;
 use rita_exit::database::database_tools::initialize_exisitng_clients_ipv6;
 use rita_exit::database::sms::send_admin_notification_sms;
+use rita_exit::operator_update::update_loop::start_operator_update_loop;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 use rita_exit::rita_loop::start_rita_exit_loop;
 use rita_exit::start_rita_exit_dashboard;
@@ -160,6 +161,7 @@ fn main() {
 
     start_rita_common_loops();
     start_rita_exit_loop();
+    start_operator_update_loop();
     save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(
         settings::get_rita_exit(),
     ));

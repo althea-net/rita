@@ -157,7 +157,7 @@ pub async fn secure_setup_request(
 
     let remote_mesh_ip = remote_mesh_socket.ip();
     if remote_mesh_ip == client_mesh_ip {
-        let result = signup_client(*client).await;
+        let result = signup_client(*client, false).await;
         match result {
             Ok(exit_state) => HttpResponse::Ok().json(secure_setup_return(
                 exit_state,
