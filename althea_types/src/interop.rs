@@ -129,7 +129,7 @@ impl FromStr for SystemChain {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Default)]
 pub struct ExitRegistrationDetails {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub email: Option<String>,
@@ -689,6 +689,28 @@ pub struct OperatorCheckinMessage {
     /// fault value.
     #[serde(default)]
     pub rita_uptime: Duration,
+}
+
+/// The message and exit sends to the operator server to checkin, this allows us to customize
+/// the operator checkin response to the device
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperatorExitCheckinMessage {
+    pub id: Identity,
+    /// This is a password that operator tools uses to verify that the one
+    /// making a request is an exit. Exits are started with this password
+    /// in their config, and ops verifies this pass with the one they store
+    pub pass: String,
+    /// This is to keep track of the rita exit uptime for debugging purposes
+    pub exit_uptime: Duration,
+    /// Number of users online
+    pub users_online: Option<u32>,
+}
+
+/// Operator update that we get from the operator server during our checkin
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OperatorExitUpdateMessage {
+    /// List of routers for this exit to register
+    pub to_register: Vec<ExitClientIdentity>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
