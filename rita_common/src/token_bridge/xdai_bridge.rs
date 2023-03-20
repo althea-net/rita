@@ -151,9 +151,9 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
                 token,
                 *DAI_CONTRACT_ADDRESS,
                 None,
-                token_amount,
+                token_amount.clone(),
                 None,
-                None,
+                Some(get_min_amount_out(token_amount)),
                 None,
                 None,
                 None,
@@ -249,6 +249,17 @@ pub async fn simulated_withdrawal_on_eth(bridge: &TokenBridgeCore) -> Result<(),
     }
 
     Ok(())
+}
+
+/// In order to avoid Ethereum dex sandwitch attacks we need to specify a minimum amount out of DAI
+/// since both USDT and USDC are 6 decimal tokens this function simply does the decimal conversion to ensure
+/// we get 99% of the vlaue of our USDC or UDST out in DAI. If either token is depegged this will result in problems
+fn get_min_amount_out(mut input: Uint256) -> Uint256 {
+    // multiply by 1*10^12 to go from 1*10^6 value to -> 1*10^18 value
+    input = input * 1_000_000_000_000u128.into();
+    // remove 2.5% off the top, so we need at least 95% of the face value of the USDC or USDT
+    input = input.clone() - input.clone() / 40u8.into();
+    input
 }
 
 /// This function simulates the withdraw event given to it. Based on this information, we can decide if we want to
