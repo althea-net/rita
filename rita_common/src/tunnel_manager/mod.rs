@@ -432,7 +432,9 @@ impl TunnelManager {
                 // Filter by Tunnel::ifidx
                 trace!(
                     "Got tunnels by key {:?}: {:?}. Ifidx is {}",
-                    key, tunnels, peer.ifidx
+                    key,
+                    tunnels,
+                    peer.ifidx
                 );
                 let tunnel = match get_tunnel_by_ifidx(peer.ifidx, tunnels) {
                     Some(a) => a,

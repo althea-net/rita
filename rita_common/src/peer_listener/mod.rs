@@ -175,7 +175,8 @@ fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
         let listen_interface = obj.1;
         trace!(
             "Sending ImHere to {:?}, with ip {:?}",
-            listen_interface.ifname, listen_interface.linklocal_ip
+            listen_interface.ifname,
+            listen_interface.linklocal_ip
         );
         let message = PeerMessage::ImHere(listen_interface.linklocal_ip);
         let result = listen_interface
@@ -254,7 +255,8 @@ fn receive_im_here(
     trace!("Done receiving im here messages");
     trace!(
         "Setting Peers and interface map to : {:?}\n\n {:?}",
-        output, interface_map
+        output,
+        interface_map
     );
     (output, interface_map)
 }

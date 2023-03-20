@@ -456,7 +456,8 @@ fn get_exit_metrics(
         // All babel routes are advertised as /128, so we check if each 'single' ip is part of exit subnet
         trace!(
             "Route hashmap: {:?}\n, ip mesh: {:?}\n",
-            route_hashmap, ip.mesh_ip
+            route_hashmap,
+            ip.mesh_ip
         );
         let route = match route_hashmap.get(&ip.mesh_ip) {
             Some(a) => a,
