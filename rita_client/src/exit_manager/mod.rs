@@ -433,7 +433,8 @@ async fn exit_general_details_request(exit: String) -> Result<(), RitaClientErro
 
     trace!(
         "sending exit general details request to {} with endpoint {:?}",
-        exit, endpoint
+        exit,
+        endpoint
     );
     let exit_details = get_exit_info(&endpoint).await?;
     let mut rita_client = settings::get_rita_client();

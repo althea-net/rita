@@ -110,7 +110,6 @@ pub fn is_router_storage_small(router_model: &str) -> bool {
     mikrotik_routerboard-760igs|
     netgear_ex6100v2"
         .matches(&router_model.to_lowercase())
-        .into_iter()
         .count()
         != 0
 }

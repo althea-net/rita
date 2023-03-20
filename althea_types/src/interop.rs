@@ -95,10 +95,11 @@ impl Hash for Identity {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy, Default)]
 pub enum SystemChain {
     Ethereum,
     Rinkeby,
+    #[default]
     Xdai,
 }
 
@@ -109,12 +110,6 @@ impl Display for SystemChain {
             SystemChain::Rinkeby => write!(f, "Rinkeby"),
             SystemChain::Xdai => write!(f, "Xdai"),
         }
-    }
-}
-
-impl Default for SystemChain {
-    fn default() -> SystemChain {
-        SystemChain::Xdai
     }
 }
 
@@ -149,10 +144,11 @@ pub struct ExitRegistrationDetails {
 }
 
 /// This is the state an exit can be in
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Default)]
 #[serde(tag = "state")]
 pub enum ExitState {
     /// the default state of the struct in the config
+    #[default]
     New,
     /// we have successfully contacted the exit and gotten basic info
     GotInfo {
@@ -176,12 +172,6 @@ pub enum ExitState {
     },
     /// we have been denied
     Denied { message: String },
-}
-
-impl Default for ExitState {
-    fn default() -> Self {
-        ExitState::New
-    }
 }
 
 impl ExitState {
