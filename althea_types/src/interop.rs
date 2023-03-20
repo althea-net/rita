@@ -95,7 +95,7 @@ impl Hash for Identity {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy, Default)]
+#[derive(Default, Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
 pub enum SystemChain {
     Ethereum,
     Rinkeby,
@@ -144,7 +144,7 @@ pub struct ExitRegistrationDetails {
 }
 
 /// This is the state an exit can be in
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Default)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(tag = "state")]
 pub enum ExitState {
     /// the default state of the struct in the config
