@@ -11,7 +11,7 @@ pub fn start_extender_dashboard(rita_dashboard_port: u16) {
         runner.block_on(async move {
             let _res = HttpServer::new(|| App::new().route("/status", web::get().to(status_check)))
                 .workers(1)
-                .bind(format!("[::0]:{}", rita_dashboard_port))
+                .bind(format!("[::0]:{rita_dashboard_port}"))
                 .unwrap()
                 .shutdown_timeout(0)
                 .run()

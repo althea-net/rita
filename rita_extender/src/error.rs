@@ -20,8 +20,8 @@ impl From<JsonPayloadError> for RitaExtenderError {
 impl Display for RitaExtenderError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            RitaExtenderError::MiscStringError(e) => write!(f, "{}", e),
-            RitaExtenderError::JsonPayloadError(e) => write!(f, "{}", e),
+            RitaExtenderError::MiscStringError(e) => write!(f, "{e}"),
+            RitaExtenderError::JsonPayloadError(e) => write!(f, "{e}"),
         }
     }
 }

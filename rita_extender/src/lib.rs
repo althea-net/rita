@@ -84,8 +84,7 @@ pub async fn extender_checkin(
         Ok(a) => a,
         Err(e) => {
             return Err(RitaExtenderError::MiscStringError(format!(
-                "Unable to checkin with router: {:?}",
-                e
+                "Unable to checkin with router: {e:?}"
             )));
         }
     };
@@ -103,8 +102,7 @@ pub fn get_checkin_message() -> ExtenderCheckin {
                 Ok(a) => a,
                 Err(e) => {
                     println!(
-                        "Unable to initialize wifi info to send to optools, will try later: {}",
-                        e
+                        "Unable to initialize wifi info to send to optools, will try later: {e}"
                     );
                     Vec::new()
                 }
@@ -227,7 +225,7 @@ fn apply_opkg_update_if_needed(router_version: String, extender_version: String)
             Ok(o) => match o.status.code() {
                 Some(0) => info!("opkg update completed successfully! {:?}", o),
                 Some(_) => {
-                    let err = format!("opkg update has failed! {:?}", o);
+                    let err = format!("opkg update has failed! {o:?}");
                     error!("{}", err);
                     return;
                 }
@@ -249,7 +247,7 @@ fn apply_opkg_update_if_needed(router_version: String, extender_version: String)
             Ok(o) => match o.status.code() {
                 Some(0) => info!("opkg update completed successfully! {:?}", o),
                 Some(_) => {
-                    let err = format!("opkg update has failed! {:?}", o);
+                    let err = format!("opkg update has failed! {o:?}");
                     error!("{}", err);
                     return;
                 }
@@ -298,8 +296,7 @@ fn get_opkg_feed(router_ver: String) -> Result<String, RitaExtenderError> {
     ret.push_str(&router_rc.to_string());
 
     Ok(format!(
-        "https://updates.altheamesh.com/{}/packages/mipsel_24kc/althea",
-        ret
+        "https://updates.altheamesh.com/{ret}/packages/mipsel_24kc/althea"
     ))
 }
 
