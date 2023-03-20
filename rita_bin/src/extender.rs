@@ -29,7 +29,7 @@ fn main() {
 
     // Connect to router and get its revevant info. Called here to get logging info
     let setting = get_initial_logging_settings();
-    println!("Initial checkin returned {:?}", setting);
+    println!("Initial checkin returned {setting:?}");
 
     // we should remote log if there's an operator address or if logging is enabled. If we are unable to query
     // the router for remote logging, default to local logging
@@ -57,7 +57,7 @@ fn main() {
     } else {
         let res = enable_remote_logging("rita_extender".to_string(), logging_url, level, wgkey);
 
-        println!("logging status {:?}", res);
+        println!("logging status {res:?}");
     }
 
     info!(
@@ -80,10 +80,7 @@ fn main() {
 
 #[actix_rt::main]
 async fn get_initial_logging_settings() -> Option<ExtenderUpdate> {
-    println!(
-        "Trying to perform initial checkin with {}",
-        DEFAULT_UPSTREAM_ENDPOINT
-    );
+    println!("Trying to perform initial checkin with {DEFAULT_UPSTREAM_ENDPOINT}");
     if let Ok(a) = extender_checkin(DEFAULT_UPSTREAM_ENDPOINT.into(), get_checkin_message()).await {
         return Some(a);
     }

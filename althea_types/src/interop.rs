@@ -1,5 +1,5 @@
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
-use crate::{ClientExtender, WifiDevice};
+use crate::{ClientExtender, UsageTracker, WifiDevice};
 use arrayvec::ArrayString;
 use babel_monitor::structs::Neighbor;
 use babel_monitor::structs::Route;
@@ -570,7 +570,6 @@ pub struct OperatorUpdateMessage {
     pub local_update_instruction: Option<UpdateTypeLegacy>,
     /// String that holds the download link to the latest firmware release
     /// When a user hits 'update router', it updates to this version
-    ///  #[serde(default = "default_shaper_settings")]
     pub local_update_instruction_v2: Option<UpdateType>,
     /// settings for the device bandwidth shaper
     #[serde(default = "default_shaper_settings")]
@@ -583,6 +582,9 @@ pub struct OperatorUpdateMessage {
     pub contact_info: Option<ContactType>,
     /// Billing details from ops tools, so that we may sync changes
     pub billing_details: Option<BillingDetails>,
+    /// Last seen hour that ops tools has for usage data, so we know from the router
+    /// side how much history we need to send in with the next checkin cycle
+    pub ops_last_seen_usage_hour: u64,
 }
 
 /// Serializes a ContactType as a string
@@ -684,6 +686,11 @@ pub struct OperatorCheckinMessage {
     /// This is a user set bandwidth limit value, it will cap the users download
     /// and upload to the provided value of their choosing. Denoted in mbps
     pub user_bandwidth_limit: Option<usize>,
+    /// Details of both the Client and Relay bandwidth usage over a given period determined
+    /// by the ops_last_seen_usage_hour in OperatorUpdateMessage. When the device's last
+    /// saved usage hour is the same as the ops last seen, we send no data here as we are up
+    /// to date. Data sent through here gets added to a database entry for each device.
+    pub user_bandwidth_usage: Option<UsageTracker>,
     /// This is to keep track of the rita client uptime for debugging purposes
     /// In the event something whacko happens, serde will magically derive def-
     /// fault value.

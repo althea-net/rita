@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::net::Ipv4Addr;
 use std::time::SystemTime;
 
@@ -60,4 +61,23 @@ pub struct InstallationDetails {
     /// Time of install, this is set by the operator tools when it accepts
     /// the value because the router system clocks may be problematic.
     pub install_date: Option<SystemTime>,
+}
+
+/// The main actor that holds the usage state for the duration of operations
+/// to be sent up to ops tools.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UsageTracker {
+    pub last_save_hour: u64,
+    pub client_bandwidth: VecDeque<UsageHour>,
+    pub relay_bandwidth: VecDeque<UsageHour>,
+}
+
+/// A struct for tracking each hour of usage, indexed by time in hours since
+/// the unix epoch.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UsageHour {
+    pub index: u64,
+    pub up: u64,
+    pub down: u64,
+    pub price: u32,
 }

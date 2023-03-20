@@ -63,10 +63,10 @@ pub enum UsageType {
 /// the unix epoch
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UsageHour {
-    index: u64,
-    up: u64,
-    down: u64,
-    price: u32,
+    pub index: u64,
+    pub up: u64,
+    pub down: u64,
+    pub price: u32,
 }
 
 /// A version of payment tx with a string txid so that the formatting is correct
@@ -112,13 +112,13 @@ pub struct PaymentHour {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UsageTracker {
-    last_save_hour: u64,
+    pub last_save_hour: u64,
     // at least one of these will be left unused
-    client_bandwidth: VecDeque<UsageHour>,
-    relay_bandwidth: VecDeque<UsageHour>,
-    exit_bandwidth: VecDeque<UsageHour>,
+    pub client_bandwidth: VecDeque<UsageHour>,
+    pub relay_bandwidth: VecDeque<UsageHour>,
+    pub exit_bandwidth: VecDeque<UsageHour>,
     /// A history of payments
-    payments: VecDeque<PaymentHour>,
+    pub payments: VecDeque<PaymentHour>,
 }
 
 /// This function checks to see how many bytes were used
@@ -359,7 +359,7 @@ fn compress_serialized(serialized: Vec<u8>) -> Result<Vec<u8>, IOError> {
 }
 
 /// Gets the current hour since the unix epoch
-fn get_current_hour() -> Result<u64, RitaCommonError> {
+pub fn get_current_hour() -> Result<u64, RitaCommonError> {
     let seconds = SystemTime::now().duration_since(UNIX_EPOCH)?;
     Ok(seconds.as_secs() / (60 * 60))
 }

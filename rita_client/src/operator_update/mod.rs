@@ -3,30 +3,25 @@ pub mod update_loop;
 pub mod updater;
 extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
-use crate::exit_manager::get_client_pub_ipv6;
-use crate::exit_manager::get_selected_exit_ip;
-use crate::extend_hardware_info;
-use crate::reset_wifi_pass;
+use crate::exit_manager::{get_client_pub_ipv6, get_selected_exit_ip};
 use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
-use crate::set_router_update_instruction;
-use crate::set_wifi_multi_internal;
+use crate::{
+    extend_hardware_info, reset_wifi_pass, set_router_update_instruction, set_wifi_multi_internal,
+};
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::get_sequence_num;
-use althea_types::AuthorizedKeys;
-use althea_types::BillingDetails;
-use althea_types::ContactStorage;
-use althea_types::ContactType;
-use althea_types::CurExitInfo;
-use althea_types::ExitConnection;
-use althea_types::HardwareInfo;
-use althea_types::OperatorAction;
-use althea_types::OperatorCheckinMessage;
-use althea_types::OperatorUpdateMessage;
+use althea_types::{
+    AuthorizedKeys, BillingDetails, ContactStorage, ContactType, CurExitInfo, ExitConnection,
+    HardwareInfo, OperatorAction, OperatorCheckinMessage, OperatorUpdateMessage, UsageHour,
+    UsageTracker,
+};
 use num256::Uint256;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
+use rita_common::usage_tracker::UsageType::{Client, Relay};
+use rita_common::usage_tracker::{get_current_hour, get_usage_data};
 use rita_common::utils::option_convert;
 use rita_common::DROPBEAR_AUTHORIZED_KEYS;
 use rita_common::KI;
@@ -35,11 +30,9 @@ use serde_json::Value;
 use settings::client::RitaClientSettings;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::fs::{remove_file, rename, File};
-use std::io::BufRead;
-use std::io::BufReader;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::time::{Duration, Instant};
 use updater::update_system;
@@ -95,7 +88,7 @@ const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
 pub const OPERATOR_UPDATE_TIMEOUT: Duration = CLIENT_LOOP_TIMEOUT;
 
 /// Checks in with the operator server
-pub async fn operator_update() {
+pub async fn operator_update(ops_last_seen_usage_hour: u64) -> u64 {
     let url: &str;
     if cfg!(feature = "dev_env") {
         url = "http://0.0.0.0:8080/checkin";
@@ -126,7 +119,7 @@ pub async fn operator_update() {
     // want the operator to work properly and we will continue to checkin
     if operator_address.is_none() && !logging_enabled {
         info!("No Operator configured and logging disabled, not checking in!");
-        return;
+        return 0;
     }
 
     match operator_address {
@@ -169,6 +162,61 @@ pub async fn operator_update() {
         },
     });
 
+    let current_hour = match get_current_hour() {
+        Ok(hour) => hour,
+        Err(e) => {
+            error!("System time is set earlier than unix epoch {:?}", e);
+            return 0;
+        }
+    };
+    let mut hours_to_send: u64 = 0;
+    // first check whats the last saved hr, send everything from that hr on
+    // but, we need to save a var of the last x hrs not seen, and load that up with the next checkin cycle if >0.
+    if current_hour - ops_last_seen_usage_hour > 0 {
+        hours_to_send = current_hour - ops_last_seen_usage_hour;
+    }
+    let mut usage_tracker_data: Option<UsageTracker> = None;
+
+    // only deal with this if we actually do need to send some hours
+    if hours_to_send != 0 {
+        let mut usage_data_client = get_usage_data(Client);
+        let mut usage_data_relay = get_usage_data(Relay);
+        let mut new_client_data: VecDeque<UsageHour> = VecDeque::new();
+        let mut new_relay_data: VecDeque<UsageHour> = VecDeque::new();
+        for _hour in 0..hours_to_send {
+            // pop front, add to front of new vecdeque if exists.
+            while let Some(data) = usage_data_client.pop_front() {
+                if data.index > ops_last_seen_usage_hour {
+                    new_client_data.push_front(UsageHour {
+                        up: data.up,
+                        down: data.down,
+                        price: data.price,
+                        index: data.index,
+                    });
+                    break;
+                }
+            }
+
+            // pop front, add to front of new vecdeque if exists.
+            while let Some(data) = usage_data_relay.pop_front() {
+                if data.index > ops_last_seen_usage_hour {
+                    new_relay_data.push_front(UsageHour {
+                        up: data.up,
+                        down: data.down,
+                        price: data.price,
+                        index: data.index,
+                    });
+                    break;
+                }
+            }
+        }
+        usage_tracker_data = Some(UsageTracker {
+            last_save_hour: current_hour,
+            client_bandwidth: new_client_data,
+            relay_bandwidth: new_relay_data,
+        });
+    }
+
     let exit_con = Some(ExitConnection {
         cur_exit,
         client_pub_ipv6: get_client_pub_ipv6(),
@@ -190,6 +238,7 @@ pub async fn operator_update() {
             hardware_info,
             user_bandwidth_limit,
             rita_uptime: RITA_UPTIME.elapsed(),
+            user_bandwidth_usage: usage_tracker_data,
         })
         .await;
 
@@ -201,7 +250,7 @@ pub async fn operator_update() {
         }
         Err(e) => {
             error!("Failed to perform operator checkin with {:?}", e);
-            return;
+            return 0;
         }
     };
 
@@ -209,7 +258,7 @@ pub async fn operator_update() {
         Ok(a) => a,
         Err(e) => {
             error!("Failed to perform operator checkin with {:?}", e);
-            return;
+            return 0;
         }
     };
 
@@ -264,7 +313,13 @@ pub async fn operator_update() {
         (_, Some(new)) => Some(new),
     };
     set_router_update_instruction(update_instructions);
-    perform_operator_update(new_settings, rita_client, network)
+    perform_operator_update(new_settings.clone(), rita_client, network);
+    // update our count of ops last seen if we have confirmation ops is up to date on usage data
+    if new_settings.ops_last_seen_usage_hour == current_hour {
+        current_hour
+    } else {
+        0
+    }
 }
 
 /// logs some hardware info that may help debug this router

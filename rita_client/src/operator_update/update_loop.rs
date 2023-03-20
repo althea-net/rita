@@ -9,7 +9,9 @@ use std::time::{Duration, Instant};
 /// This function spawns a thread soley responsible for performing the operator update
 /// the sends large format data to operator tools (versus the heartbeat which is about 1200 bytes)
 /// this update also gets instructions from operator tools, such as updates, reboots, or any OperatorAction
+#[allow(unused_assignments)]
 pub fn start_operator_update_loop() {
+    let mut ops_last_seen_usage_hour: u64 = 0;
     let mut last_restart = Instant::now();
     // outer thread is a watchdog inner thread is the runner
     thread::spawn(move || {
@@ -23,7 +25,8 @@ pub fn start_operator_update_loop() {
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
                     // Check in with Operator
-                    operator_update().await;
+                    let last = operator_update(ops_last_seen_usage_hour).await;
+                    ops_last_seen_usage_hour = last;
                 });
 
                 info!(
