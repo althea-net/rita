@@ -193,30 +193,28 @@ pub async fn tm_contact_peers(pl: PeerListener) {
         trace!("contacting peer found by UDP {:?}", peer);
         udp_peers_fut.push(tm_neighbor_inquiry_udp_peer(peer, &pl));
     }
-    if is_gateway {
-        for manual_peer in manual_peers.iter() {
-            trace!("contacting manual peer {:?}", manual_peer);
-            let ip = manual_peer.parse::<IpAddr>();
+    for manual_peer in manual_peers.iter() {
+        trace!("contacting manual peer {:?}", manual_peer);
+        let ip = manual_peer.parse::<IpAddr>();
 
-            match ip {
-                Ok(ip) => {
-                    let socket = SocketAddr::new(ip, rita_hello_port);
-                    let man_peer = Peer {
-                        ifidx: 0,
-                        contact_socket: socket,
-                    };
-                    // we must run these in the local context because the peer struct does not live long enough
-                    manual_peers_ip_fut.push(tm_neighbor_inquiry_manual_peer(man_peer));
-                }
-                Err(_) => {
-                    // Do not contact manual peers on the internet if we are not a gateway
-                    // it will just fill the logs with failed dns resolution attempts or result
-                    // in bad behavior, we do allow the addressing of direct ip address gateways
-                    // for the special case that the user is attempting some special behavior
-                    if is_gateway {
-                        manual_peers_dns_fut
-                            .push(tm_neighbor_inquiry_hostname(manual_peer.to_string()));
-                    }
+        match ip {
+            Ok(ip) => {
+                let socket = SocketAddr::new(ip, rita_hello_port);
+                let man_peer = Peer {
+                    ifidx: 0,
+                    contact_socket: socket,
+                };
+                // we must run these in the local context because the peer struct does not live long enough
+                manual_peers_ip_fut.push(tm_neighbor_inquiry_manual_peer(man_peer));
+            }
+            Err(_) => {
+                // Do not contact manual peers on the internet if we are not a gateway
+                // it will just fill the logs with failed dns resolution attempts or result
+                // in bad behavior, we do allow the addressing of direct ip address gateways
+                // for the special case that the user is attempting some special behavior
+                if is_gateway {
+                    manual_peers_dns_fut
+                        .push(tm_neighbor_inquiry_hostname(manual_peer.to_string()));
                 }
             }
         }
