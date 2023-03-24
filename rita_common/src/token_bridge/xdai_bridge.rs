@@ -256,7 +256,7 @@ pub async fn simulated_withdrawal_on_eth(bridge: &TokenBridgeCore) -> Result<(),
 /// we get 99% of the vlaue of our USDC or UDST out in DAI. If either token is depegged this will result in problems
 fn get_min_amount_out(mut input: Uint256) -> Uint256 {
     // multiply by 1*10^12 to go from 1*10^6 value to -> 1*10^18 value
-    input = input * 1_000_000_000_000u128.into();
+    input *= 1_000_000_000_000u128.into();
     // remove 2.5% off the top, so we need at least 95% of the face value of the USDC or USDT
     input = input.clone() - input.clone() / 40u8.into();
     input
