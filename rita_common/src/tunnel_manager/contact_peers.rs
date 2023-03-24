@@ -145,10 +145,7 @@ pub async fn tm_neighbor_inquiry_manual_peer(peer: Peer) -> Result<(), RitaCommo
 
 /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel
 /// interface name. Sends a Hello over udp
-pub fn tm_neighbor_inquiry_udp_peer(
-    peer: &Peer,
-    pl: &PeerListener,
-) -> Result<(), RitaCommonError> {
+pub fn tm_neighbor_inquiry_udp_peer(peer: &Peer, pl: &PeerListener) -> Result<(), RitaCommonError> {
     trace!("TunnelManager neigh inquiry for {:?}", peer);
     let our_port = tm_get_port();
 
