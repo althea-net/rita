@@ -15,7 +15,6 @@ use crate::IdentityCallback;
 use crate::RitaCommonError;
 use crate::KI;
 use althea_types::LocalIdentity;
-use futures::future::join3;
 use futures::future::join_all;
 use std::net::ToSocketAddrs;
 use std::net::{IpAddr, SocketAddr};
@@ -113,13 +112,27 @@ pub async fn tm_neighbor_inquiry_manual_peer(peer: Peer) -> Result<(), RitaCommo
 
     let client = awc::Client::default();
     info!("Sending hello request to manual peer: {}", endpoint);
-    let response: LocalIdentity = client
+    let response = client
         .post(endpoint)
         .timeout(Duration::from_secs(5))
         .send_json(&msg.my_id)
-        .await?
-        .json()
-        .await?;
+        .await;
+
+    let mut response = match response {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Error serializing our request {:?}", e);
+            return Err(RitaCommonError::SendRequestError(e));
+        }
+    };
+
+    let response: LocalIdentity = match response.json().await {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Got error deserializing Hello {:?}", e);
+            return Err(RitaCommonError::JsonPayloadError(e));
+        }
+    };
 
     info!("Received a local identity, setting a tunnel");
     let peer = msg.to;
@@ -131,8 +144,8 @@ pub async fn tm_neighbor_inquiry_manual_peer(peer: Peer) -> Result<(), RitaCommo
 }
 
 /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel
-/// interface name. Sends a Hello over udp, or http if its a manual peer
-pub async fn tm_neighbor_inquiry_udp_peer(
+/// interface name. Sends a Hello over udp
+pub fn tm_neighbor_inquiry_udp_peer(
     peer: &Peer,
     pl: &PeerListener,
 ) -> Result<(), RitaCommonError> {
@@ -186,12 +199,13 @@ pub async fn tm_contact_peers(pl: PeerListener) {
 
     trace!("TunnelManager contacting peers");
 
-    let mut udp_peers_fut = Vec::new();
     let mut manual_peers_ip_fut = Vec::new();
     let mut manual_peers_dns_fut = Vec::new();
     for (_, peer) in pl.peers.iter() {
         trace!("contacting peer found by UDP {:?}", peer);
-        udp_peers_fut.push(tm_neighbor_inquiry_udp_peer(peer, &pl));
+        if let Err(e) = tm_neighbor_inquiry_udp_peer(peer, &pl) {
+            error!("Neighbor inqury for failed with: {:?}", e);
+        }
     }
     for manual_peer in manual_peers.iter() {
         trace!("contacting manual peer {:?}", manual_peer);
@@ -225,15 +239,8 @@ pub async fn tm_contact_peers(pl: PeerListener) {
     // sync actions, but for manual peers the advantage is huge since there are half a dozen exits
     // and they each may take seconds to respond, joining the udp peers in just lets us run their sync
     // operations while efficiencly waiting for http exit responses
-    let a = join_all(udp_peers_fut);
-    let b = join_all(manual_peers_ip_fut);
-    let c = join_all(manual_peers_dns_fut);
-    let (udp_result, manual_result_ip, manual_result_dns) = join3(a, b, c).await;
-    for r in udp_result {
-        if let Err(e) = r {
-            error!("Neighbor inqury for failed with: {:?}", e);
-        }
-    }
+    let manual_result_ip = join_all(manual_peers_ip_fut).await;
+    let manual_result_dns = join_all(manual_peers_dns_fut).await;
     for r in manual_result_ip {
         if let Err(e) = r {
             error!("Neighbor inqury for failed with: {:?}", e);
