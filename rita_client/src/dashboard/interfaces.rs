@@ -260,8 +260,10 @@ pub fn ethernet_transform_mode(
             let ret = KI.del_uci_var("network.backhaul");
             return_codes.push(ret);
         }
-        // LTE is even simpler
+        // LTE is the same
         InterfaceMode::LTE => {
+            network.external_nic = None;
+
             let ret = KI.del_uci_var("network.lte");
             return_codes.push(ret);
         }
@@ -320,6 +322,8 @@ pub fn ethernet_transform_mode(
             return_codes.push(ret);
         }
         InterfaceMode::LTE => {
+            network.external_nic = Some(ifname.to_string());
+
             let ret = KI.set_uci_var("network.lte", "interface");
             return_codes.push(ret);
             let ret = KI.set_uci_var("network.lte.ifname", ifname);
