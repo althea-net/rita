@@ -45,43 +45,45 @@ pub async fn operator_update() {
     let rita_exit = settings::get_rita_exit();
     let id = rita_exit.get_identity().unwrap();
 
-    info!("About to perform operator update with {}", url);
+    if let Some(pass) = rita_exit.exit_network.pass {
+        info!("About to perform operator update with {}", url);
 
-    let client = awc::Client::default();
-    let response = client
-        .post(url)
-        .timeout(OPERATOR_UPDATE_TIMEOUT)
-        .send_json(&OperatorExitCheckinMessage {
-            id,
-            pass: rita_exit.exit_network.pass,
-            exit_uptime: RITA_UPTIME.elapsed(),
-            // Since this checkin works only from b20, we only need to look on wg_exit_v2
-            users_online: KI.get_wg_exit_clients_online("wg_exit_v2").ok(),
-        })
-        .await;
+        let client = awc::Client::default();
+        let response = client
+            .post(url)
+            .timeout(OPERATOR_UPDATE_TIMEOUT)
+            .send_json(&OperatorExitCheckinMessage {
+                id,
+                pass,
+                exit_uptime: RITA_UPTIME.elapsed(),
+                // Since this checkin works only from b20, we only need to look on wg_exit_v2
+                users_online: KI.get_wg_exit_clients_online("wg_exit_v2").ok(),
+            })
+            .await;
 
-    let response = match response {
-        Ok(mut response) => {
-            trace!("Response is {:?}", response.status());
-            trace!("Response is {:?}", response.headers());
-            response.json().await
-        }
-        Err(e) => {
-            error!("Failed to perform exit operator checkin with {:?}", e);
-            return;
-        }
-    };
+        let response = match response {
+            Ok(mut response) => {
+                trace!("Response is {:?}", response.status());
+                trace!("Response is {:?}", response.headers());
+                response.json().await
+            }
+            Err(e) => {
+                error!("Failed to perform exit operator checkin with {:?}", e);
+                return;
+            }
+        };
 
-    let new_settings: OperatorExitUpdateMessage = match response {
-        Ok(a) => a,
-        Err(e) => {
-            error!("Failed to perform exit operator checkin with {:?}", e);
-            return;
-        }
-    };
+        let new_settings: OperatorExitUpdateMessage = match response {
+            Ok(a) => a,
+            Err(e) => {
+                error!("Failed to perform exit operator checkin with {:?}", e);
+                return;
+            }
+        };
 
-    // Perform operator updates
-    register_op_clients(new_settings.to_register).await;
+        // Perform operator updates
+        register_op_clients(new_settings.to_register).await;
+    }
 }
 
 async fn register_op_clients(clients: Vec<ExitClientIdentity>) {
