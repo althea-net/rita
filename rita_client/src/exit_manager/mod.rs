@@ -42,6 +42,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::time::Instant;
 
 /// The number of times ExitSwitcher will try to connect to an unresponsive exit before blacklisting its ip
 const MAX_BLACKLIST_STRIKES: u16 = 100;
@@ -78,13 +79,26 @@ pub struct SelectedExitList {
 }
 
 /// An actor which pays the exit
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct ExitManager {
     pub nat_setup: bool,
     /// Every tick we query an exit endpoint to get a list of exits in that cluster. We use this list for exit switching
     pub exit_list: ExitList,
     /// Store last exit here, when we see an exit change, we reset wg tunnels
     pub last_exit: Option<IpAddr>,
+    /// Store exit connection status. If no update in > 10, perform a power cycle
+    pub last_connection_time: Instant,
+}
+
+impl Default for ExitManager {
+    fn default() -> Self {
+        ExitManager {
+            nat_setup: false,
+            exit_list: ExitList::default(),
+            last_exit: None,
+            last_connection_time: Instant::now(),
+        }
+    }
 }
 
 /// This functions sets the exit list ONLY IF the list arguments provived is not empty. This is need for the following edge case:
@@ -755,4 +769,21 @@ pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
         }
     }
     None
+}
+
+/// Verifies ipv4 connectivity by pinging 1.1.1.1
+pub fn run_ping_test() -> bool {
+    match KI.run_command("ping", &["-c", "2", "1.1.1.1"]) {
+        Ok(out) => {
+            let out = String::from_utf8(out.stdout).expect("Why did this unwrap fail?");
+            if out.contains("time=") {
+                return true;
+            }
+            false
+        }
+        Err(e) => {
+            error!("ipv4 ping error: {:?}", e);
+            false
+        }
+    }
 }
