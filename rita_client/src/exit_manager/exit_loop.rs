@@ -4,7 +4,7 @@ use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
 use crate::exit_manager::{
     correct_default_route, exit_general_details_request, exit_status_request, get_client_pub_ipv6,
     get_cluster_ip_list, get_full_selected_exit, get_routes_hashmap, initialize_selected_exit_list,
-    linux_setup_exit_tunnel, remove_nat, restore_nat, set_exit_list,
+    linux_setup_exit_tunnel, remove_nat, restore_nat, run_ping_test, set_exit_list,
 };
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
@@ -20,6 +20,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const EXIT_LOOP_SPEED: Duration = Duration::from_secs(5);
+const PING_TEST_SPEED: Duration = Duration::from_secs(100);
+const REBOOT_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// This asnyc loop runs functions related to Exit management.
 pub fn start_exit_manager_loop() {
@@ -70,12 +72,26 @@ pub fn start_exit_manager_loop() {
                                         Vec::new()
                                     }
                                 };
+
+                                // Run this ping test every PING_TEST_SPEED seconds
+                                if Instant::now() - em_state.last_connection_time > PING_TEST_SPEED {
+                                    if run_ping_test() {
+                                        em_state.last_connection_time = Instant::now();
+                                    } else {
+                                         // If this router has been in a bad state for >10 mins, reboot
+                                         if (Instant::now() - em_state.last_connection_time) > REBOOT_TIMEOUT {
+                                            let _res = KI.run_command("reboot", &[]);
+                                        }
+                                    }
+                                }
+
                                 // Get cluster exit list. This is saved locally and updated every tick depending on what exit we connect to.
                                 // When it is empty, it means an exit we connected to went down, and we use the list from memory to connect to a new instance
                                 let exit_list = match get_cluster_ip_list(current_exit.clone()).await {
                                     Ok(a) => a,
                                     Err(e) => {
                                         error!("Exit_Switcher: Unable to get exit list: {:?}", e);
+
                                         ExitList {
                                             exit_list: Vec::new(),
                                             wg_exit_listen_port: 0,
