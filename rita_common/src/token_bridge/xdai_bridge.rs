@@ -150,7 +150,7 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
                 bridge.eth_privatekey,
                 token,
                 *DAI_CONTRACT_ADDRESS,
-                None,
+                Some(100u16.into()),
                 token_amount.clone(),
                 None,
                 Some(get_min_amount_out(token_amount)),
