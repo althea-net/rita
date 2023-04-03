@@ -35,6 +35,7 @@ use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel::prelude::PgConnection;
+use exit_db::models::Client;
 use rita_common::blockchain_oracle::calculate_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
@@ -363,27 +364,54 @@ pub fn cleanup_exit_clients(
     Ok(())
 }
 
+#[derive(Default, Clone, Serialize, Deserialize, Debug)]
+pub struct ExitClientSetupStates {
+    // cache of clients from previous tick. Used to check if we need to
+    // rerun some setup code
+    pub old_clients: HashSet<ExitClient>,
+    // List of clients we see on wg_exit from previous tick. Used to check for new clients on the
+    // interface
+    pub wg_exit_clients: HashSet<WgKey>,
+    // List of clients on wg_exit_v2 from previous tick
+    pub wg_exit_v2_clients: HashSet<WgKey>,
+}
+
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct CurrentExitClientState {
+    new_v2: HashSet<WgKey>,
+    new_v1: HashSet<WgKey>,
+    all_v2: HashSet<WgKey>,
+    all_v1: HashSet<WgKey>,
+}
+
 /// Gets a complete list of clients from the database and transforms that list
 /// into a single very long wg tunnel setup command which is then applied to the
 /// wg_exit tunnel (or created if it's the first run). This is the offically supported
 /// way to update live WireGuard tunnels and should not disrupt traffic
 pub fn setup_clients(
     clients_list: &[exit_db::models::Client],
-    old_clients: &HashSet<ExitClient>,
-) -> Result<HashSet<ExitClient>, Box<RitaExitError>> {
+    client_states: ExitClientSetupStates,
+) -> Result<ExitClientSetupStates, Box<RitaExitError>> {
+    let mut client_states = client_states;
     let start = Instant::now();
 
     // use hashset to ensure uniqueness and check for duplicate db entries
     let mut wg_clients = HashSet::new();
+    let mut key_to_client_map: HashMap<WgKey, Client> = HashMap::new();
 
-    trace!("got clients from db {:?} {:?}", clients_list, old_clients);
+    trace!(
+        "got clients from db {:?} {:?}",
+        clients_list,
+        client_states.old_clients
+    );
 
     for c in clients_list.iter() {
         match (c.verified, to_exit_client(c.clone())) {
             (true, Ok(exit_client_c)) => {
-                if !wg_clients.insert(exit_client_c) {
+                if !wg_clients.insert(exit_client_c.clone()) {
                     error!("Duplicate database entry! {}", c.wg_pubkey);
                 }
+                key_to_client_map.insert(exit_client_c.public_key, c.clone());
             }
             (true, Err(e)) => warn!("Error converting {:?} to exit client {:?}", c, e),
             (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
@@ -394,7 +422,11 @@ pub fn setup_clients(
     // symetric difference is an iterator of all items in A but not in B
     // or in B but not in A, in short if there's any difference between the two
     // it must be nonzero, since all entires must be unique there can not be duplicates
-    if wg_clients.symmetric_difference(old_clients).count() != 0 {
+    if wg_clients
+        .symmetric_difference(&client_states.old_clients)
+        .count()
+        != 0
+    {
         info!("Setting up configs for wg_exit and wg_exit_v2");
         let mut tc_datastore = get_tc_datastore();
         let ipv6_filter_handles = tc_datastore.ipv6_filter_handles;
@@ -453,55 +485,138 @@ pub fn setup_clients(
             wg_clients.len(),
         );
     }
+
     // Setup ipv6 and v4 routes and rules for clients
-    let new_wg_exit_clients: HashMap<WgKey, SystemTime> = KI
+    let new_wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> = KI
         .get_last_handshake_time("wg_exit_v2")
         .expect("There should be a new wg_exit interface")
         .into_iter()
         .collect();
-    let wg_exit_clients: HashMap<WgKey, SystemTime> = KI
+    let wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> = KI
         .get_last_handshake_time("wg_exit")
         .expect("There should be a wg_exit interface")
         .into_iter()
         .collect();
-    for c in clients_list.iter() {
-        let interface =
-            match get_client_interface(c, new_wg_exit_clients.clone(), wg_exit_clients.clone()) {
-                Ok(a) => a,
-                Err(_) => {
-                    // There is no handshake on either wg_exit or wg_exit_v2, which can happen during a restart
-                    // in this case the client will not have an ipv6 route until they initiate a handshake again
-                    continue;
-                }
-            };
-        KI.setup_client_routes(
-            c.internet_ipv6.clone(),
-            c.mesh_ip.clone(),
-            c.internal_ip.clone(),
-            &interface,
-        );
 
-        let ex_nic = settings::get_rita_exit()
-            .network
-            .external_nic
-            .expect("Expected an external nic here");
+    let ex_nic = settings::get_rita_exit()
+        .network
+        .external_nic
+        .expect("Expected an external nic here");
 
-        let res = KI.setup_client_rules(
-            c.internet_ipv6.clone(),
-            c.mesh_ip.clone(),
-            &interface,
-            ex_nic.clone(),
-        );
+    // Get all new clients that need rule setup for wg_exit_v2 and wg_exit respectively
+    let changed_clients_return = find_changed_clients(
+        client_states.clone(),
+        new_wg_exit_clients_timestamps,
+        wg_exit_clients_timestamps,
+        clients_list,
+    );
 
-        if res.is_err() {
-            error!(
-                "IPV6 Error: Setup client ip6tables rules failed with: {:?}",
-                res
+    // set previous tick states to current clients on wg interfaces
+    client_states.wg_exit_v2_clients = changed_clients_return.all_v2;
+    client_states.wg_exit_clients = changed_clients_return.all_v1;
+
+    // setup new wg_exit_v2 routes
+    for c_key in changed_clients_return.new_v2 {
+        if let Some(c) = key_to_client_map.get(&c_key) {
+            KI.setup_client_routes(
+                c.internet_ipv6.clone(),
+                c.mesh_ip.clone(),
+                c.internal_ip.clone(),
+                "wg_exit_v2",
             );
+            let res = KI.setup_client_rules(
+                c.internet_ipv6.clone(),
+                c.mesh_ip.clone(),
+                "wg_exit_v2",
+                ex_nic.clone(),
+            );
+            if res.is_err() {
+                error!(
+                    "IPV6 Error: Setup client ip6tables rules failed with: {:?}",
+                    res
+                );
+                client_states.wg_exit_v2_clients.remove(&c_key);
+            }
         }
     }
 
-    Ok(wg_clients)
+    // setup new wg_exit routes (downgrade from b20 -> 19 and new b19 routers)
+    for c_key in changed_clients_return.new_v1 {
+        if let Some(c) = key_to_client_map.get(&c_key) {
+            KI.setup_client_routes(
+                c.internet_ipv6.clone(),
+                c.mesh_ip.clone(),
+                c.internal_ip.clone(),
+                "wg_exit",
+            );
+
+            let res = KI.setup_client_rules(
+                c.internet_ipv6.clone(),
+                c.mesh_ip.clone(),
+                "wg_exit",
+                ex_nic.clone(),
+            );
+            if res.is_err() {
+                error!(
+                    "IPV6 Error: Setup client ip6tables rules failed with: {:?}",
+                    res
+                );
+                client_states.wg_exit_clients.remove(&c_key);
+            }
+        }
+    }
+
+    Ok(client_states)
+}
+
+/// Find all clients that underwent transition from b19 -> 20 or vice versa and need updated rules and routes
+/// This function returns (v2_clients to setup, v1_clients to setup, all_v2 clients, all_v1 clients)
+fn find_changed_clients(
+    client_states: ExitClientSetupStates,
+    all_v2: HashMap<WgKey, SystemTime>,
+    all_v1: HashMap<WgKey, SystemTime>,
+    clients_list: &[exit_db::models::Client],
+) -> CurrentExitClientState {
+    let wg_exit = "wg_exit".to_string();
+    let mut v1_clients = HashSet::new();
+
+    let wg_exit_v2 = "wg_exit_v2".to_string();
+    let mut v2_clients = HashSet::new();
+
+    // Look at handshakes of each client to determine if they are a V1 or V2 client
+    for c in clients_list {
+        match get_client_interface(c, all_v2.clone(), all_v1.clone()) {
+            Ok(interface) => {
+                if interface == wg_exit {
+                    v1_clients.insert(match c.wg_pubkey.parse() {
+                        Ok(a) => a,
+                        Err(_) => continue,
+                    });
+                } else if interface == wg_exit_v2 {
+                    v2_clients.insert(match c.wg_pubkey.parse() {
+                        Ok(a) => a,
+                        Err(_) => continue,
+                    });
+                }
+            }
+            Err(_) => {
+                // There is no handshake on either wg_exit or wg_exit_v2, which can happen during a restart
+                // in this case the client will not have an ipv6 route until they initiate a handshake again
+                continue;
+            }
+        };
+    }
+
+    // All new client (that need rules setup) are Set{clients on wg interface} - Set{clients from previous tick}
+    let new_v2 = &v2_clients - &client_states.wg_exit_v2_clients;
+    let new_v1 = &v1_clients - &client_states.wg_exit_clients;
+
+    CurrentExitClientState {
+        new_v2,
+        new_v1,
+        all_v2: v2_clients,
+        all_v1: v1_clients,
+    }
 }
 
 pub fn get_client_interface(

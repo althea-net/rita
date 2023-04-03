@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use KernelInterfaceError as Error;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ExitClient {
     pub internal_ip: IpAddr,
     pub internet_ipv6_list: Vec<IpNetwork>,

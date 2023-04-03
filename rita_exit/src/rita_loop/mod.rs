@@ -15,12 +15,13 @@ use crate::{get_database_connection, network_endpoints::*, RitaExitError};
 use crate::database::struct_tools::clients_to_ids;
 use crate::database::{
     cleanup_exit_clients, enforce_exit_clients, setup_clients, validate_clients_region,
+    ExitClientSetupStates,
 };
 use crate::traffic_watcher::{watch_exit_traffic, Watch};
 use actix_async::System as AsyncSystem;
 use actix_web_async::{web, App, HttpServer};
 use althea_kernel_interface::ExitClient;
-use althea_types::Identity;
+use althea_types::{Identity, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
 
 use diesel::{query_dsl::RunQueryDsl, PgConnection};
@@ -41,6 +42,23 @@ pub const EXIT_LOOP_SPEED: u64 = 5;
 pub const EXIT_LOOP_SPEED_DURATION: Duration = Duration::from_secs(EXIT_LOOP_SPEED);
 pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
+/// Cache of rita exit state to track across ticks
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+pub struct RitaExitCache {
+    // a cache of what tunnels we had setup last round, used to prevent extra setup ops
+    wg_clients: HashSet<ExitClient>,
+    // a list of client debts from the last round, to prevent extra enforcement ops
+    debt_actions: HashSet<(Identity, DebtAction)>,
+    // if we have successfully setup the wg exit tunnel in the past, if false we have never
+    // setup exit clients and should crash if we fail to do so, otherwise we are preventing
+    // proper failover
+    successful_setup: bool,
+    // cache of b19 routers we have successful rules and routes for
+    wg_exit_clients: HashSet<WgKey>,
+    // cache of b20 routers we have successful rules and routes for
+    wg_exit_v2_clients: HashSet<WgKey>,
+}
+
 /// Starts the rita exit billing thread, this thread deals with blocking db
 /// calls and performs various tasks required for billing. The tasks interacting
 /// with actix are the most troublesome because the actix system may restart
@@ -57,17 +75,11 @@ pub fn start_rita_exit_loop() {
         // with some fancy destructuring
         while let Err(e) = {
             thread::spawn(move || {
-                // a cache of what tunnels we had setup last round, used to prevent extra setup ops
-                let mut wg_clients: HashSet<ExitClient> = HashSet::new();
-                // a list of client debts from the last round, to prevent extra enforcement ops
-                let mut debt_actions: HashSet<(Identity, DebtAction)> = HashSet::new();
-                // if we have successfully setup the wg exit tunnel in the past, if false we have never
-                // setup exit clients and should crash if we fail to do so, otherwise we are preventing
-                // proper failover
-                let mut successful_setup: bool = false;
+                // Internal exit cache that store state across multiple ticks
+                let mut rita_exit_cache = RitaExitCache::default();
 
                 loop {
-                    rita_exit_loop(&mut wg_clients, &mut debt_actions, &mut successful_setup)
+                    rita_exit_cache = rita_exit_loop(rita_exit_cache);
                 }
             })
             .join()
@@ -83,11 +95,8 @@ pub fn start_rita_exit_loop() {
     });
 }
 
-fn rita_exit_loop(
-    wg_clients: &mut HashSet<ExitClient>,
-    debt_actions: &mut HashSet<(Identity, DebtAction)>,
-    successful_setup: &mut bool,
-) {
+fn rita_exit_loop(rita_exit_cache: RitaExitCache) -> RitaExitCache {
+    let mut rita_exit_cache = rita_exit_cache;
     let start = Instant::now();
     // opening a database connection takes at least several milliseconds, as the database server
     // may be across the country, so to save on back and forth we open on and reuse it as much
@@ -106,51 +115,90 @@ fn rita_exit_loop(
                 error!("IPV6 Error: Unable to reset databases: {:?}", e);
             };
 
+            let get_clients = Instant::now();
             if let Ok(clients_list) = clients.load::<models::Client>(&conn) {
-                trace!("got {:?} clients", clients_list);
+                info!(
+                    "Finished Rita get clients, got {:?} clients in {}ms",
+                    clients_list.len(),
+                    get_clients.elapsed().as_millis()
+                );
                 let ids = clients_to_ids(clients_list.clone());
 
+                let start_bill = Instant::now();
                 // watch and bill for traffic
                 bill(babel_port, start, ids);
+                info!(
+                    "Finished Rita billing in {}ms",
+                    start_bill.elapsed().as_millis()
+                );
 
                 info!("about to setup clients");
+                let start_setup = Instant::now();
                 // Create and update client tunnels
-                match setup_clients(&clients_list, wg_clients) {
-                    Ok(new_wg_clients) => {
-                        *successful_setup = true;
-                        *wg_clients = new_wg_clients;
+                match setup_clients(
+                    &clients_list,
+                    ExitClientSetupStates {
+                        old_clients: rita_exit_cache.wg_clients.clone(),
+                        wg_exit_clients: rita_exit_cache.wg_exit_clients.clone(),
+                        wg_exit_v2_clients: rita_exit_cache.wg_exit_v2_clients.clone(),
+                    },
+                ) {
+                    Ok(client_states) => {
+                        rita_exit_cache.successful_setup = true;
+                        rita_exit_cache.wg_clients = client_states.old_clients;
+                        rita_exit_cache.wg_exit_clients = client_states.wg_exit_clients;
+                        rita_exit_cache.wg_exit_v2_clients = client_states.wg_exit_v2_clients;
                     }
                     Err(e) => error!("Setup clients failed with {:?}", e),
                 }
+                info!(
+                    "Finished Rita setting up clients in {}ms",
+                    start_setup.elapsed().as_millis()
+                );
 
+                let start_cleanup = Instant::now();
                 info!("about to cleanup clients");
                 // find users that have not been active within the configured time period
                 // and remove them from the db
                 if let Err(e) = cleanup_exit_clients(&clients_list, &conn) {
                     error!("Exit client cleanup failed with {:?}", e);
                 }
+                info!(
+                    "Finished Rita cleaning clients in {}ms",
+                    start_cleanup.elapsed().as_millis()
+                );
 
                 // Make sure no one we are setting up is geoip unauthorized
+                let start_region = Instant::now();
                 info!("about to check regions");
                 check_regions(start, clients_list.clone(), &conn);
+                info!(
+                    "Finished Rita checking region in {}ms",
+                    start_region.elapsed().as_millis()
+                );
 
                 info!("About to enforce exit clients");
                 // handle enforcement on client tunnels by querying debt keeper
                 // this consumes client list
-                match enforce_exit_clients(clients_list, debt_actions) {
-                    Ok(new_debt_actions) => *debt_actions = new_debt_actions,
+                let start_enforce = Instant::now();
+                match enforce_exit_clients(clients_list, &rita_exit_cache.debt_actions) {
+                    Ok(new_debt_actions) => rita_exit_cache.debt_actions = new_debt_actions,
                     Err(e) => warn!("Failed to enforce exit clients with {:?}", e,),
                 }
+                info!(
+                    "Finished Rita enforcement in {}ms ",
+                    start_enforce.elapsed().as_millis()
+                );
 
                 info!(
-                    "Completed Rita exit loop in {}ms, all vars should be dropped",
+                    "Finished Rita exit loop in {}ms, all vars should be dropped",
                     start.elapsed().as_millis(),
                 );
             }
         }
         Err(e) => {
             error!("Failed to get database connection with {}", e);
-            if !*successful_setup {
+            if !rita_exit_cache.successful_setup {
                 let db_uri = settings::get_rita_exit().db_uri;
                 let message = format!(
                     "Failed to get database connection to {db_uri} on first setup loop, the exit can not operate without the ability to get the clients list from the database exiting"
@@ -163,6 +211,7 @@ fn rita_exit_loop(
         }
     }
     thread::sleep(EXIT_LOOP_SPEED_DURATION);
+    rita_exit_cache
 }
 
 fn bill(babel_port: u16, start: Instant, ids: Vec<Identity>) {
