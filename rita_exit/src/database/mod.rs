@@ -487,15 +487,34 @@ pub fn setup_clients(
     }
 
     // Setup ipv6 and v4 routes and rules for clients
+    // We optimise by setting up routes/rules only for those routers we see a latest handshake value with.
+    // 1.) Find handshakes on both interfaces
+    // 2.) From these timestamps, determine if client is wg exit v1 or v2
+    // 3.) Compare this to our datastore of previous clients we set up routes for
+    // 4.) Set up routes for v2 or v1 based on this
     let new_wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> = KI
-        .get_last_handshake_time("wg_exit_v2")
+        .get_last_active_handshake_time("wg_exit_v2")
         .expect("There should be a new wg_exit interface")
         .into_iter()
         .collect();
     let wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> = KI
-        .get_last_handshake_time("wg_exit")
+        .get_last_active_handshake_time("wg_exit")
         .expect("There should be a wg_exit interface")
         .into_iter()
+        .collect();
+
+    let client_list_for_setup: Vec<Client> = key_to_client_map
+        .clone()
+        .into_iter()
+        .filter_map(|(k, v)| {
+            if new_wg_exit_clients_timestamps.contains_key(&k)
+                || wg_exit_clients_timestamps.contains_key(&k)
+            {
+                Some(v)
+            } else {
+                None
+            }
+        })
         .collect();
 
     let ex_nic = settings::get_rita_exit()
@@ -508,7 +527,7 @@ pub fn setup_clients(
         client_states.clone(),
         new_wg_exit_clients_timestamps,
         wg_exit_clients_timestamps,
-        clients_list,
+        &client_list_for_setup,
     );
 
     // set previous tick states to current clients on wg interfaces
