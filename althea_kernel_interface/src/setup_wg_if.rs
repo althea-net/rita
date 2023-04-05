@@ -124,6 +124,44 @@ impl dyn KernelInterface {
         }
         Ok(timestamps)
     }
+
+    /// Returns the last handshake time of every ACTIVE client on this tunnel.
+    /// An active handshake mean a wireguard tunnel that has a latest handshake value
+    /// When running wg show wg_exit latest-handshake, a entries with timestamp 0 are inactive
+    pub fn get_last_active_handshake_time(
+        &self,
+        ifname: &str,
+    ) -> Result<Vec<(WgKey, SystemTime)>, Error> {
+        let output = self.run_command("wg", &["show", ifname, "latest-handshakes"])?;
+        let out = String::from_utf8(output.stdout)?;
+        let mut timestamps = Vec::new();
+        for line in out.lines() {
+            let content: Vec<&str> = line.split('\t').collect();
+            let mut itr = content.iter();
+            let wg_key: WgKey = match itr.next() {
+                Some(val) => val.parse()?,
+                None => {
+                    return Err(KernelInterfaceError::RuntimeError(
+                        "Invalid line!".to_string(),
+                    ))
+                }
+            };
+            let timestamp = match itr.next() {
+                Some(val) => val.parse()?,
+                None => {
+                    return Err(KernelInterfaceError::RuntimeError(
+                        "Invalid line!".to_string(),
+                    ))
+                }
+            };
+            if timestamp == 0 {
+                continue;
+            }
+            let d = UNIX_EPOCH + Duration::from_secs(timestamp);
+            timestamps.push((wg_key, d))
+        }
+        Ok(timestamps)
+    }
 }
 
 #[test]
