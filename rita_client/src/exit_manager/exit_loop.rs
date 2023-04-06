@@ -233,9 +233,29 @@ pub fn start_exit_manager_loop() {
                         let servers = { settings::get_rita_client().exit_client.exits };
                         for (k, s) in servers {
                             match s.info {
-                                ExitState::New { .. } => general_requests.push(exit_general_details_request(k.clone())),
-                                ExitState::Registered { .. } => status_requests.push(exit_status_request(k.clone())),
-                                _ => {}
+                                ExitState::New { .. } => {
+                                    trace!("Exit {} is in state NEW, calling general details", k);
+                                    general_requests.push(exit_general_details_request(k.clone()))
+                                },
+                                // now that Operator tools can register clients, we perform status update on GotInfo to check if
+                                // Ops has registered us. This will move our GotInfo -> Registered state for an exit
+                                ExitState::GotInfo { .. } => {
+                                    trace!("Exit {} is in state GotInfo, calling status request", k);
+                                    status_requests.push(exit_status_request(k.clone()))
+                                },
+                                // For routers that register normally, (not through ops), GotInfo -> Pending. In this state, we 
+                                // continue to query until we reach Registered
+                                ExitState::Pending { .. } => {
+                                    trace!("Exit {} is in state Pending, calling status request", k);
+                                    status_requests.push(exit_status_request(k.clone()));
+                                },
+                                ExitState::Registered { .. } => {
+                                    trace!("Exit {} is in state Registered, calling status request", k);
+                                    status_requests.push(exit_status_request(k.clone()));
+                                },
+                                _ => {
+                                    trace!("Exit {} is in state {:?} calling status request", k, s.info);
+                                }
                             }
                         }
                         join!(join_all(general_requests), join_all(status_requests));

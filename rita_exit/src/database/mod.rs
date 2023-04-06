@@ -246,7 +246,9 @@ pub fn client_status(
         })
     } else {
         error!("De-registering client! {:?}", client);
-        Ok(ExitState::New)
+        Err(Box::new(RitaExitError::MiscStringError(
+            "Status request for a client that isnt present, please register first!".to_string(),
+        )))
     }
 }
 
