@@ -584,6 +584,7 @@ pub struct OperatorUpdateMessage {
     pub billing_details: Option<BillingDetails>,
     /// Last seen hour that ops tools has for usage data, so we know from the router
     /// side how much history we need to send in with the next checkin cycle
+    #[serde(default = "default_ops_last_seen_usage_hour")]
     pub ops_last_seen_usage_hour: u64,
 }
 
@@ -647,6 +648,10 @@ fn default_shaper_settings() -> ShaperSettings {
         min_speed: 50,
         enabled: true,
     }
+}
+
+fn default_ops_last_seen_usage_hour() -> u64 {
+    0
 }
 
 /// The message we send to the operator server to checkin, this allows us to customize
