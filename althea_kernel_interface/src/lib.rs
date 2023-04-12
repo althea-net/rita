@@ -89,6 +89,7 @@ pub enum KernelInterfaceError {
     InvalidArchString(String),
     FailedToGetSystemTime,
     FailedToGetSystemKernelVersion,
+    ParseError(String),
 }
 
 impl fmt::Display for KernelInterfaceError {
@@ -109,6 +110,7 @@ impl fmt::Display for KernelInterfaceError {
                 write!(f, "Failed to get load average!")
             }
             KernelInterfaceError::FailedToGetMemoryInfo => write!(f, "Failed to get memory info!"),
+            KernelInterfaceError::ParseError(val) => write!(f, "Unable to parse: {val}!"),
             KernelInterfaceError::NoAltheaReleaseFeedFound => {
                 write!(f, "Could not pares /etc/opkg/customfeeds.conf")
             }

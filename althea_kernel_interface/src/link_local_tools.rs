@@ -1,57 +1,70 @@
-use crate::{KernelInterface, KernelInterfaceError};
+use crate::{file_io::get_lines, KernelInterface, KernelInterfaceError};
 use regex::Regex;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+pub fn parse_if_inet6_addr(line: String, is_local: bool) -> Result<Ipv6Addr, KernelInterfaceError> {
+    if (is_local && line.starts_with("fe80")) || (!is_local && !line.starts_with("fe80")) {
+        let mut line = line;
+        // 32 hex characters in v6 addr
+        line.truncate(32);
+
+        let mut addr_str = "".to_string();
+        for (i, c) in line.char_indices() {
+            if i != 0 && i % 4 == 0 {
+                addr_str.push(':');
+            }
+            addr_str.push(c);
+        }
+
+        let addr: Ipv6Addr = match addr_str.parse() {
+            Ok(a) => a,
+            Err(e) => {
+                error!("Unable to parse ipv6 link local with {:?}", e);
+                return Err(KernelInterfaceError::ParseError(addr_str));
+            }
+        };
+
+        return Ok(addr);
+    }
+
+    Err(KernelInterfaceError::RuntimeError(
+        "Cannot find request ip on interface".to_string(),
+    ))
+}
 
 impl dyn KernelInterface {
     /// This gets our link local ip for a given device
     pub fn get_link_local_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
-        let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "link"])?;
-        trace!("Got {:?} from `ip addr`", output);
-
-        lazy_static! {
-            static ref RE: Regex = Regex::new(r"inet6 (\S*?)(/[0-9]+)? scope link")
-                .expect("Unable to compile regular expression");
+        let path = "/proc/net/if_inet6";
+        let lines = get_lines(path)?;
+        for line in lines {
+            if line.contains(dev) {
+                match parse_if_inet6_addr(line, true) {
+                    Ok(a) => return Ok(a),
+                    Err(_) => continue,
+                }
+            }
         }
-
-        let cap_str = String::from_utf8(output.stdout)?;
-        let err = String::from_utf8(output.stderr)?;
-        let cap = RE.captures(&cap_str);
-        if let Some(cap) = cap {
-            trace!("got link local IP of {} from device {}", &cap[1], &dev);
-            Ok(cap[1].parse::<Ipv6Addr>()?)
-        } else if err.contains("does not exist") {
-            Err(KernelInterfaceError::NoInterfaceError(dev.to_string()))
-        } else if cap.is_none() && output.status.success() {
-            Err(KernelInterfaceError::AddressNotReadyError(
-                "No address seems to be available yet".to_string(),
-            ))
-        } else {
-            Err(KernelInterfaceError::RuntimeError(
-                "Some other error occured".to_string(),
-            ))
-        }
+        Err(KernelInterfaceError::AddressNotReadyError(
+            "No address seems to be available yet".to_string(),
+        ))
     }
 
     /// This gets our global ip for a given device
     pub fn get_global_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
-        let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "global"])?;
-        trace!("Got {:?} from `ip addr`", output);
-
-        lazy_static! {
-            static ref RE: Regex = Regex::new(r"inet (\S*?)(/[0-9]+)? scope global")
-                .expect("Unable to compile regular expression");
+        let path = "/proc/net/if_inet6";
+        let lines = get_lines(path)?;
+        for line in lines {
+            if line.contains(dev) {
+                match parse_if_inet6_addr(line, false) {
+                    Ok(a) => return Ok(a),
+                    Err(_) => continue,
+                }
+            }
         }
-
-        let cap_str = String::from_utf8(output.stdout)?;
-        let cap = RE.captures(&cap_str);
-        if let Some(cap) = cap {
-            trace!("got global IP of {} from device {}", &cap[1], &dev);
-            Ok(cap[1].parse::<Ipv6Addr>()?)
-        } else {
-            Err(KernelInterfaceError::RuntimeError(
-                "No global found or no interface found".to_string(),
-            ))
-        }
+        Err(KernelInterfaceError::AddressNotReadyError(
+            "No address seems to be available yet".to_string(),
+        ))
     }
 
     pub fn get_global_device_ip_v4(&self, dev: &str) -> Result<Ipv4Addr, KernelInterfaceError> {
@@ -156,80 +169,50 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
 }
 
 #[test]
-fn test_get_link_local_device_ip_linux() {
-    use crate::KI;
+fn test_if_inet6_parsing() {
+    let addrs = "26003c01e002f1000000000000000000 06 3c 00 80   br-lan
+fd53a881fcbb6747a0ae2e1d8473b242 10 80 00 80      wg1
+fd53a881fcbb6747a0ae2e1d8473b242 0e 80 00 80      wg0
+fe800000000000009683c4fffe0deeb5 09 40 20 80    wlan1
+fe80000000000000a0ae2e1d8473b242 10 40 20 80      wg1
+fe80000000000000a0ae2e1d8473b242 0f 40 20 80  wg_exit
+fe80000000000000a0ae2e1d8473b242 0e 40 20 80      wg0
+00000000000000000000000000000001 01 80 10 80       lo
+fe800000000000009683c4fffe0deeb4 0a 40 20 80    wlan0
+fe800000000000009683c4fffe0deeb4 06 40 20 80   br-lan
+fe800000000000009683c4fffe0deeb4 02 40 20 80     eth0
+fe800000000000009683c4fffe0deeb4 08 40 20 80   eth0.4"
+        .to_string();
 
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
+    let mut br_lan_local: Option<Ipv6Addr> = None;
+    let mut br_lan_global: Option<Ipv6Addr> = None;
 
-    KI.set_mock(Box::new(move |program, args| {
-        assert_eq!(program, "ip");
-        assert_eq!(args, &["addr", "show", "dev", "eth0", "scope", "link"]);
-
-        Ok(Output {
-                stdout: b"2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
-    link/ether 74:df:bf:30:37:f3 brd ff:ff:ff:ff:ff:ff
-    inet6 fe80::96:3add:69d9:906a/64 scope link
-       valid_lft forever preferred_lft forever"
-                    .to_vec(),
-                stderr: b"".to_vec(),
-                status: ExitStatus::from_raw(0),
-            })
-    }));
-
-    let ip = KI.get_link_local_device_ip("eth0").unwrap();
-
-    assert_eq!(ip, "fe80::96:3add:69d9:906a".parse::<IpAddr>().unwrap())
-}
-
-#[test]
-fn test_get_link_local_reply_ip_linux() {
-    use crate::KI;
-
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    let mut counter = 0;
-
-    KI.set_mock(Box::new(move |program, args| {
-        counter += 1;
-        match counter {
-            1 => {
-                assert_eq!(program, "ip");
-                assert_eq!(args, &["neigh"]);
-
-                Ok(Output {
-                    stdout: b"
-fe80::7459:8eff:fe98:81 dev eth0 lladdr 76:59:8e:98:00:81 STALE
-fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE"
-                        .to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
+    let lines = addrs.split('\n').collect::<Vec<&str>>();
+    for line in lines {
+        if line.contains("br-lan") {
+            match parse_if_inet6_addr(line.to_string(), false) {
+                Ok(a) => br_lan_global = Some(a),
+                Err(_) => continue,
             }
-            2 => {
-                assert_eq!(program, "ip");
-                assert_eq!(args, &["addr", "show", "dev", "eth0", "scope", "link"]);
-
-                Ok(Output {
-                        stdout: b"2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
-    link/ether 74:df:bf:30:37:f3 brd ff:ff:ff:ff:ff:ff
-    inet6 fe80::96:3add:69d9:906a/64 scope link
-       valid_lft forever preferred_lft forever"
-                            .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-            }
-            _ => unimplemented!("called too many times"),
         }
-    }));
+    }
 
-    let dev = KI
-        .get_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap(), None)
-        .unwrap();
+    let lines = addrs.split('\n').collect::<Vec<&str>>();
+    for line in lines {
+        if line.contains("br-lan") {
+            match parse_if_inet6_addr(line.to_string(), true) {
+                Ok(a) => br_lan_local = Some(a),
+                Err(_) => continue,
+            }
+        }
+    }
 
-    assert_eq!(dev, "fe80::96:3add:69d9:906a".parse::<IpAddr>().unwrap())
+    assert_eq!(
+        br_lan_global,
+        Some("2600:3c01:e002:f100::".parse().unwrap())
+    );
+    assert_eq!(
+        br_lan_local,
+        Some("fe80::9683:c4ff:fe0d:eeb4".parse().unwrap())
+    )
 }
