@@ -20,10 +20,16 @@ use crate::tunnel_manager::TunnelChange;
 use crate::tunnel_manager::TunnelStateChange;
 use crate::RitaCommonError;
 
+use althea_types::Denom;
+use althea_types::SystemChain;
 use althea_types::{Identity, PaymentTx};
 use num256::{Int256, Uint256};
 use num_traits::identities::Zero;
+use num_traits::CheckedMul;
 use num_traits::Signed;
+use settings::get_rita_common;
+use settings::DEBT_KEEPER_DENOM;
+use settings::DEBT_KEEPER_DENOM_DECIMAL;
 
 use std::collections::HashMap;
 use std::fs;
@@ -171,9 +177,40 @@ pub fn dump() -> DebtData {
     dk.get_debts()
 }
 
-pub fn payment_received(from: Identity, amount: Uint256) -> Result<(), RitaCommonError> {
+pub fn payment_received(
+    from: Identity,
+    amount: Uint256,
+    denom: Denom,
+) -> Result<(), RitaCommonError> {
     let mut dk = DEBT_DATA.write().unwrap();
+
+    // Debt keeper currently bookeeps in dai, we convert whatever amount we recive to the debt keeper using
+    let amount = normalize_payment_amount(
+        amount,
+        denom,
+        Denom {
+            denom: DEBT_KEEPER_DENOM.to_string(),
+            decimal: DEBT_KEEPER_DENOM_DECIMAL,
+        },
+    );
     dk.payment_received(&from, amount)
+}
+
+/// Currency conversion from_denom -> to_denom
+pub fn normalize_payment_amount(amount: Uint256, from_denom: Denom, to_denom: Denom) -> Uint256 {
+    let mut amount = amount;
+    if from_denom.denom != to_denom.denom {
+        let unit_factor = match amount.checked_mul(&to_denom.decimal.into()) {
+            Some(a) => a,
+            None => panic!(
+                "We overflowed when multipling {} and {}",
+                amount, to_denom.decimal
+            ),
+        };
+        // Pay 1 more unit amount to account for loss from integer division
+        amount = (unit_factor / from_denom.decimal.into()) + 1u64.into();
+    };
+    amount
 }
 
 pub fn payment_failed(to: Identity) {
@@ -181,8 +218,21 @@ pub fn payment_failed(to: Identity) {
     dk.payment_failed(&to)
 }
 
-pub fn payment_succeeded(to: Identity, amount: Uint256) -> Result<(), RitaCommonError> {
+pub fn payment_succeeded(
+    to: Identity,
+    amount: Uint256,
+    denom: Denom,
+) -> Result<(), RitaCommonError> {
     let mut dk = DEBT_DATA.write().unwrap();
+    // Debt keeper currently bookeeps in dai, we convert whatever amount we recive to the debt keeper using
+    let amount = normalize_payment_amount(
+        amount,
+        denom,
+        Denom {
+            denom: DEBT_KEEPER_DENOM.to_string(),
+            decimal: DEBT_KEEPER_DENOM_DECIMAL,
+        },
+    );
     add_tx_to_total(amount);
     dk.payment_succeeded(&to, amount)
 }
@@ -255,11 +305,14 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
                 });
             }
             DebtAction::MakePayment { to, amount } => {
-                if potential_payment_issues_detected() {
-                    warn!("Potential payment issue detected");
-                    return Err(RitaCommonError::MiscStringError(
-                        "Potential payment issue detected".to_string(),
-                    ));
+                let payment = get_rita_common().payment;
+                if let SystemChain::Xdai = payment.system_chain {
+                    if potential_payment_issues_detected() {
+                        warn!("Potential payment issue detected");
+                        return Err(RitaCommonError::MiscStringError(
+                            "Potential payment issue detected".to_string(),
+                        ));
+                    }
                 }
                 queue_payment(PaymentTx {
                     to,
@@ -273,6 +326,7 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
                     },
                     amount,
                     txid: None, // not yet published
+                    tx_hash: None,
                 });
             }
         }
@@ -744,6 +798,9 @@ mod tests {
             "0x0000000000000000000000000000000000000001"
                 .parse()
                 .unwrap(),
+            "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
+                .parse()
+                .unwrap(),
             "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
                 .unwrap(),
@@ -761,6 +818,9 @@ mod tests {
         Identity::new(
             array.into(),
             "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
+            "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
                 .parse()
                 .unwrap(),
             "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
@@ -1255,6 +1315,11 @@ mod tests {
             eth_address: "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
                 .parse()
                 .unwrap(),
+            althea_address: Some(
+                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
+                    .parse()
+                    .unwrap(),
+            ),
             wg_public_key: "zgAlhyOQy8crB0ewrsWt3ES9SvFguwx5mq9i2KiknmA="
                 .parse()
                 .unwrap(),
@@ -1277,6 +1342,11 @@ mod tests {
             eth_address: "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
                 .parse()
                 .unwrap(),
+            althea_address: Some(
+                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
+                    .parse()
+                    .unwrap(),
+            ),
             wg_public_key: "uNu3IMSgt3SY2+MvtEwjEpx45lOk7q/7sWC3ff80GXE="
                 .parse()
                 .unwrap(),

@@ -96,6 +96,7 @@ EXIT_SETTINGS = {
             },
             "eth_address": "0xbe398dc24de37c73cec974d688018e58f94d6e0a",
             "wg_public_key": "H/ABwzXk834OwGYU8CZGfFxNZOd+BAJEaVDHiEiWWhU=",
+            "althea_address": "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3",
             "registration_port": 4875,
             "state": "New",
         }

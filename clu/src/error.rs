@@ -10,6 +10,7 @@ pub enum NewCluError {
     StandardError(std::io::Error),
     NoDeviceName(String),
     ClarityError(clarity::Error),
+    DeepSpaceError(deep_space::error::PrivateKeyError),
 }
 
 impl From<clarity::Error> for NewCluError {
@@ -32,6 +33,11 @@ impl From<std::io::Error> for NewCluError {
         NewCluError::StandardError(error)
     }
 }
+impl From<deep_space::error::PrivateKeyError> for NewCluError {
+    fn from(error: deep_space::error::PrivateKeyError) -> Self {
+        NewCluError::DeepSpaceError(error)
+    }
+}
 
 impl Display for NewCluError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
@@ -44,6 +50,7 @@ impl Display for NewCluError {
                 write!(f, "Could not obtain device name from line {a:?}",)
             }
             NewCluError::ClarityError(e) => write!(f, "{e}"),
+            NewCluError::DeepSpaceError(e) => write!(f, "{e}"),
         }
     }
 }

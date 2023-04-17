@@ -99,7 +99,7 @@ fn decrypt_exit_client_id(
         }
     };
 
-    let decrypted_id: ExitClientIdentity = match serde_json::from_str(&decrypted_string) {
+    let decrypted_id = match serde_json::from_str(&decrypted_string) {
         Ok(value) => value,
         Err(e) => {
             error!(

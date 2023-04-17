@@ -4,6 +4,7 @@ use arrayvec::ArrayString;
 use babel_monitor::structs::Neighbor;
 use babel_monitor::structs::Route;
 use clarity::Address;
+use deep_space::Address as AltheaAddress;
 use ipnetwork::IpNetwork;
 use num256::Uint256;
 use serde::de::Error;
@@ -22,6 +23,8 @@ use std::time::{Duration, SystemTime};
 pub struct Identity {
     pub mesh_ip: IpAddr,
     pub eth_address: Address,
+    // set to an option to allow for backwards compatibilty
+    pub althea_address: Option<AltheaAddress>,
     pub wg_public_key: WgKey,
     pub nickname: Option<ArrayString<32>>,
 }
@@ -31,13 +34,13 @@ impl Display for Identity {
         match self.nickname {
             Some(nick) => write!(
                 f,
-                "nickname: {}, mesh_ip: {}, eth_address: {}, wg_pubkey {}",
-                nick, self.mesh_ip, self.eth_address, self.wg_public_key
+                "nickname: {}, mesh_ip: {}, eth_address: {}, althea_address: {:?}, wg_pubkey {}",
+                nick, self.mesh_ip, self.eth_address, self.althea_address, self.wg_public_key
             ),
             None => write!(
                 f,
-                "mesh_ip: {}, eth_address: {}, wg_pubkey {}",
-                self.mesh_ip, self.eth_address, self.wg_public_key
+                "mesh_ip: {}, eth_address: {}, althea_address: {:?}, wg_pubkey {}",
+                self.mesh_ip, self.eth_address, self.althea_address, self.wg_public_key
             ),
         }
     }
@@ -47,12 +50,14 @@ impl Identity {
     pub fn new(
         mesh_ip: IpAddr,
         eth_address: Address,
+        althea_address: AltheaAddress,
         wg_public_key: WgKey,
         nickname: Option<ArrayString<32>>,
     ) -> Identity {
         Identity {
             mesh_ip,
             eth_address,
+            althea_address: Some(althea_address),
             wg_public_key,
             nickname,
         }
@@ -78,6 +83,7 @@ impl PartialEq for Identity {
     fn eq(&self, other: &Identity) -> bool {
         self.mesh_ip == other.mesh_ip
             && self.eth_address == other.eth_address
+            && self.althea_address == other.althea_address
             && self.wg_public_key == other.wg_public_key
     }
 }
@@ -95,12 +101,22 @@ impl Hash for Identity {
     }
 }
 
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct Denom {
+    /// String representation of token, ex, ualthea, wei, from athea chain will be some unpredictable ibc/<hash>
+    pub denom: String,
+    /// This value * 1 denom = 1 unit of token. For example for wei, decimal is 10^18. So 1 wei * 10^18 = 1 eth
+    /// u64 supports upto a 10^19 decimal
+    pub decimal: u64,
+}
+
 #[derive(Default, Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
 pub enum SystemChain {
     Ethereum,
     Rinkeby,
     #[default]
     Xdai,
+    Althea,
 }
 
 impl Display for SystemChain {
@@ -109,6 +125,7 @@ impl Display for SystemChain {
             SystemChain::Ethereum => write!(f, "Ethereum"),
             SystemChain::Rinkeby => write!(f, "Rinkeby"),
             SystemChain::Xdai => write!(f, "Xdai"),
+            SystemChain::Althea => write!(f, "Althea"),
         }
     }
 }
@@ -124,6 +141,7 @@ impl FromStr for SystemChain {
             "Ethereum" => Ok(SystemChain::Ethereum),
             "Rinkeby" => Ok(SystemChain::Rinkeby),
             "Xdai" => Ok(SystemChain::Xdai),
+            "Althea" => Ok(SystemChain::Althea),
             _ => Err(()),
         }
     }
@@ -315,6 +333,8 @@ pub struct PaymentTx {
     pub amount: Uint256,
     // populated when transaction is published
     pub txid: Option<Uint256>,
+    // althea chain tx reciept
+    pub tx_hash: Option<String>,
 }
 
 /// This enum contains information about what type of update we need to perform on a router initiated from op tools.

@@ -25,6 +25,7 @@ pub enum RitaExitError {
     IpNetworkError(IpNetworkError),
     PhoneParseError(phonenumber::ParseError),
     ClarityError(clarity::error::Error),
+    DeepSpaceError(deep_space::error::AddressError),
     AltheaTypesError(AltheaTypesError),
     KernelInterfaceError(KernelInterfaceError),
 }
@@ -42,6 +43,11 @@ impl From<AddrParseError> for RitaExitError {
 impl From<RitaCommonError> for RitaExitError {
     fn from(error: RitaCommonError) -> Self {
         RitaExitError::RitaCommonError(error)
+    }
+}
+impl From<deep_space::error::AddressError> for RitaExitError {
+    fn from(error: deep_space::error::AddressError) -> Self {
+        RitaExitError::DeepSpaceError(error)
     }
 }
 impl From<RenderError> for RitaExitError {
@@ -104,6 +110,7 @@ impl Display for RitaExitError {
             RitaExitError::IpAddrError(a) => write!(f, "No route found for mesh ip: {a:?}",),
             RitaExitError::DieselError(a) => write!(f, "{a}",),
             RitaExitError::RitaCommonError(a) => write!(f, "{a}",),
+            RitaExitError::DeepSpaceError(a) => write!(f, "{a}",),
             RitaExitError::RenderError(a) => write!(f, "{a}",),
             RitaExitError::EmailError(a) => write!(f, "{a}",),
             RitaExitError::FileError(a) => write!(f, "{a}",),

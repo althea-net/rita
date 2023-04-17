@@ -224,7 +224,10 @@ pub async fn get_exit_info(to: &SocketAddr) -> Result<ExitState, RitaClientError
     let client = awc::Client::default();
     let mut response = match client.get(&endpoint).send().await {
         Ok(a) => a,
-        Err(e) => return Err(RitaClientError::SendRequestError(e.to_string())),
+        Err(e) => {
+            error!("Unable to get exit info with {}", e);
+            return Err(RitaClientError::SendRequestError(e.to_string()));
+        }
     };
     let response_json = response.json().await?;
 

@@ -1,9 +1,12 @@
+use althea_types::Denom;
 use althea_types::SystemChain;
 use auto_bridge::default_bridge_addresses;
 use auto_bridge::TokenBridgeAddresses;
 use clarity::{Address, PrivateKey};
+use deep_space::Address as AltheaAddress;
 use num256::Int256;
 use num256::Uint256;
+use std::collections::HashMap;
 
 fn default_local_fee() -> u32 {
     0u32 // updated by oracle, denominated in wei/byte
@@ -79,6 +82,10 @@ fn default_enable_enforcement() -> bool {
     true
 }
 
+fn default_node_grpc() -> Option<String> {
+    None
+}
+
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -112,8 +119,15 @@ pub struct PaymentSettings {
     pub enable_enforcement: bool,
     /// Our own eth private key we do not store address, instead it is derived from here
     pub eth_private_key: Option<PrivateKey>,
-    // Our own eth Address, derived from the private key on startup and not stored
+    /// Our own eth Address, derived from the private key on startup and not stored
     pub eth_address: Option<Address>,
+    /// Payment denoms that payment validator accepts. Ex usdc -> Denom {ibc/hash, 1_000_000}
+    pub accepted_denoms: Option<HashMap<String, Denom>>,
+    /// Althea chain ethermint public key, generated from eth private key
+    pub althea_address: Option<AltheaAddress>,
+    /// GRPC Node used to create a contact object to interact with althea blockchain
+    #[serde(default = "default_node_grpc")]
+    pub cosmos_node_grpc: Option<String>,
     /// A list of nodes to query for blockchain data
     /// this is kept seperate from the version for DAO settings node
     /// list in order to allow for the DAO and payments to exist on different
@@ -175,9 +189,12 @@ impl Default for PaymentSettings {
             client_can_use_free_tier: default_client_can_use_free_tier(),
             balance_warning_level: default_balance_warning_level(),
             payment_threshold: default_payment_threshold(),
+            accepted_denoms: None,
             enable_enforcement: true,
             eth_private_key: None,
             eth_address: None,
+            althea_address: None,
+            cosmos_node_grpc: default_node_grpc(),
             node_list: default_node_list(),
             system_chain: default_system_chain(),
             withdraw_chain: default_system_chain(),

@@ -3,10 +3,16 @@
 //! until it is successfully in a block, see payment_validator, once the payment is on
 //! the blockchain it's up to the reciever to validate that it's correct
 
-use althea_types::PaymentTx;
+use althea_types::SystemChain;
+use althea_types::{Denom, PaymentTx};
 use awc;
+use deep_space::{Coin, Contact, EthermintPrivateKey, PrivateKey};
 use futures::future::{join, join_all};
 use num256::Uint256;
+use settings::network::NetworkSettings;
+use settings::payment::PaymentSettings;
+use settings::{DEBT_KEEPER_DENOM, DEBT_KEEPER_DENOM_DECIMAL};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Result as DisplayResult;
 use std::fmt::{Display, Formatter};
@@ -19,8 +25,10 @@ use web30::types::SendTxOption;
 use crate::blockchain_oracle::{
     get_oracle_balance, get_oracle_latest_gas_price, get_oracle_nonce, set_oracle_nonce,
 };
-use crate::debt_keeper::payment_failed;
-use crate::payment_validator::{get_payment_txids, validate_later, ToValidate};
+use crate::debt_keeper::{normalize_payment_amount, payment_failed};
+use crate::payment_validator::{
+    get_payment_txids, validate_later, ToValidate, ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT,
+};
 use crate::rita_loop::get_web3_server;
 
 pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
@@ -143,10 +151,170 @@ pub async fn tick_payment_controller() {
 
 /// This is called by debt_keeper to make payments. It sends a
 /// PaymentTx to the `mesh_ip` in its `to` field.
-async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> {
+async fn make_payment(pmt: PaymentTx) -> Result<(), PaymentControllerError> {
     let common = settings::get_rita_common();
     let network_settings = common.network;
     let payment_settings = common.payment;
+    let system_chain = payment_settings.system_chain;
+
+    match system_chain {
+        SystemChain::Althea => make_althea_payment(pmt, payment_settings, network_settings).await,
+        SystemChain::Xdai => make_xdai_payment(pmt, payment_settings, network_settings).await,
+        SystemChain::Rinkeby => {
+            warn!("Payments on Rinkeby not currently supported!");
+            return Ok(());
+        }
+        SystemChain::Ethereum => {
+            warn!("Payments on Ethereum not currently supported!");
+            return Ok(());
+        }
+    }
+}
+
+async fn make_althea_payment(
+    mut pmt: PaymentTx,
+    payment_settings: PaymentSettings,
+    network_settings: NetworkSettings,
+) -> Result<(), PaymentControllerError> {
+    // On althea chain, we default to paying with usdc, config must specify this as an accepted denom
+    let usdc_denom = match payment_settings
+        .accepted_denoms
+        .unwrap_or(HashMap::new())
+        .get("usdc")
+    {
+        Some(a) => a.clone(),
+        None => {
+            error!("No USDC denom found");
+            return Err(PaymentControllerError::FailedToSendPayment);
+        }
+    };
+
+    // Validate that we have a valid to and from address
+    let our_address = match pmt.from.althea_address {
+        Some(a) => a,
+        None => {
+            error!("how are we making a a payment over althea chain with no althea address");
+            return Err(PaymentControllerError::FailedToSendPayment);
+        }
+    };
+
+    // our althea private key is generated from our eth private key
+    let our_private_key = match payment_settings.eth_private_key {
+        Some(a) => EthermintPrivateKey::from_secret(&a.to_bytes()),
+        None => {
+            error!("How are we making an althea payment with no private key??");
+            return Err(PaymentControllerError::FailedToSendPayment);
+        }
+    };
+
+    let to_address = match pmt.to.althea_address {
+        Some(a) => a,
+        None => {
+            error!("how are we making a a payment over althea chain with no to address");
+            return Err(PaymentControllerError::FailedToSendPayment);
+        }
+    };
+
+    let cosmos_node_grpc = match payment_settings.cosmos_node_grpc {
+        Some(a) => a,
+        None => {
+            error!("Did we forget to configure a cosmos_node_grpc in config? None found!");
+            return Err(PaymentControllerError::FailedToSendPayment);
+        }
+    };
+
+    // Convert Debt keeper denom to USDC
+    pmt.amount = normalize_payment_amount(
+        pmt.amount,
+        Denom {
+            denom: DEBT_KEEPER_DENOM.to_string(),
+            decimal: DEBT_KEEPER_DENOM_DECIMAL,
+        },
+        usdc_denom.clone(),
+    );
+
+    // Create a contact object and get our balance
+    let althea_contact = Contact::new(
+        &cosmos_node_grpc,
+        ALTHEA_CONTACT_TIMEOUT,
+        ALTHEA_CHAIN_PREFIX,
+    )
+    .unwrap();
+
+    let balance = match althea_contact
+        .get_balance(our_address, usdc_denom.denom.clone())
+        .await
+    {
+        Ok(a) => match a {
+            Some(a) => a,
+            None => {
+                error!("Unable to get balance for wallet {:?}", our_address);
+                return Err(PaymentControllerError::FailedToSendPayment);
+            }
+        },
+        Err(e) => {
+            error!(
+                "Unable to get balance for wallet {:?} with {:?}",
+                our_address, e
+            );
+            return Err(PaymentControllerError::FailedToSendPayment);
+        }
+    };
+
+    match sanity_check_balance(Some(balance.amount), &pmt) {
+        Ok(_) => {}
+        Err(e) => return Err(e),
+    }
+
+    info!(
+        "current USDC balance on Althea Chain: {:?}, payment of {:?}, from address {} to address {}",
+        balance, pmt.amount, our_address, to_address
+    );
+
+    let coin = Coin {
+        amount: pmt.amount,
+        denom: usdc_denom.denom.clone(),
+    };
+    // Make microtx transaction.
+    let transaction = match althea_contact
+        .send_microtx(coin, None, to_address, None, our_private_key)
+        .await
+    {
+        Ok(a) => a,
+        Err(e) => {
+            error!(
+                "Failed to send payment {:?} to {:?} with {:?}",
+                pmt, pmt.to, e
+            );
+            payment_failed(pmt.to);
+            return Err(PaymentControllerError::FailedToSendPayment);
+        }
+    };
+
+    // setup tx hash
+    pmt.tx_hash = Some(transaction.txhash);
+
+    send_make_payment_endpoints(pmt.clone(), network_settings, None, Some(cosmos_node_grpc)).await;
+
+    // place this payment in the validation queue to handle later.
+    let ts = ToValidate {
+        payment: pmt,
+        received: Instant::now(),
+        checked: false,
+    };
+
+    if let Err(e) = validate_later(ts.clone()) {
+        error!("Received error trying to validate {:?} Error: {:?}", ts, e);
+    }
+
+    return Ok(());
+}
+
+async fn make_xdai_payment(
+    mut pmt: PaymentTx,
+    payment_settings: PaymentSettings,
+    network_settings: NetworkSettings,
+) -> Result<(), PaymentControllerError> {
     let balance = get_oracle_balance();
     let nonce = get_oracle_nonce();
     let gas_price = get_oracle_latest_gas_price();
@@ -155,57 +323,15 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         .expect("No private key configured!");
     let our_address = our_private_key.to_address();
 
-    info!(
-        "current balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
-        balance, pmt.amount, our_address, pmt.to.eth_address, nonce
-    );
-    match balance {
-        Some(value) => {
-            if value < pmt.amount {
-                warn!("Not enough money to pay debts! Cutoff imminent");
-                // having this here really doesn't matter much, either we
-                // tell debt keeper the payment failed and it enqueues another
-                // that also won't succeed right away, or it waits for the timeout
-                // and does the same thing.
-                payment_failed(pmt.to);
-                return Err(PaymentControllerError::InsufficientFunds {
-                    amount: pmt.amount,
-                    balance: balance.unwrap_or_else(|| 0u64.into()),
-                });
-            } else if pmt.amount == 0u32.into() {
-                // in this case we just drop the tx, no retry no other messages
-                error!("Trying to pay nothing!");
-                return Err(PaymentControllerError::ZeroPayment);
-            }
-        }
-        None => {
-            warn!("Balance is none");
-            return Err(PaymentControllerError::InsufficientFunds {
-                amount: pmt.amount,
-                balance: balance.unwrap_or_else(|| 0u64.into()),
-            });
-        }
+    match sanity_check_balance(balance, &pmt) {
+        Ok(_) => {}
+        Err(e) => return Err(e),
     }
 
-    // testing hack
-    let neighbor_url = if cfg!(not(test)) {
-        format!(
-            "http://[{}]:{}/make_payment",
-            pmt.to.mesh_ip, network_settings.rita_contact_port,
-        )
-    } else {
-        String::from("http://127.0.0.1:1234/make_payment")
-    };
-
-    // v2 version, this takes a list of pmts instead of one
-    let neighbor_url_v2 = if cfg!(not(test)) {
-        format!(
-            "http://[{}]:{}/make_payment_v2",
-            pmt.to.mesh_ip, network_settings.rita_contact_port,
-        )
-    } else {
-        String::from("http://127.0.0.1:1234/make_payment_v2")
-    };
+    info!(
+        "current xdai balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
+        balance, pmt.amount, our_address, pmt.to.eth_address, nonce
+    );
 
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
@@ -247,6 +373,83 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     // add published txid to submission
     pmt.txid = Some(tx_id);
 
+    send_make_payment_endpoints(pmt.clone(), network_settings, Some(full_node), None).await;
+
+    // place this payment in the validation queue to handle later.
+    let ts = ToValidate {
+        payment: pmt,
+        received: Instant::now(),
+        checked: false,
+    };
+
+    if let Err(e) = validate_later(ts.clone()) {
+        error!("Received error trying to validate {:?} Error: {:?}", ts, e);
+    }
+
+    return Ok(());
+}
+
+fn sanity_check_balance(
+    balance: Option<Uint256>,
+    pmt: &PaymentTx,
+) -> Result<(), PaymentControllerError> {
+    match balance {
+        Some(value) => {
+            if value < pmt.amount {
+                warn!("Not enough money to pay debts! Cutoff imminent");
+                // having this here really doesn't matter much, either we
+                // tell debt keeper the payment failed and it enqueues another
+                // that also won't succeed right away, or it waits for the timeout
+                // and does the same thing.
+                payment_failed(pmt.to);
+                Err(PaymentControllerError::InsufficientFunds {
+                    amount: pmt.amount,
+                    balance: value,
+                })
+            } else if pmt.amount == 0u32.into() {
+                // in this case we just drop the tx, no retry no other messages
+                error!("Trying to pay nothing!");
+                return Err(PaymentControllerError::ZeroPayment);
+            } else {
+                Ok(())
+            }
+        }
+        None => {
+            warn!("Balance is none");
+            Err(PaymentControllerError::InsufficientFunds {
+                amount: pmt.amount,
+                balance: balance.unwrap_or_else(|| 0u64.into()),
+            })
+        }
+    }
+}
+
+async fn send_make_payment_endpoints(
+    pmt: PaymentTx,
+    network_settings: NetworkSettings,
+    full_node: Option<String>,
+    cosmos_node_grpc: Option<String>,
+) {
+    // testing hack
+    let neighbor_url = if cfg!(not(test)) {
+        format!(
+            "http://[{}]:{}/make_payment",
+            pmt.to.mesh_ip, network_settings.rita_contact_port,
+        )
+    } else {
+        String::from("http://127.0.0.1:1234/make_payment")
+    };
+
+    // v2 version, this takes a list of pmts instead of one
+    let neighbor_url_v2 = if cfg!(not(test)) {
+        format!(
+            "http://[{}]:{}/make_payment_v2",
+            pmt.to.mesh_ip, network_settings.rita_contact_port,
+        )
+    } else {
+        String::from("http://127.0.0.1:1234/make_payment_v2")
+    };
+
     // Get all txids to this client. Temporary add new payment to a copy of a list to send up to endpoint
     // this pmt is actually recorded in memory after validator confirms it
     let mut txid_history = get_payment_txids(pmt.to);
@@ -264,7 +467,6 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         .send_json(&txid_history);
 
     let resend_info = ResendInfo {
-        txid: tx_id,
         neigh_url: neighbor_url.clone(),
         pmt: pmt.clone(),
         attempt: 0u8,
@@ -273,42 +475,80 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     // Hit both endpoints, in the case of a node having both endpoints, validator will simply get a duplicate transaction txid and discard it.
     let (neigh_ack_v2, neigh_ack) = join(neigh_ack_v2, neigh_ack).await;
 
+    let tx_id = pmt.txid;
+    let tx_hash = pmt.tx_hash;
     match (neigh_ack_v2, neigh_ack) {
         (Ok(mut val2), Ok(mut val)) => {
             // THis is probably a b20 router
             match (val2.status().is_success(), val.status().is_success()) {
                 (true, _) => {
                     info!(
-                        "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using full node {} and amount {}",
-                        tx_id,
+                        "Payment pmt with tx identifier: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
+                        {
+                            if tx_id.is_some() {
+                                format!("{:#066x}", tx_id.unwrap())
+                            } else {
+                                tx_hash.unwrap()
+                            }
+                        },
                         val2.status(),
                         val2.body().await,
                         neighbor_url_v2,
-                        full_node,
+                        {
+                            if full_node.is_some() {
+                                full_node
+                            } else {
+                                cosmos_node_grpc
+                            }
+                        },
                         pmt.amount
                     );
                 }
                 (false, true) => {
                     error!(
-                        "Make_payment_v2 with txid {:#066x} failed with status {:?} and body {:?}",
-                        tx_id,
+                        "Make_payment_v2 with tx identifier {} failed with status {:?} and body {:?}",
+                        {
+                            if tx_id.is_some() {
+                                format!("{:#066x}", tx_id.unwrap())
+                            } else {
+                                tx_hash.clone().unwrap()
+                            }
+                        },
                         val2.status(),
                         val2.body().await
                     );
                     info!(
-                        "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using full node {} and amount {}",
-                        tx_id,
+                        "Payment pmt with tx identifier: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
+                        {
+                            if tx_id.is_some() {
+                                format!("{:#066x}", tx_id.unwrap())
+                            } else {
+                                tx_hash.unwrap()
+                            }
+                        },
                         val.status(),
                         val.body().await,
                         neighbor_url,
-                        full_node,
+                        {
+                            if full_node.is_some() {
+                                full_node
+                            } else {
+                                cosmos_node_grpc
+                            }
+                        },
                         pmt.amount
                     );
                 }
                 _ => {
                     error!(
-                        "We published txid: {:#066x} to url {} but our neighbor responded with status {:?} and body {:?}, will retry",
-                        tx_id, neighbor_url, val.status(), val.body().await);
+                        "We published txid: {} to url {} but our neighbor responded with status {:?} and body {:?}, will retry",
+                        {
+                            if tx_id.is_some() {
+                                format!("{:#066x}", tx_id.unwrap())
+                            } else {
+                                tx_hash.unwrap()
+                            }
+                        }, neighbor_url, val.status(), val.body().await);
                     queue_resend(resend_info);
                 }
             }
@@ -317,18 +557,36 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
             // probably a b19 router
             if val.status().is_success() {
                 info!(
-                    "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using full node {} and amount {}",
-                    tx_id,
+                    "Payment pmt with txid: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
+                    {
+                        if tx_id.is_some() {
+                            format!("{:#066x}", tx_id.unwrap())
+                        } else {
+                            tx_hash.unwrap()
+                        }
+                    },
                     val.status(),
                     val.body().await,
                     neighbor_url,
-                    full_node,
+                    {
+                        if full_node.is_some() {
+                            full_node
+                        } else {
+                            cosmos_node_grpc
+                        }
+                    },
                     pmt.amount
                 );
             } else {
                 error!(
-                    "Make_payment with txid {:#066x} failed with status {:?} and body {:?}",
-                    tx_id,
+                    "Make_payment with tx identifier {} failed with status {:?} and body {:?}",
+                    {
+                        if tx_id.is_some() {
+                            format!("{:#066x}", tx_id.unwrap())
+                        } else {
+                            tx_hash.unwrap()
+                        }
+                    },
                     val.status(),
                     val.body().await
                 );
@@ -339,18 +597,36 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
             // has been removed, all this legacy code can be removed also
             if val2.status().is_success() {
                 info!(
-                    "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using full node {} and amount {}",
-                    tx_id,
+                    "Payment pmt with txid: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
+                    {
+                        if tx_id.is_some() {
+                            format!("{:#066x}", tx_id.unwrap())
+                        } else {
+                            tx_hash.unwrap()
+                        }
+                    },
                     val2.status(),
                     val2.body().await,
                     neighbor_url_v2,
-                    full_node,
+                    {
+                        if full_node.is_some() {
+                            full_node
+                        } else {
+                            cosmos_node_grpc
+                        }
+                    },
                     pmt.amount
                 );
             } else {
                 error!(
-                    "Make_payment_v2 with txid {:#066x} failed with status {:?} and body {:?}",
-                    tx_id,
+                    "Make_payment_v2 with txid {} failed with status {:?} and body {:?}",
+                    {
+                        if tx_id.is_some() {
+                            format!("{:#066x}", tx_id.unwrap())
+                        } else {
+                            tx_hash.unwrap()
+                        }
+                    },
                     val2.status(),
                     val2.body().await
                 );
@@ -359,30 +635,23 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         (Err(_), Err(e)) => {
             // Why is make payment failing here? Call a resend
             error!(
-                "We published txid: {:#066x} but failed to notify our neighbor with {:?}, will retry",
-                tx_id, e
+                "We published txid: {} but failed to notify our neighbor with {:?}, will retry",
+                {
+                    if tx_id.is_some() {
+                        format!("{:#066x}", tx_id.unwrap())
+                    } else {
+                        tx_hash.unwrap()
+                    }
+                },
+                e
             );
             queue_resend(resend_info)
         }
     }
-
-    // place this payment in the validation queue to handle later.
-    let ts = ToValidate {
-        payment: pmt,
-        received: Instant::now(),
-        checked: false,
-    };
-
-    if let Err(e) = validate_later(ts.clone()) {
-        error!("Received error trying to validate {:?} Error: {:?}", ts, e);
-    }
-
-    Ok(())
 }
 
 #[derive(Debug, Clone)]
 struct ResendInfo {
-    txid: Uint256,
     neigh_url: String,
     pmt: PaymentTx,
     attempt: u8,
@@ -391,14 +660,23 @@ struct ResendInfo {
 /// For some reason we have sent a payment and managed not to notify our neighbor, this routine will
 /// retry up to MAX_TXID_RETIRES times
 async fn resend_txid(input: ResendInfo) -> Result<(), PaymentControllerError> {
+    let tx_id = input.pmt.txid;
+    let tx_hash = input.pmt.tx_hash.clone();
+
     let mut input = input;
     input.attempt += 1;
 
     // at this point the chance of success is too tiny to be worth it
     if input.attempt > MAX_TXID_RETRIES {
         error!(
-            "We have failed to send txid {:#066x} this payment will remain uncredited!",
-            input.txid
+            "We have failed to send txid {} this payment will remain uncredited!",
+            {
+                if tx_id.is_some() {
+                    format!("{:#066x}", tx_id.unwrap())
+                } else {
+                    tx_hash.unwrap()
+                }
+            },
         );
         return Err(PaymentControllerError::ResendFailed);
     }
@@ -411,7 +689,13 @@ async fn resend_txid(input: ResendInfo) -> Result<(), PaymentControllerError> {
         .await;
 
     if neigh_ack.is_err() || !neigh_ack.unwrap().status().is_success() {
-        error!("retry failed with published txid: {:#066x}", input.txid);
+        error!("retry failed with published txid: {}", {
+            if tx_id.is_some() {
+                format!("{:#066x}", tx_id.unwrap())
+            } else {
+                tx_hash.unwrap()
+            }
+        },);
         queue_resend(input);
     }
 

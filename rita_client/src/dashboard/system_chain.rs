@@ -65,5 +65,8 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             // reset balance so that things take effect immediatley in the UI
             set_oracle_balance(Some(0u32.into()));
         }
+        SystemChain::Althea => {
+            todo!();
+        }
     }
 }

@@ -500,6 +500,7 @@ mod tests {
     use crate::usage_tracker::{self, IOError};
     use althea_types::Identity;
     use clarity::PrivateKey;
+    use deep_space::{EthermintPrivateKey, PrivateKey as CosmosPrivateKey};
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
     use settings::client::RitaClientSettings;
@@ -660,10 +661,14 @@ mod tests {
         // the starting location of the funds
         let eth_key = PrivateKey::from_slice(&secret).unwrap();
         let eth_address = eth_key.to_address();
+        let althea_address = EthermintPrivateKey::from_secret(&eth_key.to_bytes())
+            .to_address("althea")
+            .unwrap();
 
         Identity {
             mesh_ip: ip.into(),
             eth_address,
+            althea_address: Some(althea_address),
             wg_public_key: secret.into(),
             nickname: None,
         }

@@ -18,11 +18,12 @@ extern crate log;
 extern crate arrayvec;
 
 use althea_kernel_interface::KI;
-use althea_types::Identity;
+use althea_types::{Denom, Identity};
 use network::NetworkSettings;
 use payment::PaymentSettings;
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::Write;
@@ -42,6 +43,9 @@ pub use error::SettingsError;
 
 use crate::client::RitaClientSettings;
 use crate::exit::RitaExitSettingsStruct;
+/// denom that debt keeper works in. We convert all currencies received to this amount
+pub const DEBT_KEEPER_DENOM: &str = "wei";
+pub const DEBT_KEEPER_DENOM_DECIMAL: u64 = 1_000_000_000_000_000_000;
 
 pub const SUBNET: u8 = 128;
 pub const US_WEST_SUBNET: u8 = 116;
@@ -148,6 +152,18 @@ pub fn write_config() -> Result<(), SettingsError> {
         }
         None => panic!("expected settings but got none"),
     }
+}
+
+/// Sets up default accepts denoms, by default we need to add the debt keeper denom
+/// As we add more accepted denoms, they will be added during bridge of funds
+pub fn setup_accepted_denoms() -> HashMap<String, Denom> {
+    let mut map = HashMap::new();
+    let wei = Denom {
+        denom: DEBT_KEEPER_DENOM.to_string(),
+        decimal: DEBT_KEEPER_DENOM_DECIMAL,
+    };
+    map.insert("xdai".to_string(), wei);
+    map
 }
 
 /// On an interupt (SIGTERM), saving settings before exiting

@@ -4,6 +4,7 @@ table! {
         wg_pubkey -> Varchar,
         wg_port -> Int4,
         eth_address -> Varchar,
+        althea_address -> Varchar,
         internal_ip -> Varchar,
         internet_ipv6 -> Varchar,
         nickname -> Varchar,

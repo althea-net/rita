@@ -3,10 +3,11 @@ use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
-use crate::{json_merge, set_rita_client, SettingsError};
+use crate::{json_merge, set_rita_client, setup_accepted_denoms, SettingsError};
 use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
 use clarity::Address;
+use deep_space::Address as AltheaAddress;
 use ipnetwork::IpNetwork;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
@@ -42,6 +43,9 @@ pub struct ExitServer {
     /// Subnet for backwards compatilibity
     #[serde(default)]
     pub subnet: Option<IpNetwork>,
+
+    /// Ethermint address of exit for althea chain
+    pub althea_address: Option<AltheaAddress>,
 
     /// eth address of this exit cluster
     pub eth_address: Address,
@@ -180,7 +184,10 @@ impl RitaClientSettings {
         let config_toml = std::fs::read_to_string(file_name)?;
         let ret: Self = toml::from_str(&config_toml)?;
 
-        let ret = Self::convert_subnet_to_root_ip(&ret);
+        let mut ret = Self::convert_subnet_to_root_ip(&ret);
+        // Setup accepted denoms for payment validator, this is for routers during opkg updates,
+        // this can be removed once all router are updated to the version that handles althea chain
+        ret.payment.accepted_denoms = Some(setup_accepted_denoms());
 
         set_rita_client(ret.clone());
 
@@ -258,6 +265,7 @@ impl RitaClientSettings {
         Some(Identity::new(
             self.network.mesh_ip?,
             self.payment.eth_address?,
+            self.payment.althea_address?,
             self.network.wg_public_key?,
             self.network.nickname,
         ))

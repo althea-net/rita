@@ -1,7 +1,7 @@
 use crate::localization::LocalizationSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
-use crate::{json_merge, set_rita_exit, SettingsError};
+use crate::{json_merge, set_rita_exit, setup_accepted_denoms, SettingsError};
 use althea_types::{Identity, WgKey};
 use core::str::FromStr;
 use ipnetwork::IpNetwork;
@@ -249,6 +249,7 @@ impl RitaExitSettingsStruct {
         Some(Identity::new(
             self.network.mesh_ip?,
             self.payment.eth_address?,
+            self.payment.althea_address?,
             self.network.wg_public_key?,
             self.network.nickname,
         ))
@@ -292,7 +293,11 @@ impl RitaExitSettingsStruct {
         }
 
         let config_toml = std::fs::read_to_string(file_name)?;
-        let ret: Self = toml::from_str(&config_toml)?;
+        let mut ret: Self = toml::from_str(&config_toml)?;
+
+        // Setup accepted denoms for payment validator, this is for routers during opkg updates,
+        // this can be removed once all router are updated to the version that handles althea chain
+        ret.payment.accepted_denoms = Some(setup_accepted_denoms());
 
         set_rita_exit(ret.clone());
 

@@ -5,6 +5,7 @@ extern crate lazy_static;
 
 use althea_kernel_interface::KI;
 use clarity::PrivateKey;
+use deep_space::{EthermintPrivateKey, PrivateKey as AltheaPrivateKey};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use regex::Regex;
@@ -196,6 +197,24 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, NewClu
         }
     }
 
+    // Generate the althea private key from existing private key bytes
+    let althea_address_option = payment_settings.althea_address;
+    match althea_address_option {
+        Some(existing_althea_address) => {
+            info!("Starting with Eth address {:?}", existing_althea_address);
+        }
+        None => {
+            info!("Althea key details not configured, generating");
+            let key_buf = payment_settings
+                .eth_private_key
+                .expect("Didnt we just generate a valid key??")
+                .to_bytes();
+            let new_private_key = EthermintPrivateKey::from_secret(&key_buf);
+
+            payment_settings.althea_address = Some(new_private_key.to_address("althea")?);
+        }
+    }
+
     settings.payment = payment_settings;
 
     trace!("Starting with settings (after clu) : {:?}", settings);
@@ -277,6 +296,24 @@ fn linux_exit_init(
             payment_settings.eth_address = Some(new_private_key.to_address())
         }
     }
+
+    let althea_address_option = payment_settings.althea_address;
+    match althea_address_option {
+        Some(existing_althea_address) => {
+            info!("Starting with Eth address {:?}", existing_althea_address);
+        }
+        None => {
+            info!("Althea key details not configured, generating");
+            let key_buf = payment_settings
+                .eth_private_key
+                .expect("Didnt we just generate this??")
+                .to_bytes();
+            let new_private_key = EthermintPrivateKey::from_secret(&key_buf);
+
+            payment_settings.althea_address = Some(new_private_key.to_address("althea")?);
+        }
+    }
+
     settings.payment = payment_settings;
     settings.network = network_settings;
     settings.exit_network = exit_network_settings;

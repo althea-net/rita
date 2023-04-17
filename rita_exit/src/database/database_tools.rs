@@ -2,6 +2,7 @@ use crate::database::secs_since_unix_epoch;
 use crate::database::struct_tools::client_to_new_db_client;
 use crate::database::ONE_DAY;
 use exit_db::models::AssignedIps;
+use exit_db::schema::clients::althea_address;
 use ipnetwork::{IpNetwork, Ipv6Network, NetworkSize};
 use rita_common::utils::ip_increment::increment;
 
@@ -127,6 +128,27 @@ pub fn update_client(
             {
                 return Err(Box::new(e.into()));
             }
+        }
+    }
+
+    // check if althea address needs to be updated
+    if their_record.althea_address == "" && client.global.althea_address.is_some() {
+        info!(
+            "Updating althea address for client {} to {:?}",
+            their_record.wg_pubkey, client.global.althea_address
+        );
+        if let Err(e) = diesel::update(filtered_list.clone())
+            .set(
+                althea_address.eq(client
+                    .global
+                    .althea_address
+                    .unwrap()
+                    .to_string()
+                    .to_lowercase()),
+            )
+            .execute(conn)
+        {
+            return Err(Box::new(e.into()));
         }
     }
 
@@ -293,9 +315,11 @@ pub fn client_conflict(
     let ip = client.global.mesh_ip;
     let wg = client.global.wg_public_key;
     let key = client.global.eth_address;
+    let althea_key = client.global.althea_address;
     let ip_match = clients.filter(mesh_ip.eq(ip.to_string()));
     let wg_key_match = clients.filter(wg_pubkey.eq(wg.to_string()));
     let eth_address_match = clients.filter(eth_address.eq(key.to_string().to_lowercase()));
+
     let ip_exists = match select(exists(ip_match)).get_result(conn) {
         Ok(a) => a,
         Err(e) => return Err(Box::new(e.into())),
@@ -308,11 +332,24 @@ pub fn client_conflict(
         Ok(a) => a,
         Err(e) => return Err(Box::new(e.into())),
     };
+
+    let althea_exist = match althea_key {
+        Some(a) => {
+            let althea_address_match =
+                clients.filter(althea_address.eq(a.to_string().to_lowercase()));
+            match select(exists(althea_address_match)).get_result(conn) {
+                Ok(b) => b,
+                Err(e) => return Err(Box::new(e.into())),
+            }
+        }
+        None => false,
+    };
+
     info!(
         "Signup conflict ip {} eth {} wg {}",
         ip_exists, eth_exists, wg_exists
     );
-    Ok(ip_exists || eth_exists || wg_exists)
+    Ok(ip_exists || eth_exists || wg_exists || althea_exist)
 }
 
 /// Delete a client from the Clients database. Retrieve the reclaimed subnet index and add it to

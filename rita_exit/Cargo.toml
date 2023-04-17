@@ -34,6 +34,7 @@ reqwest = { version = "0.11", features = ["blocking", "json"] }
 exit_db = { path = "../exit_db" }
 actix-web-async = {package="actix-web", version = "4.3", default_features = false, features= ["openssl"] }
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
+deep_space = {version = "2", features = ["althea"]}
 
 [features]
 # changes operator urls

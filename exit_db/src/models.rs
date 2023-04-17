@@ -9,6 +9,7 @@ pub struct Client {
     pub wg_pubkey: String,
     pub wg_port: i32,
     pub eth_address: String,
+    pub althea_address: String,
     pub internal_ip: String,
     pub internet_ipv6: String,
     pub nickname: String,

@@ -269,6 +269,9 @@ fn test_hello_serde() {
                     0xff00, 0xde, 0xad, 0xbe, 0xef, 0xb4, 0xdc, 0x0d,
                 )),
                 Address::from_slice(&address).unwrap(),
+                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
+                    .parse()
+                    .unwrap(),
                 WgKey::from_str(wgkey).unwrap(),
                 None,
             ),
@@ -313,6 +316,9 @@ fn test_encoded_hello_size() {
                     0xff00, 0xde, 0xad, 0xbe, 0xef, 0xb4, 0xdc, 0x0d,
                 )),
                 Address::from_slice(&address).unwrap(),
+                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
+                    .parse()
+                    .unwrap(),
                 WgKey::from_str(wgkey).unwrap(),
                 None,
             ),
@@ -368,6 +374,9 @@ fn test_hello_encode_decode() {
                     0xff00, 0xde, 0xad, 0xbe, 0xef, 0xb4, 0xdc, 0x0d,
                 )),
                 Address::from_slice(&address).unwrap(),
+                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
+                    .parse()
+                    .unwrap(),
                 WgKey::from_str(wgkey).unwrap(),
                 None,
             ),
@@ -432,6 +441,9 @@ fn test_deserialize_with_wrong_serialization() {
                     0xff00, 0xde, 0xad, 0xbe, 0xef, 0xb4, 0xdc, 0x0d,
                 )),
                 Address::from_slice(&address).unwrap(),
+                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
+                    .parse()
+                    .unwrap(),
                 WgKey::from_str(wgkey).unwrap(),
                 None,
             ),
