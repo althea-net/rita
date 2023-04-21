@@ -280,13 +280,14 @@ pub fn get_flag_config() -> String {
 
 /// set client settings into local or adaptor memory
 /// panics if called on exit settings
-pub fn set_rita_client(client_setting: RitaClientSettings) {
+pub fn set_rita_client(mut client_setting: RitaClientSettings) {
     if cfg!(feature = "load_from_disk") {
         let settings_file = get_settings_file_from_ns();
         // save new data to the settings file
         client_setting.write(&settings_file).unwrap();
         return;
     }
+    client_setting.log.enabled = true;
     let settings_ref = &mut *SETTINGS.write().unwrap();
     match settings_ref {
         // if there's an adaptor already saved, then use it to set there

@@ -11,31 +11,34 @@ use std::time::{Duration, Instant};
 /// this update also gets instructions from operator tools, such as updates, reboots, or any OperatorAction
 #[allow(unused_assignments)]
 pub fn start_operator_update_loop() {
-    let mut ops_last_seen_usage_hour: u64 = 0;
     let mut last_restart = Instant::now();
     // outer thread is a watchdog inner thread is the runner
     thread::spawn(move || {
         // this will always be an error, so it's really just a loop statement
         // with some fancy destructuring
         while let Err(e) = {
-            thread::spawn(move || loop {
-                let start = Instant::now();
-                trace!("Update loop tick!");
+            thread::spawn(move || {
+                let mut ops_last_seen_usage_hour: Option<u64> = None;
 
-                let runner = AsyncSystem::new();
-                runner.block_on(async move {
-                    // Check in with Operator
-                    let last = operator_update(ops_last_seen_usage_hour).await;
-                    ops_last_seen_usage_hour = last;
-                });
+                loop {
+                    let start = Instant::now();
+                    trace!("Update loop tick!");
 
-                info!(
-                    "Operator Update loop completed in {}s {}ms",
-                    start.elapsed().as_secs(),
-                    start.elapsed().subsec_millis()
-                );
+                    let runner = AsyncSystem::new();
+                    runner.block_on(async {
+                        // Check in with Operator
+                        let last = operator_update(ops_last_seen_usage_hour).await;
+                        ops_last_seen_usage_hour = Some(last);
+                    });
 
-                thread::sleep(UPDATE_FREQUENCY);
+                    info!(
+                        "Operator Update loop completed in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_millis()
+                    );
+
+                    thread::sleep(UPDATE_FREQUENCY);
+                }
             })
             .join()
         } {

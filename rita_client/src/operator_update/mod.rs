@@ -88,7 +88,7 @@ const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
 pub const OPERATOR_UPDATE_TIMEOUT: Duration = CLIENT_LOOP_TIMEOUT;
 
 /// Checks in with the operator server
-pub async fn operator_update(ops_last_seen_usage_hour: u64) -> u64 {
+pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
     let url: &str;
     if cfg!(feature = "dev_env") {
         url = "http://0.0.0.0:8080/checkin";
@@ -169,16 +169,18 @@ pub async fn operator_update(ops_last_seen_usage_hour: u64) -> u64 {
             return 0;
         }
     };
+    let last_seen_hour = ops_last_seen_usage_hour.unwrap_or(0);
     let mut hours_to_send: u64 = 0;
     // first check whats the last saved hr, send everything from that hr on
     // but, we need to save a var of the last x hrs not seen, and load that up with the next checkin cycle if >0.
-    if current_hour - ops_last_seen_usage_hour > 0 {
-        hours_to_send = current_hour - ops_last_seen_usage_hour;
+    if current_hour - last_seen_hour > 0 {
+        hours_to_send = current_hour - last_seen_hour;
     }
     let mut usage_tracker_data: Option<UsageTracker> = None;
-
     // only deal with this if we actually do need to send some hours
-    if hours_to_send != 0 {
+    // if ops_last_seen_usage_hour is a None the thread has restarted and we are waiting for ops to tell us how much
+    // data we need to send, which will be populated with the next checkin cycle
+    if hours_to_send != 0 && ops_last_seen_usage_hour.is_some() {
         let mut usage_data_client = get_usage_data(Client);
         let mut usage_data_relay = get_usage_data(Relay);
         let mut new_client_data: VecDeque<UsageHour> = VecDeque::new();
@@ -186,7 +188,7 @@ pub async fn operator_update(ops_last_seen_usage_hour: u64) -> u64 {
         for _hour in 0..hours_to_send {
             // pop front, add to front of new vecdeque if exists.
             while let Some(data) = usage_data_client.pop_front() {
-                if data.index > ops_last_seen_usage_hour {
+                if data.index > last_seen_hour {
                     new_client_data.push_front(UsageHour {
                         up: data.up,
                         down: data.down,
@@ -199,7 +201,7 @@ pub async fn operator_update(ops_last_seen_usage_hour: u64) -> u64 {
 
             // pop front, add to front of new vecdeque if exists.
             while let Some(data) = usage_data_relay.pop_front() {
-                if data.index > ops_last_seen_usage_hour {
+                if data.index > last_seen_hour {
                     new_relay_data.push_front(UsageHour {
                         up: data.up,
                         down: data.down,
@@ -316,9 +318,10 @@ pub async fn operator_update(ops_last_seen_usage_hour: u64) -> u64 {
     perform_operator_update(new_settings.clone(), rita_client, network);
     // update our count of ops last seen if we have confirmation ops is up to date on usage data
     if new_settings.ops_last_seen_usage_hour == current_hour {
+        info!("Confirmed ops has taken usage update for hour {current_hour}");
         current_hour
     } else {
-        0
+        new_settings.ops_last_seen_usage_hour
     }
 }
 
