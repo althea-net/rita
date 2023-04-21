@@ -265,7 +265,9 @@ pub fn tm_monitor_check(interface_list: &[Interface]) {
                     tun.iface_name
                 );
                 let res = tun.monitor();
-                error!("Unable to re-add tunnel to babel with: {:?}", res);
+                if let Err(e) = res {
+                    error!("Unable to re-add tunnel to babel with: {:?}", e);
+                }
             }
         }
     }
