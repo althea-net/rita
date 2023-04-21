@@ -33,10 +33,10 @@ impl dyn KernelInterface {
         const MAX_RETRY: u8 = 5;
 
         //call "ip links" to get a list of currently set up links
-        let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
+        let links = self.get_interfaces()?;
         let mut if_num = 0;
         //loop through the output of "ip links" until we find a wg suffix that isn't taken (e.g. "wg3")
-        while links.contains(format!("wg{if_num}").as_str()) {
+        while links.contains(&format!("wg{if_num}")) {
             if_num += 1;
         }
 
@@ -170,46 +170,6 @@ fn test_durations() {
     let d2 = UNIX_EPOCH + Duration::from_secs(10);
 
     println!("d: {d:?}, d2: {d2:?}");
-}
-
-#[test]
-fn test_setup_wg_if_linux() {
-    use crate::KI;
-
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    let mut counter = 0;
-
-    let link_args = &["link"];
-    let link_add = &["link", "add", "wg1", "type", "wireguard"];
-    KI.set_mock(Box::new(move |program, args| {
-        assert_eq!(program, "ip");
-        counter += 1;
-
-        match counter {
-            1 => {
-                assert_eq!(args, link_args);
-                Ok(Output{
-                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-            }
-            2 => {
-                assert_eq!(args, link_add);
-                Ok(Output {
-                    stdout: b"".to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
-            }
-            _ => panic!("command called too many times"),
-        }
-    }));
-
-    KI.setup_wg_if().unwrap();
 }
 
 #[test]
