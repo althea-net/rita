@@ -81,6 +81,9 @@ pub struct QueryExitDebts {
 
 pub async fn query_exit_debts(msg: QueryExitDebts) {
     trace!("About to query the exit for client debts");
+    let tx_fee_percentage = settings::get_rita_common()
+        .payment
+        .simulated_transaction_fee;
 
     let local_debt: Option<Int256>;
     {
@@ -88,11 +91,16 @@ pub async fn query_exit_debts(msg: QueryExitDebts) {
 
         // we could exit the function if this fails, but doing so would remove the chance
         // that we can get debts from the exit and continue anyways
-        local_debt =
-            match local_traffic_calculation(writer, &msg.exit_id, msg.exit_price, msg.routes) {
-                Ok(val) => Some(Int256::from(val)),
-                Err(_e) => None,
-            };
+        local_debt = match local_traffic_calculation(
+            writer,
+            &msg.exit_id,
+            msg.exit_price,
+            msg.routes,
+            tx_fee_percentage,
+        ) {
+            Ok(val) => Some(Int256::from(val)),
+            Err(_e) => None,
+        };
     }
     let gateway_exit_client = is_gateway_client();
     let start = Instant::now();
@@ -193,6 +201,7 @@ pub fn local_traffic_calculation(
     exit: &Identity,
     exit_price: u64,
     routes: Vec<Route>,
+    tx_fee_percentage: u8,
 ) -> Result<i128, RitaClientError> {
     let exit_route = find_exit_route_capped(exit.mesh_ip, routes)?;
     info!("Exit metric: {}", exit_route.metric);
@@ -267,6 +276,8 @@ pub fn local_traffic_calculation(
     // to handle in the general case
     let mut owes_exit = 0i128;
     let value = i128::from(input) * exit_dest_price;
+    // add tx fee surcharge on the exit, this ensures the exit recovers the tx fee percentage
+    let value = value + (value / tx_fee_percentage as i128);
     trace!(
         "We are billing for {} bytes input times a exit dest price of {} for a total of {}",
         input,

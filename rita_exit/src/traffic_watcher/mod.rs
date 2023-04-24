@@ -179,7 +179,15 @@ pub fn watch(
     routes: &[Route],
     clients: &[Identity],
 ) -> Result<(), Box<RitaExitError>> {
+    // Since Althea is a pay per forward network we must add a surcharge for transaction fees
+    // to our own price. In the case Exit -> A -> B -> C the exit pays A a lump sum for it's own
+    // fees as well as B's fees. This means the exit pays the transaction fee (a percentage) for
+    // that entire series of hops, we use the percentage number to ensure the exit recovers that amount
     let our_price = settings::get_rita_exit().exit_network.exit_price;
+    let tx_fee_percentage = settings::get_rita_common()
+        .payment
+        .simulated_transaction_fee;
+
     let our_id = match settings::get_rita_exit().get_identity() {
         Some(id) => id,
         None => {
@@ -275,7 +283,13 @@ pub fn watch(
             (Some(id), Some(dest), Some(history)) => match debts.get_mut(id) {
                 Some(debt) => {
                     let used = bytes.upload - history.upload;
-                    let value = i128::from(dest + our_price) * i128::from(used);
+                    // ensure the exit recovers the percentage fee see explanation where tx_fee_percentage is declared
+                    // surchage is based only on the price paid forward, since the exit keeps it's share without making
+                    // an additional pyament
+                    let tx_fee_surcharge =
+                        (i128::from(*dest) * i128::from(used)) / i128::from(tx_fee_percentage);
+                    let value =
+                        (i128::from(dest + our_price) * i128::from(used)) + tx_fee_surcharge;
                     trace!("We are billing for {} bytes output (client input) times a exit dest price of {} for a total of -{}", used, dest + our_price, value);
                     *debt -= value;
                     history.upload = bytes.upload;
