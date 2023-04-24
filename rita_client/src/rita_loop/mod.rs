@@ -17,6 +17,7 @@ use antenna_forwarding_client::start_antenna_forwarding_proxy;
 use rita_common::rita_loop::set_gateway;
 use rita_common::tunnel_manager::tm_get_neighbors;
 use settings::client::RitaClientSettings;
+use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Read;
@@ -312,5 +313,18 @@ fn manage_babeld_logs() {
         }
     } else {
         warn!("Failed to get metadata for log file {}", log_file)
+    }
+}
+
+pub fn update_resolv_conf() {
+    let resolv_path = "/etc/resolv.conf";
+    let current_config = fs::read_to_string(resolv_path).unwrap_or("".to_string());
+    let updated_config = "nameserver 172.168.0.254\nnameserver 8.8.8.8\nnameserver 1.0.0.1\nnameserver 74.82.42.42\nnameserver 149.112.112.10\nnameserver 64.6.65.6"
+        .to_string();
+    if !current_config.contains("nameserver 172.168.0.254") {
+        match fs::write(resolv_path, updated_config) {
+            Ok(_) => info!("Updating resolv.conf"),
+            Err(e) => error!("Could not update resolv.conf with {:?}", e),
+        };
     }
 }
