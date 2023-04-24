@@ -171,9 +171,7 @@ fn check_for_gateway_client_billing_corner_case() {
                 // wg_key excluded due to multihomed exits having a different one
                 let current_ip = get_selected_exit_ip(current_exit.clone())
                     .expect("If registered, there should be an exit ip here");
-                if neigh.identity.global.mesh_ip == current_ip
-                    && neigh.identity.global.eth_address == exit.eth_address
-                {
+                if neigh.identity.global.mesh_ip == current_ip {
                     info!("We are a gateway client");
                     set_gateway_client(true);
                     return;

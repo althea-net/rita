@@ -39,13 +39,17 @@ pub struct ExitServer {
     #[serde(default = "dummy_root_ip")]
     pub root_ip: IpAddr,
 
+    /// Can be removed once all routers on b20
     /// Subnet for backwards compatilibity
     #[serde(default)]
     pub subnet: Option<IpNetwork>,
 
+    /// Can be removed once all routers support multiple eth addresses
     /// eth address of this exit cluster
-    pub eth_address: Address,
+    pub eth_address: Option<Address>,
 
+    /// this is needed along with root ip to make an initial query to an exit for its list
+    /// This is the common wg key that all exits share
     /// wg public key used for wg_exit by this cluster
     /// each exit has a distinct wg key used for peer
     /// to peer tunnels and to identify it in logs

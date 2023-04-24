@@ -117,7 +117,7 @@ pub fn start_exit_manager_loop() {
                                 info!("Exit_Switcher: Calling set best exit");
                                 let selected_exit =
                                     match set_best_exit(current_exit.clone(), &exit_list, ip_route_hashmap) {
-                                        Ok(a) => Some(a),
+                                        Ok(a) => a,
                                         Err(e) => {
                                             warn!("Found no exit yet : {}", e);
                                             thread::sleep(EXIT_LOOP_SPEED);
@@ -125,14 +125,13 @@ pub fn start_exit_manager_loop() {
                                         }
                                     };
                                 info!("Exit_Switcher: After selecting best exit this tick, we have selected_exit_details: {:?}", get_full_selected_exit(current_exit.clone()));
-                                em_state.last_exit = selected_exit;
+                                em_state.last_exit = Some(selected_exit.mesh_ip);
                                 // check the exit's time and update locally if it's very different
                                 maybe_set_local_to_exit_time(exit.clone(), current_exit.clone()).await;
                                 // Determine states to setup tunnels
                                 let signed_up_for_exit = exit.info.our_details().is_some();
                                 let exit_has_changed = !(last_exit.is_some()
-                                    && selected_exit.is_some()
-                                    && last_exit.unwrap() == selected_exit.unwrap());
+                                    && last_exit.unwrap() == selected_exit.mesh_ip);
                                 let correct_default_route = correct_default_route(KI.get_default_route());
                                 let current_exit_id = selected_exit;
                                 info!("Reaches this part of the code: signed_up: {:?}, exit_has_changed: {:?}, correct_default_route {:?}", signed_up_for_exit, exit_has_changed, correct_default_route);
@@ -201,9 +200,9 @@ pub fn start_exit_manager_loop() {
                                     let exit_internal_addr = general_details.clone().server_internal_ip;
                                     let exit_port = exit.registration_port;
                                     let exit_id = Identity::new(
-                                        current_exit_id.expect("There should be a selected mesh ip here"),
-                                        exit.eth_address,
-                                        exit.wg_public_key,
+                                        current_exit_id.mesh_ip,
+                                        current_exit_id.eth_address,
+                                        current_exit_id.wg_public_key,
                                         None,
                                     );
                                     let babel_port = settings::get_rita_client().network.babel_port;

@@ -16,7 +16,7 @@ use crate::exit_manager::{
 };
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
-use althea_types::ExitList;
+use althea_types::{ExitList, Identity};
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use rita_common::FAST_LOOP_SPEED;
 use settings::client::ExitSwitchingCode;
@@ -86,22 +86,22 @@ impl ExitTracker {
 #[derive(Debug, Clone, Copy)]
 struct ExitMetrics {
     is_exit_down: bool,
-    cur_exit: Option<IpAddr>,
+    cur_exit: Option<Identity>,
     cur_exit_babel_met: u16,
-    tracking_exit: Option<IpAddr>,
+    tracking_exit: Option<Identity>,
     tracking_met: u16,
-    best_exit: Option<IpAddr>,
+    best_exit: Option<Identity>,
     best_exit_met: u16,
 }
 
 impl ExitMetrics {
     fn new(
         is_exit_down: bool,
-        cur_exit: Option<IpAddr>,
+        cur_exit: Option<Identity>,
         cur_exit_babel_met: u16,
-        tracking_exit: Option<IpAddr>,
+        tracking_exit: Option<Identity>,
         tracking_met: u16,
-        best_exit: Option<IpAddr>,
+        best_exit: Option<Identity>,
         best_exit_met: u16,
     ) -> ExitMetrics {
         ExitMetrics {
@@ -119,11 +119,11 @@ impl ExitMetrics {
 impl From<ExitMetrics>
     for (
         bool,
-        Option<IpAddr>,
+        Option<Identity>,
         u16,
-        Option<IpAddr>,
+        Option<Identity>,
         u16,
-        Option<IpAddr>,
+        Option<Identity>,
         u16,
     )
 {
@@ -131,11 +131,11 @@ impl From<ExitMetrics>
         e: ExitMetrics,
     ) -> (
         bool,
-        Option<IpAddr>,
+        Option<Identity>,
         u16,
-        Option<IpAddr>,
+        Option<Identity>,
         u16,
-        Option<IpAddr>,
+        Option<Identity>,
         u16,
     ) {
         let ExitMetrics {
@@ -201,7 +201,7 @@ pub fn set_best_exit(
     exit_name: String,
     exit_list: &ExitList,
     route_hashmap: HashMap<IpAddr, Route>,
-) -> Result<IpAddr, RitaClientError> {
+) -> Result<Identity, RitaClientError> {
     if route_hashmap.is_empty() {
         return Err(RitaClientError::MiscStringError(
             "No routes are found".to_string(),
@@ -272,10 +272,10 @@ pub fn set_best_exit(
                 set_selected_exit(
                     exit_name,
                     SelectedExit {
-                        selected_id: exit_metrics.best_exit,
+                        selected_id: exit_metrics.best_exit.map(|a| a.mesh_ip),
                         selected_id_metric: Some(exit_metrics.best_exit_met),
                         selected_id_degradation: None,
-                        tracking_exit: exit_metrics.best_exit,
+                        tracking_exit: exit_metrics.best_exit.map(|a| a.mesh_ip),
                     },
                 );
                 metric_vec.clear();
@@ -298,7 +298,7 @@ fn set_exit_state(
     exit_code: ExitSwitchingCode,
     exit_metrics: ExitMetrics,
     metric_vec: &mut [u16],
-) -> Result<IpAddr, RitaClientError> {
+) -> Result<Identity, RitaClientError> {
     let full_selected_exit = get_full_selected_exit(exit_name.clone()).unwrap_or_default();
     match exit_code {
         // we get this code when the exit is not setup, meaning it should not reach this else statement in the first place.
@@ -373,10 +373,10 @@ fn set_exit_state(
             set_selected_exit(
                 exit_name,
                 SelectedExit {
-                    selected_id: exit_metrics.best_exit,
+                    selected_id: exit_metrics.best_exit.map(|a| a.mesh_ip),
                     selected_id_metric: Some(exit_metrics.best_exit_met),
                     selected_id_degradation: None,
-                    tracking_exit: exit_metrics.best_exit,
+                    tracking_exit: exit_metrics.best_exit.map(|a| a.mesh_ip),
                 },
             );
             Ok(exit_metrics
@@ -394,7 +394,7 @@ fn set_exit_state(
                     selected_id: full_selected_exit.selected_id,
                     selected_id_metric: full_selected_exit.selected_id_metric,
                     selected_id_degradation: full_selected_exit.selected_id_degradation,
-                    tracking_exit: exit_metrics.best_exit,
+                    tracking_exit: exit_metrics.best_exit.map(|a| a.mesh_ip),
                 },
             );
             Ok(exit_metrics
@@ -437,7 +437,7 @@ fn get_exit_metrics(
     exit_list: &ExitList,
     exit_map: &mut HashMap<IpAddr, ExitTracker>,
 ) -> ExitMetrics {
-    let mut best_exit = None;
+    let mut best_exit: Option<Identity> = None;
     let mut best_metric = u16::MAX;
     //By default we say our exit is down. If we find a route to it that is not u16::MAX, we can change this
     let mut current_exit_down = true;
@@ -452,17 +452,17 @@ fn get_exit_metrics(
     let mut all_exits_blacklisted = true;
     let blacklisted = get_exit_blacklist();
 
-    for ip in exit_list.exit_list.clone() {
+    for id in exit_list.exit_list.clone() {
         // All babel routes are advertised as /128, so we check if each 'single' ip is part of exit subnet
         trace!(
             "Route hashmap: {:?}\n, ip mesh: {:?}\n",
             route_hashmap,
-            ip.mesh_ip
+            id.mesh_ip
         );
-        let route = match route_hashmap.get(&ip.mesh_ip) {
+        let route = match route_hashmap.get(&id.mesh_ip) {
             Some(a) => a,
             None => {
-                error!("EXIT_SWITCHER: Invalid ip: {:?}", ip.mesh_ip);
+                error!("EXIT_SWITCHER: Invalid ip: {:?}", id.mesh_ip);
                 continue;
             }
         };
@@ -509,7 +509,7 @@ fn get_exit_metrics(
             // Every loop iteration, update the best exit
             if route.metric < best_metric {
                 best_metric = route.metric;
-                best_exit = Some(ip);
+                best_exit = Some(id);
             }
         }
     }
@@ -524,7 +524,7 @@ fn get_exit_metrics(
     //If current exit is still up, we reset best exit with current exit, using our advertised metric values given that our current exit better
     if !current_exit_down && initial_best_metric < best_metric {
         best_metric = initial_best_metric;
-        best_exit = initial_best_exit;
+        best_exit = find_exit_list_identity(exit_list, initial_best_exit);
     }
 
     //We are done adding metrics values to running averages for all exits this tick, so we do cleanup
@@ -532,13 +532,25 @@ fn get_exit_metrics(
 
     ExitMetrics {
         is_exit_down: current_exit_down,
-        cur_exit: current_exit_ip,
+        cur_exit: find_exit_list_identity(exit_list, current_exit_ip),
         cur_exit_babel_met: current_exit_metric,
-        tracking_exit,
+        tracking_exit: find_exit_list_identity(exit_list, tracking_exit),
         tracking_met: tracking_metric,
         best_exit,
         best_exit_met: best_metric,
     }
+}
+
+pub fn find_exit_list_identity(exit_list: &ExitList, ip: Option<IpAddr>) -> Option<Identity> {
+    if let Some(ip) = ip {
+        for exit_id in &exit_list.exit_list {
+            if ip == exit_id.mesh_ip {
+                return Some(*exit_id);
+            }
+        }
+    }
+
+    None
 }
 
 /// This function is called to update the running averages of babel metrics for every exit in the cluster. These average can then
@@ -655,7 +667,7 @@ fn update_metric_value(
         }
     } else {
         // best exit is different from tracking, so we change tracking to be best if we see that the best metric >>> tracking metric
-        if worth_switching_tracking_exit(metric_vec, best_exit.unwrap(), exit_map) {
+        if worth_switching_tracking_exit(metric_vec, best_exit.unwrap().mesh_ip, exit_map) {
             metric_vec.clear();
             reset_exit_tracking(exit_map);
             metric_vec.push(best_metric);
@@ -768,6 +780,19 @@ mod tests {
     };
     use std::net::{IpAddr, Ipv4Addr};
 
+    fn create_dummy_identity(ip: IpAddr) -> Option<Identity> {
+        Some(Identity {
+            mesh_ip: ip,
+            eth_address: "0x5a4698BF934da10E11cf9A5dA1f6113b3afe2DA9"
+                .parse()
+                .unwrap(),
+            wg_public_key: "BLzin8GY+qHq/tUuJOZb1c/cw93ZuxoVeqDzy8oMe1c="
+                .parse()
+                .unwrap(),
+            nickname: None,
+        })
+    }
+
     #[test]
     fn test_calculate_average() {
         let vec = vec![10];
@@ -818,8 +843,8 @@ mod tests {
         // we use ipv6 addrs, but this should also work with ipv4
 
         // Testing for initial error code, when we just start tracking. No current or tracking
-        let best_exit = Some(IpAddr::V4(Ipv4Addr::new(1, 12, 12, 12)));
-        let mut tracking_exit: Option<IpAddr> = None;
+        let best_exit = create_dummy_identity(IpAddr::V4(Ipv4Addr::new(1, 12, 12, 12)));
+        let mut tracking_exit: Option<Identity> = None;
         let mut current_exit = None;
 
         assert_eq!(
@@ -874,10 +899,10 @@ mod tests {
 
         // The best exit changes, but metric is not good enough to cause a change. If if the next sample is insanely large,
         // we look at the vector to make a descision. Best exit is different from tracking == current.
-        current_exit = Some(IpAddr::V4(Ipv4Addr::new(1, 120, 120, 120)));
+        current_exit = create_dummy_identity(IpAddr::V4(Ipv4Addr::new(1, 120, 120, 120)));
         tracking_exit = current_exit;
 
-        exit_map.insert(best_exit.unwrap(), ExitTracker::new(0, 91030, 1));
+        exit_map.insert(best_exit.unwrap().mesh_ip, ExitTracker::new(0, 91030, 1));
 
         assert_eq!(
             ExitSwitchingCode::ContinueCurrent,
@@ -934,7 +959,7 @@ mod tests {
         vec.append(&mut append);
         assert_eq!(vec.len(), 10);
 
-        tracking_exit = Some(IpAddr::V4(Ipv4Addr::new(1, 200, 200, 200)));
+        tracking_exit = create_dummy_identity(IpAddr::V4(Ipv4Addr::new(1, 200, 200, 200)));
 
         assert_eq!(
             ExitSwitchingCode::SwitchExit,
@@ -952,7 +977,7 @@ mod tests {
         append = vec![410, 410, 400, 400, 430, 430, 410, 410, 430, 400];
         vec.append(&mut append);
         assert_eq!(vec.len(), 10);
-        exit_map.insert(best_exit.unwrap(), ExitTracker::new(0, 10, 1));
+        exit_map.insert(best_exit.unwrap().mesh_ip, ExitTracker::new(0, 10, 1));
 
         assert_eq!(
             ExitSwitchingCode::ResetTracking,
@@ -1064,7 +1089,7 @@ mod tests {
         assert!(exit_down);
         assert_eq!(c_e_met, u16::MAX);
         assert_eq!(t_e_m, u16::MAX);
-        assert_eq!(b_exit.unwrap(), ip3);
+        assert_eq!(b_exit.unwrap().mesh_ip, ip3);
         assert_eq!(b_e_m, 200);
 
         // Only current exit is setup, not tracking yet
@@ -1084,7 +1109,7 @@ mod tests {
         assert!(!exit_down);
         assert_eq!(c_e_met, 400);
         assert_eq!(t_e_m, u16::MAX);
-        assert_eq!(b_exit.unwrap(), ip3);
+        assert_eq!(b_exit.unwrap().mesh_ip, ip3);
         assert_eq!(b_e_m, 200);
 
         // current and tracking at setup and different from each other and best exit
@@ -1104,7 +1129,7 @@ mod tests {
         assert!(!exit_down);
         assert_eq!(c_e_met, 400);
         assert_eq!(t_e_m, 500);
-        assert_eq!(b_exit.unwrap(), ip3);
+        assert_eq!(b_exit.unwrap().mesh_ip, ip3);
         assert_eq!(b_e_m, 200);
 
         // Current and tracking are same but different from best exit
@@ -1124,7 +1149,7 @@ mod tests {
         assert!(!exit_down);
         assert_eq!(c_e_met, 500);
         assert_eq!(t_e_m, 500);
-        assert_eq!(b_exit.unwrap(), ip3);
+        assert_eq!(b_exit.unwrap().mesh_ip, ip3);
         assert_eq!(b_e_m, 200);
 
         // All three exits are the same
@@ -1144,7 +1169,7 @@ mod tests {
         assert!(!exit_down);
         assert_eq!(c_e_met, 200);
         assert_eq!(t_e_m, 200);
-        assert_eq!(b_exit.unwrap(), ip3);
+        assert_eq!(b_exit.unwrap().mesh_ip, ip3);
         assert_eq!(b_e_m, 200);
     }
 
