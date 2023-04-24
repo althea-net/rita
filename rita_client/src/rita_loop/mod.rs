@@ -5,9 +5,11 @@
 //! tunnel if the signup was successful on the selected exit.
 
 use crate::exit_manager::get_selected_exit_ip;
+use crate::get_interfaces;
 use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::operator_fee_manager::tick_operator_payments;
+use crate::InterfaceMode;
 use actix_async::System as AsyncSystem;
 use althea_kernel_interface::KI;
 use althea_types::ExitState;
@@ -19,6 +21,7 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Read;
 use std::io::Seek;
+
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -215,26 +218,39 @@ fn manage_gateway() {
     // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
     // the is_up detection is mostly useless because these ports reside on switches which mark
     // all ports as up all the time.
-    let gateway = match settings::get_rita_common().network.external_nic {
-        Some(ref external_nic) => KI.is_iface_up(external_nic).unwrap_or(false),
-        None => false,
-    };
+    if let Some(external_nic) = settings::get_rita_common().network.external_nic {
+        if KI.is_iface_up(&external_nic).unwrap_or(false) {
+            if let Ok(interfaces) = get_interfaces() {
+                info!("We are a Gateway");
+                // this flag is used to handle billing around the corner case
+                set_gateway(true);
 
-    info!("We are a Gateway: {}", gateway);
-    set_gateway(gateway);
+                // This is used to insert a route for each dns server in /etc/resolv.conf to override
+                // the wg_exit default route, this is needed for bootstrapping as a gateway can not
+                // resolve the exit ip addresses in order to perform peer discovery without these rules
+                // in LTE cases we never want to do this but we do need other gateway behavior so we setup
+                // this check
+                if let Some(mode) = interfaces.get(&external_nic) {
+                    if matches!(mode, InterfaceMode::Wan | InterfaceMode::StaticWan { .. }) {
+                        let mut common = settings::get_rita_common();
+                        match KI.get_resolv_servers() {
+                            Ok(s) => {
+                                for ip in s.iter() {
+                                    trace!("Resolv route {:?}", ip);
 
-    if gateway {
-        let mut common = settings::get_rita_common();
-        match KI.get_resolv_servers() {
-            Ok(s) => {
-                for ip in s.iter() {
-                    trace!("Resolv route {:?}", ip);
-                    KI.manual_peers_route(ip, &mut common.network.last_default_route)
-                        .unwrap();
+                                    KI.manual_peers_route(
+                                        ip,
+                                        &mut common.network.last_default_route,
+                                    )
+                                    .unwrap();
+                                }
+                                settings::set_rita_common(common);
+                            }
+                            Err(e) => warn!("Failed to add DNS routes with {:?}", e),
+                        }
+                    }
                 }
-                settings::set_rita_common(common);
             }
-            Err(e) => warn!("Failed to add DNS routes with {:?}", e),
         }
     }
 }
