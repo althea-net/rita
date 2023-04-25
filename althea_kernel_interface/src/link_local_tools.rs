@@ -32,39 +32,41 @@ pub fn parse_if_inet6_addr(line: String, is_local: bool) -> Result<Ipv6Addr, Ker
     ))
 }
 
-impl dyn KernelInterface {
-    /// This gets our link local ip for a given device
-    pub fn get_link_local_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
-        let path = "/proc/net/if_inet6";
-        let lines = get_lines(path)?;
-        for line in lines {
-            if line.contains(dev) {
-                match parse_if_inet6_addr(line, true) {
+fn get_link_local_device_ip_internal(
+    lines: Vec<String>,
+    dev: &str,
+    is_local: bool,
+) -> Result<Ipv6Addr, KernelInterfaceError> {
+    for line in lines {
+        // the interface name is the last segment of the line
+        let iface = line.split_ascii_whitespace().last();
+        if let Some(iface) = iface {
+            if iface == dev {
+                match parse_if_inet6_addr(line, is_local) {
                     Ok(a) => return Ok(a),
                     Err(_) => continue,
                 }
             }
         }
-        Err(KernelInterfaceError::AddressNotReadyError(
-            "No address seems to be available yet".to_string(),
-        ))
+    }
+    Err(KernelInterfaceError::AddressNotReadyError(
+        "No address seems to be available yet".to_string(),
+    ))
+}
+
+impl dyn KernelInterface {
+    /// This gets our link local ip for a given device
+    pub fn get_link_local_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
+        let path = "/proc/net/if_inet6";
+        let lines = get_lines(path)?;
+        get_link_local_device_ip_internal(lines, dev, true)
     }
 
     /// This gets our global ip for a given device
     pub fn get_global_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
         let path = "/proc/net/if_inet6";
         let lines = get_lines(path)?;
-        for line in lines {
-            if line.contains(dev) {
-                match parse_if_inet6_addr(line, false) {
-                    Ok(a) => return Ok(a),
-                    Err(_) => continue,
-                }
-            }
-        }
-        Err(KernelInterfaceError::AddressNotReadyError(
-            "No address seems to be available yet".to_string(),
-        ))
+        get_link_local_device_ip_internal(lines, dev, false)
     }
 
     pub fn get_global_device_ip_v4(&self, dev: &str) -> Result<Ipv4Addr, KernelInterfaceError> {
@@ -174,6 +176,8 @@ fn test_if_inet6_parsing() {
 fd53a881fcbb6747a0ae2e1d8473b242 10 80 00 80      wg1
 fd53a881fcbb6747a0ae2e1d8473b242 0e 80 00 80      wg0
 fe800000000000009683c4fffe0deeb5 09 40 20 80    wlan1
+fde60000000000000000000000000001 08 80 00 80     lan1
+fe8000000000000002e04cfffe67a154 08 40 20 80     lan1
 fe80000000000000a0ae2e1d8473b242 10 40 20 80      wg1
 fe80000000000000a0ae2e1d8473b242 0f 40 20 80  wg_exit
 fe80000000000000a0ae2e1d8473b242 0e 40 20 80      wg0
@@ -183,36 +187,25 @@ fe800000000000009683c4fffe0deeb4 06 40 20 80   br-lan
 fe800000000000009683c4fffe0deeb4 02 40 20 80     eth0
 fe800000000000009683c4fffe0deeb4 08 40 20 80   eth0.4"
         .to_string();
+    let addrs: Vec<String> = addrs.lines().into_iter().map(|f| f.to_string()).collect();
 
-    let mut br_lan_local: Option<Ipv6Addr> = None;
-    let mut br_lan_global: Option<Ipv6Addr> = None;
-
-    let lines = addrs.split('\n').collect::<Vec<&str>>();
-    for line in lines {
-        if line.contains("br-lan") {
-            match parse_if_inet6_addr(line.to_string(), false) {
-                Ok(a) => br_lan_global = Some(a),
-                Err(_) => continue,
-            }
-        }
-    }
-
-    let lines = addrs.split('\n').collect::<Vec<&str>>();
-    for line in lines {
-        if line.contains("br-lan") {
-            match parse_if_inet6_addr(line.to_string(), true) {
-                Ok(a) => br_lan_local = Some(a),
-                Err(_) => continue,
-            }
-        }
-    }
+    let br_lan_global = get_link_local_device_ip_internal(addrs.clone(), "br-lan", false).unwrap();
+    let br_lan_local = get_link_local_device_ip_internal(addrs.clone(), "br-lan", true).unwrap();
 
     assert_eq!(
         br_lan_global,
-        Some("2600:3c01:e002:f100::".parse().unwrap())
+        "2600:3c01:e002:f100::".parse::<Ipv6Addr>().unwrap()
     );
     assert_eq!(
         br_lan_local,
-        Some("fe80::9683:c4ff:fe0d:eeb4".parse().unwrap())
-    )
+        "fe80::9683:c4ff:fe0d:eeb4".parse::<Ipv6Addr>().unwrap()
+    );
+
+    let lan1_global = get_link_local_device_ip_internal(addrs.clone(), "lan1", false).unwrap();
+    let lan1_local = get_link_local_device_ip_internal(addrs, "lan1", true).unwrap();
+    assert_eq!(lan1_global, "fde6::1".parse::<Ipv6Addr>().unwrap());
+    assert_eq!(
+        lan1_local,
+        "fe80::2e0:4cff:fe67:a154".parse::<Ipv6Addr>().unwrap()
+    );
 }
