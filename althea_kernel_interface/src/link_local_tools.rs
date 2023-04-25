@@ -187,7 +187,7 @@ fe800000000000009683c4fffe0deeb4 06 40 20 80   br-lan
 fe800000000000009683c4fffe0deeb4 02 40 20 80     eth0
 fe800000000000009683c4fffe0deeb4 08 40 20 80   eth0.4"
         .to_string();
-    let addrs: Vec<String> = addrs.lines().into_iter().map(|f| f.to_string()).collect();
+    let addrs: Vec<String> = addrs.lines().map(|f| f.to_string()).collect();
 
     let br_lan_global = get_link_local_device_ip_internal(addrs.clone(), "br-lan", false).unwrap();
     let br_lan_local = get_link_local_device_ip_internal(addrs.clone(), "br-lan", true).unwrap();
