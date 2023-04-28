@@ -1,3 +1,4 @@
+use crate::hardware_info::maybe_get_single_line_string;
 use crate::open_tunnel::is_link_local;
 use crate::KernelInterface;
 use crate::KernelInterfaceError as Error;
@@ -9,14 +10,12 @@ impl dyn KernelInterface {
     /// Returns a bool based on device state, "UP" or "DOWN", "UNKNOWN" is
     /// interpreted as DOWN
     pub fn is_iface_up(&self, dev: &str) -> Option<bool> {
-        let output = self
-            .run_command("ip", &["addr", "show", "dev", dev])
-            .unwrap();
-
-        // Get the first line, check if it has state "UP"
-        match String::from_utf8(output.stdout) {
-            Ok(stdout) => stdout.lines().next().map(|line| line.contains("state UP")),
-            _ => None,
+        let path = format!("/sys/class/net/{dev}");
+        if let Some(is_up) = maybe_get_single_line_string(&format!("{path}/operstate")) {
+            let is_up = is_up.contains("up");
+            Some(is_up)
+        } else {
+            None
         }
     }
 
