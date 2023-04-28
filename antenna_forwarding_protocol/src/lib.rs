@@ -241,7 +241,7 @@ pub enum ForwardingProtocolMessage {
     /// much easier to extend than a hard bytes protocol
     /// this is only sent client -> server the server is
     /// identified implicitly
-    IdentificationMessage { id: Identity },
+    IdentificationMessage { id: Box<Identity> },
     /// The serialized struct sent as the payload
     /// for the Forward message (type 1) this is what
     /// the server sends the client when it would like an
@@ -292,7 +292,8 @@ impl ForwardingProtocolMessage {
     pub const KEEPALIVE_MESSAGE_TYPE: u16 = 6;
 
     pub fn new_identification_message(id: Identity) -> ForwardingProtocolMessage {
-        ForwardingProtocolMessage::IdentificationMessage { id }
+        let boxed_id = Box::new(id);
+        ForwardingProtocolMessage::IdentificationMessage { id: boxed_id }
     }
 
     pub fn new_forward_message(

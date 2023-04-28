@@ -62,7 +62,7 @@ pub enum PeerMessage {
     /// This is the message sent over the udp socket. It contains the necessary information to set up a tunnel
     /// from the respective side of connection
     Hello {
-        my_id: LocalIdentity,
+        my_id: Box<LocalIdentity>,
         response: bool,
         sender_wgport: u16,
     },
@@ -333,7 +333,7 @@ fn test_encoded_hello_size() {
     };
 
     let res = PeerMessage::Hello {
-        my_id: hello_struct.my_id,
+        my_id: Box::new(hello_struct.my_id),
         response: hello_struct.response,
         sender_wgport: hello_struct.my_id.wg_port,
     };
@@ -394,7 +394,7 @@ fn test_hello_encode_decode() {
     //Encode the message
     let s_wgport = 0x1232;
     let res = PeerMessage::Hello {
-        my_id: hello_struct.my_id,
+        my_id: Box::new(hello_struct.my_id),
         response: hello_struct.response,
         sender_wgport: s_wgport,
     };
@@ -409,7 +409,7 @@ fn test_hello_encode_decode() {
             response,
             sender_wgport,
         } => {
-            assert_eq!(my_id, hello_struct.my_id);
+            assert_eq!(my_id, Box::new(hello_struct.my_id));
             assert_eq!(response, hello_struct.response);
             assert_eq!(sender_wgport, s_wgport);
         }
@@ -460,7 +460,7 @@ fn test_deserialize_with_wrong_serialization() {
 
     //Encode the message
     let res = PeerMessage::Hello {
-        my_id: hello_struct.my_id,
+        my_id: Box::new(hello_struct.my_id),
         response: hello_struct.response,
         sender_wgport: hello_struct.my_id.wg_port,
     };

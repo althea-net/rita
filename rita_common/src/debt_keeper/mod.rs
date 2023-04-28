@@ -280,7 +280,7 @@ pub fn traffic_replace(traffic: Traffic) {
 pub enum DebtAction {
     SuspendTunnel,
     OpenTunnel,
-    MakePayment { to: Identity, amount: Uint256 },
+    MakePayment { to: Box<Identity>, amount: Uint256 },
 }
 
 pub fn send_debt_update() -> Result<(), RitaCommonError> {
@@ -315,7 +315,7 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
                     }
                 }
                 queue_payment(PaymentTx {
-                    to,
+                    to: *to,
                     from: match settings::get_rita_common().get_identity() {
                         Some(id) => id,
                         None => {
@@ -680,7 +680,7 @@ impl DebtKeeper {
                 debt_data.payment_in_flight_start = Some(Instant::now());
 
                 debt_data.action = DebtAction::MakePayment {
-                    to: *ident,
+                    to: Box::new(*ident),
                     amount: to_pay,
                 };
 
@@ -885,7 +885,7 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(100u32),
-                to: ident,
+                to: Box::new(ident),
             }
         );
     }
@@ -909,7 +909,7 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(11u32),
-                to: ident,
+                to: Box::new(ident),
             }
         );
     }
@@ -955,7 +955,7 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(10000u32),
-                to: ident,
+                to: Box::new(ident),
             }
         );
     }
@@ -981,7 +981,7 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(11u32),
-                to: ident,
+                to: Box::new(ident),
             }
         );
     }
@@ -1116,7 +1116,7 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(10000u32),
-                to: ident,
+                to: Box::new(ident),
             }
         );
         // simulate a payment failure
@@ -1147,7 +1147,7 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(10000u32),
-                to: ident,
+                to: Box::new(ident),
             }
         );
         d.payment_succeeded(&ident, Uint256::from(10000u32))
@@ -1166,7 +1166,7 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(10000u32),
-                to: ident,
+                to: Box::new(ident),
             }
         );
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
@@ -1200,7 +1200,7 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(11u32),
-                to: ident,
+                to: Box::new(ident),
             }
         );
         // simulate a payment failure
@@ -1230,7 +1230,7 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(11u32),
-                to: ident,
+                to: Box::new(ident),
             }
         );
         d.payment_succeeded(&ident, Uint256::from(11u32)).unwrap();
@@ -1248,7 +1248,7 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(11u32),
-                to: ident,
+                to: Box::new(ident),
             }
         );
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);

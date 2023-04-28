@@ -298,7 +298,7 @@ pub async fn validate() {
                 let msg = format!("We failed to check txid {} against full nodes for the full duration of it's timeout period, please check full nodes",if let Some(txid) = item.payment.txid {
                     format!("{:#066x}", txid)
                 } else {
-                    item.payment.tx_hash.clone().unwrap()
+                    item.payment.tx_hash.unwrap()
                 });
                 error!("{}", msg);
 
@@ -614,10 +614,8 @@ async fn handle_althea_tx_checking(ts: ToValidate) {
         (Ok(transaction), _) => {
             // we have a response back from the full node that this tx is not in the mempool this
             // satisfies our checked requirement
-            if transaction.tx_response.is_some() {
-                if !ts.checked {
-                    checked(ts.clone());
-                }
+            if transaction.tx_response.is_some() && !ts.checked {
+                checked(ts.clone());
             }
         }
         (Err(_), Ok(_)) => {
@@ -664,8 +662,8 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
         return;
     }
 
-    let from_address_eth = ts.payment.from.eth_address.clone();
-    let from_address_althea = ts.payment.from.althea_address.clone();
+    let from_address_eth = ts.payment.from.eth_address;
+    let from_address_althea = ts.payment.from.althea_address;
 
     let amount = ts.payment.amount;
 

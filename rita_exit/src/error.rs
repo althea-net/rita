@@ -13,7 +13,7 @@ use std::{
 #[derive(Debug)]
 pub enum RitaExitError {
     MiscStringError(String),
-    EmailNotFound(ExitClientIdentity),
+    EmailNotFound(Box<ExitClientIdentity>),
     AddrParseError(AddrParseError),
     IpAddrError(IpAddr),
     DieselError(diesel::result::Error),

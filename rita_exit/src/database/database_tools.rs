@@ -132,7 +132,7 @@ pub fn update_client(
     }
 
     // check if althea address needs to be updated
-    if their_record.althea_address == "" && client.global.althea_address.is_some() {
+    if their_record.althea_address.is_empty() && client.global.althea_address.is_some() {
         info!(
             "Updating althea address for client {} to {:?}",
             their_record.wg_pubkey, client.global.althea_address
@@ -506,7 +506,11 @@ pub fn update_mail_sent_time(
     use self::schema::clients::dsl::{clients, email, email_sent_time};
     let mail_addr = match client.clone().reg_details.email {
         Some(mail) => mail,
-        None => return Err(Box::new(RitaExitError::EmailNotFound(client.clone()))),
+        None => {
+            return Err(Box::new(RitaExitError::EmailNotFound(Box::new(
+                client.clone(),
+            ))))
+        }
     };
 
     if let Err(e) = diesel::update(clients.filter(email.eq(mail_addr)))

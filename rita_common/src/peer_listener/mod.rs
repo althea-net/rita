@@ -254,7 +254,7 @@ pub fn send_hello(
     trace!("Sending a Hello message");
 
     let message = PeerMessage::Hello {
-        my_id: msg.my_id,
+        my_id: Box::new(msg.my_id),
         response: msg.response,
         sender_wgport,
     };
@@ -331,7 +331,7 @@ pub fn receive_hello() {
                         };
 
                         let tunnel =
-                            tm_identity_callback(IdentityCallback::new(their_id, peer, None));
+                            tm_identity_callback(IdentityCallback::new(*their_id, peer, None));
                         let tunnel = match tunnel {
                             Ok(val) => val,
                             Err(e) => {
@@ -370,7 +370,7 @@ pub fn receive_hello() {
                         );
                         let their_id = my_id;
                         if let Err(e) = tm_identity_callback(IdentityCallback::new(
-                            their_id,
+                            *their_id,
                             peer_to_send,
                             Some(sender_wgport),
                         )) {

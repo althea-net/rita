@@ -162,11 +162,11 @@ async fn make_payment(pmt: PaymentTx) -> Result<(), PaymentControllerError> {
         SystemChain::Xdai => make_xdai_payment(pmt, payment_settings, network_settings).await,
         SystemChain::Rinkeby => {
             warn!("Payments on Rinkeby not currently supported!");
-            return Ok(());
+            Ok(())
         }
         SystemChain::Ethereum => {
             warn!("Payments on Ethereum not currently supported!");
-            return Ok(());
+            Ok(())
         }
     }
 }
@@ -307,7 +307,7 @@ async fn make_althea_payment(
         error!("Received error trying to validate {:?} Error: {:?}", ts, e);
     }
 
-    return Ok(());
+    Ok(())
 }
 
 async fn make_xdai_payment(
@@ -386,7 +386,7 @@ async fn make_xdai_payment(
         error!("Received error trying to validate {:?} Error: {:?}", ts, e);
     }
 
-    return Ok(());
+    Ok(())
 }
 
 fn sanity_check_balance(
