@@ -311,8 +311,21 @@ pub async fn validate() {
         }
     }
 
-    // execute all of the above verification operations in parallel
-    join_all(futs).await;
+    /// This is the number of tx we validate in a single join operation
+    /// doing too many at once can cause system problems by opening many connections
+    /// and spamming full nodes.
+    const VALIDATE_BATCH_SIZE: usize = 10;
+
+    let mut buf = Vec::new();
+    for f in futs.into_iter() {
+        if buf.len() < VALIDATE_BATCH_SIZE {
+            buf.push(f)
+        } else {
+            // execute all of the above verification operations in parallel
+            join_all(buf).await;
+            buf = Vec::new();
+        }
+    }
 
     for item in to_delete.iter() {
         remove_unvalidated_transaction(item.clone());
