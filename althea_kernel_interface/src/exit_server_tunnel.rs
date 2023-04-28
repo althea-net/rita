@@ -221,19 +221,23 @@ impl dyn KernelInterface {
         // 2.) Does the route contain 'interface'? Yes? we continue
         // 3.) No? That means either no route exists or there is a route with the other interface name
         // 4.) Delete route, add new route with the correct interface
-        let output = self
-            .run_command("ip", &["route", "show", &client_internal_ip])
-            .expect("Fix command");
-        let route = String::from_utf8(output.stdout).unwrap();
-        if !route.contains(&interface_cloned) {
-            self.run_command("ip", &["route", "del", &client_internal_ip])
-                .expect("Fix command");
+        let output = self.run_command("ip", &["route", "show", &client_internal_ip]);
+        if let Ok(output) = output {
+            let route = String::from_utf8(output.stdout).unwrap();
+            if !route.contains(&interface_cloned) {
+                if let Err(e) = self.run_command("ip", &["route", "del", &client_internal_ip]) {
+                    error!("Unable to delete old IPV4 route with {}", e);
+                };
 
-            self.run_command(
-                "ip",
-                &["route", "add", &client_internal_ip, "dev", interface],
-            )
-            .expect("Fix command");
+                if let Err(e) = self.run_command(
+                    "ip",
+                    &["route", "add", &client_internal_ip, "dev", interface],
+                ) {
+                    error!("IPV4 route setup failed with {}", e);
+                };
+            }
+        } else {
+            error!("Ip route show failed? Continuing to setup ipv6");
         }
 
         // Setup ipv6 routes
@@ -253,19 +257,28 @@ impl dyn KernelInterface {
             // Verfiy its a valid subnet
             if let Ok(ip_net) = ip.parse::<IpNetwork>() {
                 // Look for existing routes
-                let output = self
-                    .run_command("ip", &["-6", "route", "show", &ip_net.to_string()])
-                    .expect("Fix command");
+                let output =
+                    match self.run_command("ip", &["-6", "route", "show", &ip_net.to_string()]) {
+                        Ok(a) => a,
+                        Err(e) => {
+                            error!("ip -6 route show failed with {:?}", e);
+                            return;
+                        }
+                    };
                 let existing_routes = String::from_utf8(output.stdout).unwrap();
                 if !existing_routes.contains(&interface_cloned) {
-                    self.run_command("ip", &["-6", "route", "del", &ip_net.to_string()])
-                        .expect("Fix command");
+                    if let Err(e) =
+                        self.run_command("ip", &["-6", "route", "del", &ip_net.to_string()])
+                    {
+                        error!("Unable to delete old IPV6 route with {}", e);
+                    };
 
-                    self.run_command(
+                    if let Err(e) = self.run_command(
                         "ip",
                         &["-6", "route", "add", &ip_net.to_string(), "dev", interface],
-                    )
-                    .expect("Fix command");
+                    ) {
+                        error!("IPV6 route setup failed with {}", e);
+                    };
                 }
             } else {
                 error!("IPV6 Error: Invalid client database state. Client with mesh ip: {:?} has invalid database ipv6 list: {:?}", client_mesh, client_ipv6_list);

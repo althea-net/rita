@@ -191,9 +191,13 @@ impl ToString for IpRoute {
 
 impl dyn KernelInterface {
     pub fn get_default_route(&self) -> Option<DefaultRoute> {
-        let output = self
-            .run_command("ip", &["route", "list", "default"])
-            .unwrap();
+        let output = match self.run_command("ip", &["route", "list", "default"]) {
+            Ok(a) => a,
+            Err(e) => {
+                error!("Failed to get ip route list: {}", e);
+                return None;
+            }
+        };
 
         let stdout = String::from_utf8(output.stdout).unwrap();
         // return the first valid default route that correctly parses into a route
