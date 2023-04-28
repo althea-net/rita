@@ -190,10 +190,10 @@ impl ToString for IpRoute {
 }
 
 impl dyn KernelInterface {
-    pub fn get_default_route(&self) -> Option<DefaultRoute> {
-        let output = self
-            .run_command("ip", &["route", "list", "default"])
-            .unwrap();
+    /// Gets the default route, returns Error if the command fails and None
+    /// if no default route is set
+    pub fn get_default_route(&self) -> Result<Option<DefaultRoute>, Error> {
+        let output = self.run_command("ip", &["route", "list", "default"])?;
 
         let stdout = String::from_utf8(output.stdout).unwrap();
         // return the first valid default route that correctly parses into a route
@@ -203,13 +203,13 @@ impl dyn KernelInterface {
             match line.parse() {
                 Ok(route) => {
                     if let IpRoute::DefaultRoute(r) = route {
-                        return Some(r);
+                        return Ok(Some(r));
                     }
                 }
                 Err(e) => error!("Failed to parse route! {:?}", e),
             }
         }
-        None
+        Ok(None)
     }
 
     pub fn set_route(&self, to: &IpRoute) -> Result<(), Error> {
@@ -222,17 +222,20 @@ impl dyn KernelInterface {
     }
 
     /// Updates the settings default route, returns true if an edit to the settings has been performed
-    pub fn update_settings_route(&self, settings_default_route: &mut Option<DefaultRoute>) -> bool {
-        let def_route = match self.get_default_route() {
+    pub fn update_settings_route(
+        &self,
+        settings_default_route: &mut Option<DefaultRoute>,
+    ) -> Result<bool, Error> {
+        let def_route = match self.get_default_route()? {
             Some(route) => route,
-            None => return false,
+            None => return Ok(false),
         };
         if !def_route.is_althea_default_route() {
             // update the default route if default route is not wg exit
             *settings_default_route = Some(def_route);
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -243,7 +246,7 @@ impl dyn KernelInterface {
         endpoint_ip: &IpAddr,
         settings_default_route: &mut Option<DefaultRoute>,
     ) -> Result<bool, Error> {
-        let changed = self.update_settings_route(settings_default_route);
+        let changed = self.update_settings_route(settings_default_route)?;
         match settings_default_route {
             Some(d) => {
                 self.set_route(&IpRoute::ToSubnet(ToSubnet {
@@ -269,7 +272,7 @@ impl dyn KernelInterface {
         &self,
         settings_default_route: &mut Option<DefaultRoute>,
     ) -> Result<(), Error> {
-        let current_route = self.get_default_route();
+        let current_route = self.get_default_route()?;
         match current_route.clone() {
             Some(d) => {
                 if d.is_althea_default_route() {
@@ -318,7 +321,7 @@ fn test_get_default_route_invalid() {
     }));
 
     assert!(
-        KI.get_default_route().is_none(),
+        KI.get_default_route().unwrap().is_none(),
         "Invalid `ip route` unexpectedly returned a valid route"
     );
 }
@@ -375,7 +378,10 @@ default via 192.168.9.1 dev wifiinterface proto dhcp metric 1200
         }
     }));
 
-    let result = KI.get_default_route().expect("Unable to get default route");
+    let result = KI
+        .get_default_route()
+        .expect("Unable to get default route")
+        .unwrap();
     let correct = DefaultRoute {
         via: "192.168.8.1".parse().unwrap(),
         nic: "wifiinterface".to_string(),

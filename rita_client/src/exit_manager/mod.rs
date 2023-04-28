@@ -161,7 +161,7 @@ fn linux_setup_exit_tunnel(
     let local_mesh_ip = network.mesh_ip;
 
     // TODO this should be refactored to return a value
-    KI.update_settings_route(&mut network.last_default_route);
+    KI.update_settings_route(&mut network.last_default_route)?;
     info!("Updated settings route");
 
     if let Err(KernelInterfaceError::RuntimeError(v)) = KI.setup_wg_if_named("wg_exit") {

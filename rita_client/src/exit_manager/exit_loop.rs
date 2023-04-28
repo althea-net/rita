@@ -133,7 +133,15 @@ pub fn start_exit_manager_loop() {
                                 let exit_has_changed = !(last_exit.is_some()
                                     && selected_exit.is_some()
                                     && last_exit.unwrap() == selected_exit.unwrap());
-                                let correct_default_route = correct_default_route(KI.get_default_route());
+
+                                let default_route = match KI.get_default_route() {
+                                    Ok(route) => route,
+                                    Err(e) => {
+                                        error!("Failed to get default route, skipping exit switcher loop {:?}", e);
+                                        continue;
+                                    },
+                                };
+                                let correct_default_route = correct_default_route(default_route);
                                 let current_exit_id = selected_exit;
                                 info!("Reaches this part of the code: signed_up: {:?}, exit_has_changed: {:?}, correct_default_route {:?}", signed_up_for_exit, exit_has_changed, correct_default_route);
                                 match (signed_up_for_exit, exit_has_changed, correct_default_route) {
