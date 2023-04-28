@@ -262,6 +262,17 @@ pub async fn validate() {
     let mut to_delete = Vec::new();
 
     let unvalidated_transactions = get_unvalidated_transactions();
+
+    // grab only first ten for now
+    let mut to_val = HashSet::new();
+    let mut val_iter = unvalidated_transactions.iter();
+    for _ in 1..10 {
+        if let Some(curr) = val_iter.next() {
+            to_val.insert(curr.clone());
+        }
+    }
+    let unvalidated_transactions = to_val;
+
     info!(
         "Attempting to validate {} transactions {}",
         unvalidated_transactions.len(),
