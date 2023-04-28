@@ -20,6 +20,8 @@ use settings::client::RitaClientSettings;
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::io::Read;
 use std::io::Seek;
 
@@ -318,13 +320,30 @@ fn manage_babeld_logs() {
 
 pub fn update_resolv_conf() {
     let resolv_path = "/etc/resolv.conf";
-    let current_config = fs::read_to_string(resolv_path).unwrap_or("".to_string());
     let updated_config = "nameserver 172.168.0.254\nnameserver 8.8.8.8\nnameserver 1.0.0.1\nnameserver 74.82.42.42\nnameserver 149.112.112.10\nnameserver 64.6.65.6"
         .to_string();
-    if !current_config.contains("nameserver 172.168.0.254") {
-        match fs::write(resolv_path, updated_config) {
-            Ok(_) => info!("Updating resolv.conf"),
-            Err(e) => error!("Could not update resolv.conf with {:?}", e),
-        };
-    }
+    // read line by line instead
+    match File::open(resolv_path) {
+        Ok(file) => {
+            let reader = BufReader::new(file);
+            for line in reader.lines() {
+                let s = line.unwrap_or("".to_string());
+                if s.trim() == "nameserver 172.168.0.254" {
+                    info!("Found nameserver 172.168.0.254, no update to resolv.conf");
+                    return;
+                }
+            }
+            // if we get here we haven't found the nameserver and need to add it
+            match fs::write(resolv_path, updated_config) {
+                Ok(_) => info!("Updating resolv.conf"),
+                Err(e) => error!("Could not update resolv.conf with {:?}", e),
+            };
+        }
+        Err(_e) => {
+            match fs::write(resolv_path, updated_config) {
+                Ok(_) => info!("Updating resolv.conf"),
+                Err(e) => error!("Could not update resolv.conf with {:?}", e),
+            };
+        }
+    };
 }
