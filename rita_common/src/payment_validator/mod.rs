@@ -315,7 +315,6 @@ pub async fn validate() {
     /// doing too many at once can cause system problems by opening many connections
     /// and spamming full nodes.
     const VALIDATE_BATCH_SIZE: usize = 10;
-
     let mut buf = Vec::new();
     for f in futs.into_iter() {
         if buf.len() < VALIDATE_BATCH_SIZE {
@@ -326,6 +325,8 @@ pub async fn validate() {
             buf = Vec::new();
         }
     }
+    // check the last leftover futures in the array
+    join_all(buf).await;
 
     for item in to_delete.iter() {
         remove_unvalidated_transaction(item.clone());
