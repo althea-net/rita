@@ -364,6 +364,12 @@ fn perform_operator_update(
         Some(OperatorAction::Reboot) => {
             let _res = KI.run_command("reboot", &[]);
         }
+        Some(OperatorAction::SoftReboot) => {
+            let args = vec!["restart"];
+            if let Err(e) = KI.run_command("/etc/init.d/rita", &args) {
+                error!("Unable to restart rita after opkg update: {}", e)
+            }
+        }
         Some(OperatorAction::ResetRouterPassword) => {
             network.rita_dashboard_password = None;
         }
