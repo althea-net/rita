@@ -272,6 +272,7 @@ pub fn start_exit_manager_loop() {
                         // and looks at the ipv6 subnet assigned to our router in the ExitState struct
                         // which should be present after requesting general status from a registered exit.
                         // This subnet is then added the lan network interface on the router to be used by slaac
+                        // And the subnet ip /128 is assigned to wg_exit as 'our own' ip
                         trace!("Setting up ipv6 for slaac");
                         if let Some(ipv6_sub) = get_client_pub_ipv6() {
                             trace!("setting up slaac with {:?}", ipv6_sub);
