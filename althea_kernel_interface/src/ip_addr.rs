@@ -46,8 +46,9 @@ impl dyn KernelInterface {
     }
 
     /// After receiving an ipv6 addr from the exit, this function adds that ip
-    /// to br-lan SLAAC takes this ip and assigns a /64 to hosts that connect
+    /// to br-lan. SLAAC takes this ip and assigns a /64 to hosts that connect
     /// to the router
+    /// We take a /128 of this ipv6 addr and assign it to ourselves in wg_exit as our own ipv6 addr
     pub fn setup_ipv6_slaac(&self, router_ipv6_str: IpNetwork) {
         // Get all the v6 addrs on interface
         let v6_addrs = match self.get_ipv6_from_iface("br-lan") {
@@ -66,7 +67,7 @@ impl dyn KernelInterface {
                 .expect("Why did we get an invalid addr from kernel?");
             // slaac addr is already set
             if net == router_ipv6_str {
-                return;
+                break;
             }
 
             // Remove all previously set ipv6 addrs
@@ -89,6 +90,54 @@ impl dyn KernelInterface {
         ) {
             error!(
                 "IPV6 ERROR: WHy are we unalbe to add the new subnet {:?} Error: {:?}",
+                router_ipv6_str, e
+            );
+        }
+
+        // Do the same thing for wg_exit
+        let v6_addrs = match self.get_ipv6_from_iface("wg_exit") {
+            Ok(a) => {
+                trace!("Our ip list on wg_exit looks like {:?}", a);
+                a
+            }
+            Err(e) => {
+                error!("IPV6 ERROR: Unable to parse ips from interface wg_exit, didnt not setup ipv6 correctly: {:?}", e);
+                return;
+            }
+        };
+
+        for (addr, _netmask) in v6_addrs {
+            // slaac addr is already set
+            if addr == router_ipv6_str.ip() {
+                return;
+            }
+
+            // Remove all previously set ipv6 addrs
+            if !is_link_local(IpAddr::V6(addr)) {
+                if let Err(e) =
+                    self.run_command("ip", &["addr", "del", &addr.to_string(), "dev", "wg_exit"])
+                {
+                    error!(
+                        "IPV6 Error: Why are not able to delete the addr {:?} Error {:?}",
+                        addr, e
+                    );
+                }
+            }
+        }
+
+        // Add the new ipv6 addr
+        if let Err(e) = self.run_command(
+            "ip",
+            &[
+                "addr",
+                "add",
+                &router_ipv6_str.ip().to_string(),
+                "dev",
+                "wg_exit",
+            ],
+        ) {
+            error!(
+                "IPV6 ERROR: WHy are we unalbe to add the new ip {:?} Error: {:?}",
                 router_ipv6_str, e
             );
         }
