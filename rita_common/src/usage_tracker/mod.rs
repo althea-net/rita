@@ -474,6 +474,12 @@ pub fn get_usage_data(kind: UsageType) -> VecDeque<UsageHour> {
     }
 }
 
+/// Gets the last saved usage hour from the existing usage tracker
+pub fn get_last_saved_usage_hour() -> u64 {
+    let usage_tracker = &*(USAGE_TRACKER.read().unwrap());
+    usage_tracker.last_save_hour
+}
+
 /// Gets payment data for this router, stored on the local disk at periodic intervals
 pub fn get_payments_data() -> VecDeque<PaymentHour> {
     let usage_tracker_var = &*(USAGE_TRACKER.read().unwrap());

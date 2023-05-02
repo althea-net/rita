@@ -16,6 +16,8 @@ use althea_types::ExitState;
 use antenna_forwarding_client::start_antenna_forwarding_proxy;
 use rita_common::rita_loop::set_gateway;
 use rita_common::tunnel_manager::tm_get_neighbors;
+use rita_common::usage_tracker::get_current_hour;
+use rita_common::usage_tracker::get_last_saved_usage_hour;
 use settings::client::RitaClientSettings;
 use std::fs;
 use std::fs::File;
@@ -346,4 +348,21 @@ pub fn update_resolv_conf() {
             };
         }
     };
+}
+
+pub fn update_system_time() {
+    let current_hour = get_current_hour().unwrap_or(0);
+    let last_saved = get_last_saved_usage_hour();
+    if last_saved > current_hour {
+        info!(
+            "Updating system time to our last saved hour: {}",
+            last_saved
+        );
+        let seconds = last_saved * 3600;
+        let formatted_seconds = format!("@{}", seconds);
+        match KI.run_command("date", &["-s", &formatted_seconds]) {
+            Ok(_) => info!("System time updated!"),
+            Err(e) => error!("{}", e),
+        }
+    }
 }
