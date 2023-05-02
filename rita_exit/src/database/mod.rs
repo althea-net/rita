@@ -468,12 +468,12 @@ pub fn setup_clients(
 
         match exit_status_new {
             Ok(a) => {
-                trace!("Successfully setup Exit WG NEW!");
+                trace!("Successfully setup Exit wg_exit_v2!");
                 tc_datastore.ipv6_filter_handles = a;
                 set_tc_datastore(tc_datastore);
             }
             Err(e) => warn!(
-                "Error in Exit WG NEW setup {:?}, 
+                "Error in Exit wg_exit_v2 setup {:?}, 
                         this usually happens when a Rita service is 
                         trying to auto restart in the background",
                 e
@@ -519,10 +519,8 @@ pub fn setup_clients(
         })
         .collect();
 
-    let ex_nic = settings::get_rita_exit()
-        .network
-        .external_nic
-        .expect("Expected an external nic here");
+    let exit_settings = settings::get_rita_exit();
+    let internal_ip_v4 = exit_settings.exit_network.own_internal_ip;
 
     // Get all new clients that need rule setup for wg_exit_v2 and wg_exit respectively
     let changed_clients_return = find_changed_clients(
@@ -536,54 +534,16 @@ pub fn setup_clients(
     client_states.wg_exit_v2_clients = changed_clients_return.all_v2;
     client_states.wg_exit_clients = changed_clients_return.all_v1;
 
-    // setup new wg_exit_v2 routes
-    for c_key in changed_clients_return.new_v2 {
-        if let Some(c) = key_to_client_map.get(&c_key) {
-            KI.setup_client_routes(
-                c.internet_ipv6.clone(),
-                c.mesh_ip.clone(),
-                c.internal_ip.clone(),
-                "wg_exit_v2",
-            );
-            let res = KI.setup_client_rules(
-                c.internet_ipv6.clone(),
-                c.mesh_ip.clone(),
-                "wg_exit_v2",
-                ex_nic.clone(),
-            );
-            if res.is_err() {
-                error!(
-                    "IPV6 Error: Setup client ip6tables rules failed with: {:?}",
-                    res
-                );
-                client_states.wg_exit_v2_clients.remove(&c_key);
-            }
-        }
-    }
-
-    // setup new wg_exit routes (downgrade from b20 -> 19 and new b19 routers)
+    // setup wg_exit routes (downgrade from b20 -> 19 and new b19 routers)
+    // note these are spot routes for routers still on beta19 by default
+    // all traffic will go over wg_exit_v2
     for c_key in changed_clients_return.new_v1 {
         if let Some(c) = key_to_client_map.get(&c_key) {
-            KI.setup_client_routes(
-                c.internet_ipv6.clone(),
-                c.mesh_ip.clone(),
-                c.internal_ip.clone(),
+            KI.setup_individual_client_routes(
+                c.internal_ip.parse().expect("Invalid ipv4 in the db!"),
+                internal_ip_v4.into(),
                 "wg_exit",
             );
-
-            let res = KI.setup_client_rules(
-                c.internet_ipv6.clone(),
-                c.mesh_ip.clone(),
-                "wg_exit",
-                ex_nic.clone(),
-            );
-            if res.is_err() {
-                error!(
-                    "IPV6 Error: Setup client ip6tables rules failed with: {:?}",
-                    res
-                );
-                client_states.wg_exit_clients.remove(&c_key);
-            }
         }
     }
 

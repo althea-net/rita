@@ -54,6 +54,15 @@ pub struct ExitNetworkSettings {
     pub recompute_ipv6: bool,
     /// password that operator tools uses to verify that this is an exit
     pub pass: Option<String>,
+    /// Determines if enforcement is ensabled on the wg_exit interfaces, the htb classifier used here
+    /// is slower than we would like, and therefore overloaded exits may wish to disable enforcment
+    /// to maintain a good user experience while migrating users or waiting on a faster enforcement classifier
+    #[serde(default = "enable_enforcement_default")]
+    pub enable_enforcement: bool,
+}
+
+fn enable_enforcement_default() -> bool {
+    true
 }
 
 fn recompute_ipv6_default() -> bool {
@@ -86,6 +95,7 @@ impl ExitNetworkSettings {
             cluster_exits: Vec::new(),
             recompute_ipv6: false,
             pass: None,
+            enable_enforcement: true,
         }
     }
 }
