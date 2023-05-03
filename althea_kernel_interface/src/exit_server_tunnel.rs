@@ -202,6 +202,19 @@ impl dyn KernelInterface {
         }
     }
 
+    /// this function performs the teardown step of setup_indvidual_client_routes, when a router upgrades
+    /// to beta20 or later this function checks for and deltes the rules
+    pub fn teardown_individual_client_routes(&self, client_internal_ip: IpAddr) {
+        let output = self
+            .run_command("ip", &["route", "show", &client_internal_ip.to_string()])
+            .expect("Fix command");
+        let route = String::from_utf8(output.stdout).unwrap();
+        if !route.is_empty() {
+            self.run_command("ip", &["route", "del", &client_internal_ip.to_string()])
+                .expect("Fix command");
+        }
+    }
+
     /// Performs the one time startup tasks for the rita_exit clients loop
     pub fn one_time_exit_setup(
         &self,

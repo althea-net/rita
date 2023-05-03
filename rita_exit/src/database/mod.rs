@@ -546,6 +546,13 @@ pub fn setup_clients(
             );
         }
     }
+    for c_key in changed_clients_return.new_v2 {
+        if let Some(c) = key_to_client_map.get(&c_key) {
+            KI.teardown_individual_client_routes(
+                c.internal_ip.parse().expect("Invalid ipv4 in the db!"),
+            );
+        }
+    }
 
     Ok(client_states)
 }
