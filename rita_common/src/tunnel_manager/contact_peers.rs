@@ -201,7 +201,7 @@ pub async fn tm_contact_peers(pl: PeerListener) {
     for (_, peer) in pl.peers.iter() {
         trace!("contacting peer found by UDP {:?}", peer);
         if let Err(e) = tm_neighbor_inquiry_udp_peer(peer, &pl) {
-            error!("Neighbor inqury for failed with: {:?}", e);
+            error!("Neighbor inqury for {} failed with: {:?}", peer.ifidx, e);
         }
     }
     for manual_peer in manual_peers.iter() {
@@ -240,12 +240,12 @@ pub async fn tm_contact_peers(pl: PeerListener) {
     let manual_result_dns = join_all(manual_peers_dns_fut).await;
     for r in manual_result_ip {
         if let Err(e) = r {
-            error!("Neighbor inqury for failed with: {:?}", e);
+            error!("Neighbor inqury for ip failed with: {:?}", e);
         }
     }
     for r in manual_result_dns {
         if let Err(e) = r {
-            error!("Neighbor inqury for failed with: {:?}", e);
+            error!("Neighbor inqury for dns failed with: {:?}", e);
         }
     }
 }

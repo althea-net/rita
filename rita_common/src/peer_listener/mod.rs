@@ -42,7 +42,10 @@ fn listen_to_available_ifaces() {
                     add_interface(new_listen_interface.ifname.clone(), new_listen_interface);
                 }
                 Err(e) => {
-                    error!("Received an error while listening to interfaces: {:?}", e)
+                    error!(
+                        "Received an error while listening to interface {}: {:?}",
+                        iface, e
+                    )
                 }
             }
         }
@@ -116,28 +119,7 @@ impl ListenInterface {
         let link_ip = KI.get_link_local_device_ip(ifname)?;
 
         // Lookup interface index
-        let iface_index: u32 = if cfg!(feature = "integration_test_v2") {
-            // ip netns exec n-1 cat /sys/class/net/veth-n-1-n-2/iflink
-            let ns = KI.get_namespace().unwrap();
-            let location = format!("/sys/class/net/{ifname}/ifindex");
-            let index = KI
-                .run_command("ip", &["netns", "exec", &ns, "cat", &location])
-                .unwrap();
-
-            let index = match String::from_utf8(index.stdout) {
-                Ok(mut s) => {
-                    //this outputs with an extra newline \n on the end which was messing up the next command
-                    s.truncate(s.len() - 1);
-                    s
-                }
-                Err(_) => panic!("Could not get index number!"),
-            };
-            info!("location: {:?}, index {:?}", location, index);
-
-            index.parse().unwrap()
-        } else {
-            KI.get_ifindex(ifname).unwrap_or(0) as u32
-        };
+        let iface_index: u32 = KI.get_ifindex(ifname).unwrap_or(0) as u32;
         // Bond to multicast discovery address on each listen port
         let multicast_socketaddr = SocketAddrV6::new(disc_ip, port, 0, iface_index);
         let multicast_socket = UdpSocket::bind(multicast_socketaddr)?;
@@ -211,7 +193,8 @@ fn receive_im_here(
                 match listen_interface.multicast_socket.recv_from(&mut datagram) {
                     Ok(b) => b,
                     Err(e) => {
-                        error!("Could not recv ImHere: {:?}", e);
+                        // this is expected if the socket blocks
+                        trace!("Could not recv ImHere: {:?}", e);
                         // TODO Consider we might want to remove interfaces that produce specific types
                         // of errors from the active list
                         break;
@@ -235,7 +218,7 @@ fn receive_im_here(
             };
 
             if ipaddr == listen_interface.linklocal_ip {
-                error!("Got ImHere from myself");
+                trace!("Got ImHere from myself");
                 continue;
             }
 

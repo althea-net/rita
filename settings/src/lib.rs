@@ -228,14 +228,34 @@ pub fn set_rita_common(input: RitaSettings) {
 pub fn get_rita_common() -> RitaSettings {
     if cfg!(feature = "load_from_disk") {
         let settings_file = get_settings_file_from_ns();
-        // load settings data from the settings file
-        let ritasettings = RitaClientSettings::new(&settings_file).unwrap();
-        let commonsettings = RitaSettings {
-            payment: ritasettings.payment.clone(),
-            network: ritasettings.network.clone(),
-            identity: ritasettings.get_identity(),
-        };
-        return commonsettings;
+
+        match (
+            RitaClientSettings::new(&settings_file),
+            RitaExitSettingsStruct::new(&settings_file),
+        ) {
+            (Ok(ritasettings), _) => {
+                // load settings data from the settings file
+                let commonsettings = RitaSettings {
+                    payment: ritasettings.payment.clone(),
+                    network: ritasettings.network.clone(),
+                    identity: ritasettings.get_identity(),
+                };
+                return commonsettings;
+            }
+            (_, Ok(ritasettings)) => {
+                // load settings data from the settings file
+                let commonsettings = RitaSettings {
+                    payment: ritasettings.payment.clone(),
+                    network: ritasettings.network.clone(),
+                    identity: ritasettings.get_identity(),
+                };
+                return commonsettings;
+            }
+            (_, _) => panic!(
+                "Impossible settings case in integration tests? {}",
+                settings_file
+            ),
+        }
     }
     match &*SETTINGS.read().unwrap() {
         Some(Settings::Adaptor(adapt)) => {
@@ -358,7 +378,7 @@ pub fn json_merge(a: &mut Value, b: &Value) {
 }
 
 /// Gets the current namespace that rita is executing in and returns the name of the
-/// settings file associated with this instance of rita. ONLY FOR INTEGRATION TEST V2
+/// settings file associated with this instance of rita. ONLY FOR INTEGRATION TESTV2
 fn get_settings_file_from_ns() -> String {
     let ns = KI.run_command("ip", &["netns", "identify"]).unwrap();
     let ns = match String::from_utf8(ns.stdout) {

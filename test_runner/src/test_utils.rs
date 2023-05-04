@@ -1,23 +1,26 @@
-use core::time;
+use crate::setup_utils::{Namespace, NamespaceInfo, RouteHop};
+use althea_kernel_interface::{KernelInterfaceError, KI};
+use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
+use ipnetwork::IpNetwork;
+use log::{info, warn};
+use nix::{
+    fcntl::{open, OFlag},
+    sched::{setns, CloneFlags},
+    sys::stat::Mode,
+};
 use std::{
     collections::HashMap,
     convert::TryInto,
     net::{IpAddr, Ipv6Addr},
     str::from_utf8,
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use althea_kernel_interface::{KernelInterfaceError, KI};
-use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
-use ipnetwork::IpNetwork;
-use nix::{
-    fcntl::{open, OFlag},
-    sched::{setns, CloneFlags},
-    sys::stat::Mode,
-};
-
-use crate::{Namespace, NamespaceInfo, RouteHop};
+/// Wait this long for network convergence
+const REACHABILITY_TEST_TIMEOUT: Duration = Duration::from_secs(600);
+/// How long the reacability test should wait in between tests
+const REACHABILITY_TEST_CHECK_SPEED: Duration = Duration::from_secs(15);
 
 /// test pingability between namespaces on babel routes
 pub fn test_reach_all(nsinfo: NamespaceInfo) -> Result<u16, KernelInterfaceError> {
@@ -43,7 +46,7 @@ fn test_reach(from: Namespace, to: Namespace) -> bool {
         )
         .expect(&errormsg);
     let output = from_utf8(&output.stdout).expect("could not get output for ping6!");
-    println!("ping output: {output:?} end");
+    info!("ping output: {output:?} end");
     output.contains("1 packets transmitted, 1 received, 0% packet loss")
 }
 
@@ -84,11 +87,11 @@ pub fn test_routes(nsinfo: NamespaceInfo, expected: HashMap<Namespace, RouteHop>
             //within routes there must be a route that matches the expected price between the dest (fd00::id) and the expected next hop (fe80::id)
 
             if try_route(&expected, routes, ns1.clone(), ns2.clone()) {
-                println!("We found route for {:?}, {:?}", ns1.name, ns2.name);
+                info!("We found route for {:?}, {:?}", ns1.name, ns2.name);
                 count += 1;
                 continue 'neighs;
             } else {
-                println!(
+                warn!(
                     "No route found for {:?}, {:?}, retrying...",
                     ns1.name, ns2.name
                 );
@@ -97,34 +100,32 @@ pub fn test_routes(nsinfo: NamespaceInfo, expected: HashMap<Namespace, RouteHop>
         }
     }
 
+    let start = Instant::now();
     while !not_found.is_empty() {
-        let mut minutes_passed = 0;
-        let one_min = time::Duration::from_secs(60);
-        println!("Retrying failed routes");
+        info!("Retrying failed routes");
         let namespaces = not_found.pop().unwrap();
         let ns1 = namespaces.clone().0;
         let ns2 = namespaces.clone().1;
         let routes = routesmap.get(&ns1.name).unwrap();
 
-        while minutes_passed < 10 {
-            thread::sleep(one_min);
-            minutes_passed += 1;
+        while start.elapsed() < REACHABILITY_TEST_TIMEOUT {
+            thread::sleep(REACHABILITY_TEST_CHECK_SPEED);
             match try_route(&expected, routes, ns1.clone(), ns2.clone()) {
                 true => {
-                    println!("We found route for {:?}, {:?}", ns1.name, ns2.name);
+                    info!("We found route for {:?}, {:?}", ns1.name, ns2.name);
                     count += 1;
                     break;
                 }
                 false => {
-                    println!(
+                    info!(
                         "No route found for {:?}, {:?}, retrying...",
                         ns1.name, ns2.name
                     );
                 }
             }
         }
-        if minutes_passed > 10 {
-            println!(
+        if start.elapsed() > REACHABILITY_TEST_TIMEOUT {
+            info!(
                 "Could not find missing routes after 10 minutes: {:?}, {:?}",
                 namespaces, not_found
             );

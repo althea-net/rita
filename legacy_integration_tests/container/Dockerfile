@@ -15,4 +15,4 @@ ENV NODES=$NODES
 # note that changes have to be checked in to be pulled in and tested! we pull this in near
 # the bottom to maximize caching of earlier containers
 ADD rita.tar.gz /
-CMD PATH=$PATH:$HOME/.cargo/bin SPEEDTEST_THROUGHPUT="200" SPEEDTEST_DURATION="15" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1 /althea_rs/integration-tests/rita.sh
+CMD PATH=$PATH:$HOME/.cargo/bin SPEEDTEST_THROUGHPUT="200" SPEEDTEST_DURATION="15" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1 /althea_rs/legacy_integration_tests/rita.sh

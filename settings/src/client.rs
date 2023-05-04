@@ -163,7 +163,9 @@ impl ExitClientSettings {
 
 impl RitaClientSettings {
     pub fn new(file_name: &str) -> Result<Self, SettingsError> {
-        assert!(Path::new(file_name).exists());
+        if !Path::new(file_name).exists() {
+            return Err(SettingsError::FileNotFoundError(file_name.to_string()));
+        }
 
         let config_toml = std::fs::read_to_string(file_name)?;
         let ret: Self = toml::from_str(&config_toml)?;
@@ -171,7 +173,9 @@ impl RitaClientSettings {
     }
 
     pub fn new_watched(file_name: &str) -> Result<Self, SettingsError> {
-        assert!(Path::new(file_name).exists());
+        if !Path::new(file_name).exists() {
+            return Err(SettingsError::FileNotFoundError(file_name.to_string()));
+        }
 
         let config_toml = std::fs::read_to_string(file_name)?;
         let ret: Self = toml::from_str(&config_toml)?;

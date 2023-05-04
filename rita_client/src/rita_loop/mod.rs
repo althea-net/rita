@@ -269,7 +269,7 @@ fn manage_babeld_logs() {
     let mut file = match File::open(path) {
         Ok(a) => a,
         Err(e) => {
-            error!("Unable to truncate babel logs: {:?}", e);
+            warn!("Unable to truncate babel logs: {:?}", e);
             return;
         }
     };
@@ -283,7 +283,7 @@ fn manage_babeld_logs() {
             }
         }
         Err(e) => {
-            error!("Unable to truncate babel logs: {:?}", e);
+            warn!("Unable to truncate babel logs: {:?}", e);
             return;
         }
     }

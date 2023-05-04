@@ -10,6 +10,7 @@ pub enum SettingsError {
     IOError(std::io::Error),
     IpNetworkError(ipnetwork::IpNetworkError),
     SerdeJsonError(serde_json::Error),
+    FileNotFoundError(String),
 }
 
 impl From<toml::ser::Error> for SettingsError {
@@ -46,6 +47,9 @@ impl Display for SettingsError {
             SettingsError::IOError(e) => write!(f, "{e}"),
             SettingsError::IpNetworkError(e) => write!(f, "{e}"),
             SettingsError::SerdeJsonError(e) => write!(f, "{e}"),
+            SettingsError::FileNotFoundError(e) => {
+                write!(f, "Could not find config file at path {}", e)
+            }
         }
     }
 }
