@@ -18,8 +18,8 @@ docker rm -f rita-test
 set -e
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-DOCKERFOLDER=$DIR/../integration-tests/container/
-REPOFOLDER=$DIR/..
+DOCKERFOLDER=$DIR/../../legacy_integration_tests/container/
+REPOFOLDER=$DIR/../..
 git archive --format=tar.gz -o $DOCKERFOLDER/rita.tar.gz --prefix=althea_rs/ HEAD
 pushd $DOCKERFOLDER
 time docker build -t rita-test --build-arg NODES=$NODES .

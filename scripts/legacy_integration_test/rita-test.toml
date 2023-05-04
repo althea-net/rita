@@ -15,8 +15,7 @@ rita_tick_interval = 5
 wg_private_key_path = "/tmp/priv"
 wg_start_port = 60000
 peer_interfaces = ["eth0.2", "eth0.3", "eth0.4"]
-manual_peers = ["1.1.1.1", "2.2.2.2"]
-global_non_mesh_ip = "3.3.3.3"
+manual_peers = []
 default_route = []
 
 [exit_client]

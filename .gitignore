@@ -14,16 +14,16 @@ test.db-journal
 *.sw*
 *.orig
 
-/scripts/staging_dir/
-/scripts/staging/
-integration-tests/private-key*
-integration-tests/deps*
-integration-tests/rita-settings*
-integration-tests/staging*
-integration-tests/althea_rs_*
-integration-tests/target*
-integration-tests/mail/*
-integration-tests/bounty.db-journal
+/scripts/cross_building/staging_dir/
+/scripts/cross_building/staging/
+legacy-integration-tests/private-key*
+legacy-integration-tests/deps*
+legacy-integration-tests/rita-settings*
+legacy-integration-tests/staging*
+legacy-integration-tests/althea_rs_*
+legacy-integration-tests/target*
+legacy-integration-tests/mail/*
+legacy-integration-tests/bounty.db-journal
 *.pem
 *__pycache__*
 *.tar*

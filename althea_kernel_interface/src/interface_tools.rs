@@ -185,11 +185,32 @@ impl dyn KernelInterface {
 
     /// Gets the ifindex from an interface
     pub fn get_ifindex(&self, if_name: &str) -> Result<usize, Error> {
-        let lines = get_lines(&format!("/sys/class/net/{if_name}/ifindex"))?;
-        if let Some(ifindex) = lines.get(0) {
-            Ok(ifindex.parse()?)
+        if cfg!(feature = "integration_test") {
+            // ip netns exec n-1 cat /sys/class/net/veth-n-1-n-2/iflink
+            let ns = self.get_namespace().unwrap();
+            let location = format!("/sys/class/net/{if_name}/ifindex");
+            let index = self
+                .run_command("ip", &["netns", "exec", &ns, "cat", &location])
+                .unwrap();
+
+            let index = match String::from_utf8(index.stdout) {
+                Ok(mut s) => {
+                    //this outputs with an extra newline \n on the end which was messing up the next command
+                    s.truncate(s.len() - 1);
+                    s
+                }
+                Err(_) => panic!("Could not get index number!"),
+            };
+            info!("location: {:?}, index {:?}", location, index);
+
+            Ok(index.parse().unwrap())
         } else {
-            Err(Error::NoInterfaceError(if_name.to_string()))
+            let lines = get_lines(&format!("/sys/class/net/{if_name}/ifindex"))?;
+            if let Some(ifindex) = lines.get(0) {
+                Ok(ifindex.parse()?)
+            } else {
+                Err(Error::NoInterfaceError(if_name.to_string()))
+            }
         }
     }
 

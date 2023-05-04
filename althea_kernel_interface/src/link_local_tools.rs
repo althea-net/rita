@@ -1,6 +1,9 @@
 use crate::{file_io::get_lines, KernelInterface, KernelInterfaceError};
 use regex::Regex;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::{
+    fs::read_dir,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+};
 
 pub fn parse_if_inet6_addr(line: String, is_local: bool) -> Result<Ipv6Addr, KernelInterfaceError> {
     if (is_local && line.starts_with("fe80")) || (!is_local && !line.starts_with("fe80")) {
@@ -55,17 +58,70 @@ fn get_link_local_device_ip_internal(
 }
 
 impl dyn KernelInterface {
+    fn get_proc_net_path(&self) -> String {
+        if cfg!(feature = "integration_test") {
+            // this is extremely overcomplicated and needs to be replaced by netlink at some point
+            // essentially we find the namespace file of a process spanwed in the namespace (babel)
+            // and then read it, only works in integration tests.
+
+            let ns = self.run_command("ip", &["netns", "identify"]).unwrap();
+            let ns = match String::from_utf8(ns.stdout) {
+                Ok(s) => s,
+                Err(_) => panic!("Could not get netns name!"),
+            };
+            let ns = ns.trim();
+            let links = read_dir("/proc/").unwrap();
+
+            // in the legacy test namespaces are netlab-1 but interfaces are veth-1-2
+            // so this lets us do the conversion
+            let legacy_test_ns_number = ns.strip_prefix("netlab-");
+
+            for dir in links {
+                let dir = dir.unwrap();
+                if dir.path().is_dir() {
+                    let dir_name = dir.file_name().to_str().unwrap().to_string();
+                    // we're looking for a pid
+                    if let Ok(number) = dir_name.parse() {
+                        let number: u16 = number;
+                        let path = format!("/proc/{number}/net/if_inet6");
+                        if let Ok(lines) = get_lines(&path) {
+                            for line in lines {
+                                let line = line.split_ascii_whitespace().last().unwrap();
+                                let prefix =
+                                    if let Some(legacy_test_ns_number) = legacy_test_ns_number {
+                                        format!("veth-{legacy_test_ns_number}")
+                                    } else {
+                                        format!("veth-{ns}")
+                                    };
+                                if line.starts_with(&prefix) {
+                                    return path;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            panic!(
+                "We did not find the babel process to locate this rita threads namespace {}!",
+                ns
+            );
+        } else {
+            // standard location
+            "/proc/net/if_inet6".to_string()
+        }
+    }
+
     /// This gets our link local ip for a given device
     pub fn get_link_local_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
-        let path = "/proc/net/if_inet6";
-        let lines = get_lines(path)?;
+        let path = self.get_proc_net_path();
+        let lines = get_lines(&path)?;
         get_link_local_device_ip_internal(lines, dev, true)
     }
 
     /// This gets our global ip for a given device
     pub fn get_global_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
-        let path = "/proc/net/if_inet6";
-        let lines = get_lines(path)?;
+        let path = self.get_proc_net_path();
+        let lines = get_lines(&path)?;
         get_link_local_device_ip_internal(lines, dev, false)
     }
 

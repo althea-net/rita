@@ -96,7 +96,7 @@ impl dyn KernelInterface {
         for line in stdout.lines() {
             let split = line.split_ascii_whitespace();
             for item in split {
-                if item == &format!("1:{class_id}") {
+                if *item == format!("1:{class_id}") {
                     return Ok(true);
                 }
             }
