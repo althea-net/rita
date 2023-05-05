@@ -60,7 +60,7 @@ pub async fn set_operator_fee(fee: Path<Uint256>) -> HttpResponse {
     debug!("set_operator_fee POST hit {:?}", op_fee);
 
     let mut rita_client = settings::get_rita_client();
-    rita_client.operator.operator_fee = op_fee.clone();
+    rita_client.operator.operator_fee = op_fee;
 
     if op_fee == 0_u8.into() {
         rita_client.operator.use_operator_price = true

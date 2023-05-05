@@ -41,7 +41,7 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
     let mut amount = if let Some(amount) = amount {
         amount
     } else {
-        match balance.clone() {
+        match balance {
             Some(value) => value,
             None => return HttpResponse::BadRequest().finish(),
         }
@@ -60,7 +60,7 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
     let tx_cost = gas_price * tx_gas;
     match balance {
         Some(value) => {
-            if amount.clone() + tx_cost.clone() >= value {
+            if amount + tx_cost >= value {
                 amount = value - tx_cost;
             }
         }
@@ -83,7 +83,7 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
 }
 
 pub async fn withdraw(path: Path<(Address, Uint256)>) -> HttpResponse {
-    withdraw_handler(path.0, Some(path.1.clone()))
+    withdraw_handler(path.0, Some(path.1))
 }
 
 pub async fn withdraw_all(path: Path<Address>) -> HttpResponse {
@@ -99,7 +99,7 @@ fn queue_eth_compatible_withdraw(address: Address, amount: Uint256) -> HttpRespo
 }
 
 fn get_withdraw_queue() -> Option<(Address, Uint256)> {
-    WITHDRAW_QUEUE.write().unwrap().clone()
+    *WITHDRAW_QUEUE.write().unwrap()
 }
 
 fn set_withraw_queue(set: Option<(Address, Uint256)>) {
@@ -118,8 +118,7 @@ pub async fn eth_compatible_withdraw() {
             .send_transaction(
                 dest,
                 Vec::new(),
-                amount.clone(),
-                payment_settings.eth_address.unwrap(),
+                amount,
                 payment_settings.eth_private_key.unwrap(),
                 vec![
                     SendTxOption::Nonce(get_oracle_nonce()),

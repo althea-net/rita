@@ -159,7 +159,7 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         "current balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
         balance, pmt.amount, our_address, pmt.to.eth_address, nonce
     );
-    match balance.clone() {
+    match balance {
         Some(value) => {
             if value < pmt.amount {
                 warn!("Not enough money to pay debts! Cutoff imminent");
@@ -214,11 +214,10 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         .send_transaction(
             pmt.to.eth_address,
             Vec::new(),
-            pmt.amount.clone(),
-            our_address,
+            pmt.amount,
             *our_private_key,
             vec![
-                SendTxOption::Nonce(nonce.clone()),
+                SendTxOption::Nonce(nonce),
                 SendTxOption::GasPrice(gas_price),
             ],
         )
@@ -246,7 +245,7 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
                             tx_id, balance, pmt.amount, our_address, pmt.to.eth_address, nonce);
 
     // add published txid to submission
-    pmt.txid = Some(tx_id.clone());
+    pmt.txid = Some(tx_id);
 
     // Get all txids to this client. Temporary add new payment to a copy of a list to send up to endpoint
     // this pmt is actually recorded in memory after validator confirms it
@@ -265,7 +264,7 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         .send_json(&txid_history);
 
     let resend_info = ResendInfo {
-        txid: tx_id.clone(),
+        txid: tx_id,
         neigh_url: neighbor_url.clone(),
         pmt: pmt.clone(),
         attempt: 0u8,

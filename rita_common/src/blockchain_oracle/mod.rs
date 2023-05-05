@@ -144,11 +144,11 @@ impl Default for BlockchainOracle {
 
 // Oracle Getters
 pub fn get_oracle_latest_gas_price() -> Uint256 {
-    ORACLE.read().unwrap().gas_price.clone()
+    ORACLE.read().unwrap().gas_price
 }
 
 pub fn get_oracle_nonce() -> Uint256 {
-    ORACLE.read().unwrap().nonce.clone()
+    ORACLE.read().unwrap().nonce
 }
 
 pub fn get_oracle_net_version() -> u64 {
@@ -156,11 +156,11 @@ pub fn get_oracle_net_version() -> u64 {
 }
 
 pub fn get_oracle_balance() -> Option<Uint256> {
-    ORACLE.read().unwrap().balance.clone()
+    ORACLE.read().unwrap().balance
 }
 
 pub fn get_oracle_last_seen_block() -> Option<Uint256> {
-    ORACLE.read().unwrap().last_seen_block.clone()
+    ORACLE.read().unwrap().last_seen_block
 }
 
 pub fn get_oracle_last_updated() -> Option<Instant> {
@@ -339,7 +339,7 @@ fn update_gas_price(
 ) {
     // Minimum gas price. When gas is below this, we set gasprice to this value, which is then used to
     // calculate pay and close thresh
-    let min_gas = payment_settings.min_gas.clone();
+    let min_gas = payment_settings.min_gas;
 
     let value = new_gas_price;
     info!(

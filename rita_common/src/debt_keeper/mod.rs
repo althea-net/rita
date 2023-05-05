@@ -144,13 +144,13 @@ fn debt_limit(debt: Int256, close_threshold: Int256) -> Int256 {
     if debt < close_threshold {
         info!(
             "Forgiving {} wei to enforce debt limit",
-            debt - close_threshold.clone()
+            debt - close_threshold
         );
         close_threshold - 1u8.into()
     } else if debt > close_threshold.abs() {
         info!(
             "Not paying {} wei to enforce debt limit",
-            debt - close_threshold.clone()
+            debt - close_threshold
         );
         close_threshold.abs() + 1u8.into()
     } else {
@@ -183,7 +183,7 @@ pub fn payment_failed(to: Identity) {
 
 pub fn payment_succeeded(to: Identity, amount: Uint256) -> Result<(), RitaCommonError> {
     let mut dk = DEBT_DATA.write().unwrap();
-    add_tx_to_total(amount.clone());
+    add_tx_to_total(amount);
     dk.payment_succeeded(&to, amount)
 }
 
@@ -195,7 +195,7 @@ pub struct Traffic {
 pub fn traffic_update(traffic: Vec<Traffic>) {
     let mut dk = DEBT_DATA.write().unwrap();
     for t in traffic.iter() {
-        dk.traffic_update(&t.from, t.amount.clone());
+        dk.traffic_update(&t.from, t.amount);
     }
 }
 
@@ -446,7 +446,7 @@ impl DebtKeeper {
         peer.payment_in_flight = false;
         peer.payment_in_flight_start = None;
 
-        peer.total_payment_sent += amount.clone();
+        peer.total_payment_sent += amount;
         peer.last_successful_payment = Some(Instant::now());
         peer.debt -= match amount.to_int256() {
             Some(val) => val,
@@ -474,9 +474,9 @@ impl DebtKeeper {
         );
 
         // just a counter, no convergence importance
-        debt_data.total_payment_received += amount.clone();
+        debt_data.total_payment_received += amount;
         // add in the latest amount to the pile before processing
-        debt_data.incoming_payments += amount.clone();
+        debt_data.incoming_payments += amount;
 
         let they_owe_us = debt_data.debt < Int256::zero();
         // unwrap is safe because the abs of a signed 256 bit int can't overflow a unsigned 256 bit int or be negative
@@ -588,7 +588,7 @@ impl DebtKeeper {
         let payment_in_flight = debt_data.payment_in_flight;
 
         if debt_limit_enabled {
-            debt_data.debt = debt_limit(debt_data.debt.clone(), close_threshold.clone());
+            debt_data.debt = debt_limit(debt_data.debt, close_threshold);
         }
 
         match (should_close, should_pay, payment_in_flight) {
