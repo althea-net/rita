@@ -295,20 +295,12 @@ pub async fn get_client_debt(client: Json<Identity>) -> HttpResponse {
             let they_owe_more_than_in_queue = if we_owe_them {
                 false
             } else {
-                (neg_one.clone() * client_debt.clone())
-                    .to_uint256()
-                    .unwrap()
-                    > unverified_payments_uint
+                (neg_one * client_debt).to_uint256().unwrap() > unverified_payments_uint
             };
 
             // they have more credit than they owe, wait for this to unwind
             // we apply credit right before enforcing or on payment.
-            if !we_owe_them
-                && incoming_payments
-                    > (neg_one.clone() * client_debt.clone())
-                        .to_uint256()
-                        .unwrap()
-            {
+            if !we_owe_them && incoming_payments > (neg_one * client_debt).to_uint256().unwrap() {
                 return HttpResponse::Ok().json(zero);
             }
 

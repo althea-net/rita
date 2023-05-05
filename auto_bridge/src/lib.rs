@@ -3,7 +3,7 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-use clarity::abi::{encode_call, Token};
+use clarity::abi::{encode_call, AbiToken};
 use clarity::utils::bytes_to_hex_str;
 use clarity::{Address, PrivateKey};
 use num256::Uint256;
@@ -12,7 +12,7 @@ use std::time::Duration;
 use web30::amm::{DAI_CONTRACT_ADDRESS as DAI_CONTRACT_ON_ETH, USDC_CONTRACT_ADDRESS};
 use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
-use web30::types::Log;
+use web30::types::{Log, TransactionRequest, TransactionResponse};
 
 mod error;
 pub use error::TokenBridgeError;
@@ -114,7 +114,6 @@ impl TokenBridge {
         dai_amount: Uint256,
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
-        let own_address = self.own_address;
         let secret = self.eth_privatekey;
 
         // You basically just send it some dai to the bridge address and they show
@@ -126,11 +125,10 @@ impl TokenBridge {
                 *DAI_CONTRACT_ON_ETH,
                 encode_call(
                     "transfer(address,uint256)",
-                    &[self.xdai_bridge_on_eth.into(), dai_amount.clone().into()],
+                    &[self.xdai_bridge_on_eth.into(), dai_amount.into()],
                 )
                 .unwrap(),
                 0u32.into(),
-                own_address,
                 secret,
                 Vec::new(),
             )
@@ -173,7 +171,6 @@ impl TokenBridge {
         data: HelperWithdrawInfo,
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
-        let own_address = self.own_address;
         let payload = get_payload_for_funds_unlock(&data);
         trace!(
             "bridge unlocking funds with! {} bytes payload! {}",
@@ -187,7 +184,6 @@ impl TokenBridge {
                 self.xdai_bridge_on_eth,
                 payload,
                 0u32.into(),
-                own_address,
                 self.eth_privatekey,
                 Vec::new(),
             )
@@ -195,7 +191,7 @@ impl TokenBridge {
 
         let _ = self
             .eth_web3
-            .wait_for_transaction(txid.clone(), timeout, None)
+            .wait_for_transaction(txid, timeout, None)
             .await;
         Ok(txid)
     }
@@ -221,7 +217,7 @@ pub async fn get_relay_message_hash(
         &[
             dest_address.into(),
             amount_sent.into(),
-            Token::Bytes(xdai_withdraw_txid.to_bytes_be()),
+            AbiToken::Bytes(xdai_withdraw_txid.to_be_bytes().to_vec()),
         ],
     ) {
         Ok(a) => a,
@@ -232,11 +228,14 @@ pub async fn get_relay_message_hash(
         }
     };
     let msg_hash = xdai_web3
-        .simulate_transaction(helper_on_xdai, 0_u32.into(), payload, own_address, None)
+        .simulate_transaction(
+            TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            None,
+        )
         .await?;
     // this may return 0x0 if the value is not yet ready, in this case
     // we fail with a not ready error
-    let payload = match encode_call("getMessage(bytes32)", &[Token::Bytes(msg_hash.clone())]) {
+    let payload = match encode_call("getMessage(bytes32)", &[AbiToken::Bytes(msg_hash.clone())]) {
         Ok(a) => a,
         Err(e) => {
             return Err(TokenBridgeError::Web3Error(Web3Error::BadInput(format!(
@@ -245,14 +244,17 @@ pub async fn get_relay_message_hash(
         }
     };
     let msg = xdai_web3
-        .simulate_transaction(helper_on_xdai, 0_u32.into(), payload, own_address, None)
+        .simulate_transaction(
+            TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            None,
+        )
         .await?;
 
     if msg == vec![0] || msg.len() <= 64 {
         return Err(TokenBridgeError::HelperMessageNotReady);
     }
 
-    let payload = match encode_call("getSignatures(bytes32)", &[Token::Bytes(msg_hash)]) {
+    let payload = match encode_call("getSignatures(bytes32)", &[AbiToken::Bytes(msg_hash)]) {
         Ok(a) => a,
         Err(e) => {
             return Err(TokenBridgeError::Web3Error(Web3Error::BadInput(format!(
@@ -261,7 +263,10 @@ pub async fn get_relay_message_hash(
         }
     };
     let sigs_payload = xdai_web3
-        .simulate_transaction(helper_on_xdai, 0_u32.into(), payload, own_address, None)
+        .simulate_transaction(
+            TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            None,
+        )
         .await?;
     if sigs_payload == vec![0] || sigs_payload.len() <= 64 {
         return Err(TokenBridgeError::HelperMessageNotReady);
@@ -274,8 +279,8 @@ pub async fn get_relay_message_hash(
     //  1. discard the first uint256 type specifier, we know what we have
     //  2. take the second uint256 it's the length in bytes of the rest of the message
     //  3. take the bytes between START (2 uint256 offset) and END (offset plus message length)
-    let msg_len = Uint256::from_bytes_be(&msg[32..64]);
-    let sigs_len = Uint256::from_bytes_be(&sigs_payload[32..64]);
+    let msg_len = Uint256::from_be_bytes(&msg[32..64]);
+    let sigs_len = Uint256::from_be_bytes(&sigs_payload[32..64]);
     if msg_len > usize::MAX.into() || sigs_len > usize::MAX.into() {
         return Err(TokenBridgeError::HelperMessageIncorrect);
     }
@@ -300,8 +305,8 @@ pub fn get_payload_for_funds_unlock(data: &HelperWithdrawInfo) -> Vec<u8> {
     encode_call(
         "executeSignatures(bytes,bytes)",
         &[
-            Token::UnboundedBytes(data.msg.clone()),
-            Token::UnboundedBytes(data.sigs.clone()),
+            AbiToken::UnboundedBytes(data.msg.clone()),
+            AbiToken::UnboundedBytes(data.sigs.clone()),
         ],
     )
     .unwrap()
@@ -338,7 +343,10 @@ pub async fn check_relayed_message(
     };
 
     let res = web3
-        .simulate_transaction(contract, 0_u32.into(), payload, own_address, None)
+        .simulate_transaction(
+            TransactionRequest::quick_tx(own_address, contract, payload),
+            None,
+        )
         .await?;
 
     // if last entry of vector is 1, true, else false
@@ -367,7 +375,6 @@ pub async fn encode_relaytokens(
             bridge.xdai_bridge_on_xdai,
             payload,
             amount,
-            bridge.own_address,
             bridge.eth_privatekey,
             options,
         )
@@ -388,11 +395,11 @@ fn compute_start_end(
     total_blocks: u64,
     max_iter: u64,
 ) -> (Uint256, Uint256) {
-    let start_block = (latest_block.clone() - total_blocks.into()) + (max_iter * iter).into();
-    let end_block = if start_block.clone() + max_iter.into() > latest_block {
+    let start_block = (latest_block - total_blocks.into()) + (max_iter * iter).into();
+    let end_block = if start_block + max_iter.into() > latest_block {
         latest_block
     } else {
-        start_block.clone() + max_iter.into()
+        start_block + max_iter.into()
     };
 
     (start_block, end_block)
@@ -447,8 +454,7 @@ pub async fn check_withdrawals(
 
     // iterate MAX_ITER blocks at a time
     loop {
-        let (start, end) =
-            compute_start_end(iter, xdai_latest_block.clone(), blocks_to_check, MAX_ITER);
+        let (start, end) = compute_start_end(iter, xdai_latest_block, blocks_to_check, MAX_ITER);
         iter += 1;
 
         //We search for the phrase UserRequestForSignature(_receiver,valueToTransfer)
@@ -492,7 +498,7 @@ fn parse_receiver_data(data: &[u8]) -> Result<(Address, Uint256), Web3Error> {
 
     // The next word in payload represents the ammount. this is bytes 32 - 64
     let ammount_bytes = &data[32..64];
-    let ammount = Uint256::from_bytes_be(ammount_bytes);
+    let ammount = Uint256::from_be_bytes(ammount_bytes);
 
     Ok((address, ammount))
 }
@@ -507,8 +513,8 @@ async fn parse_sender_data(data: &[u8], client: &Web3) -> Result<(Address, Uint2
         ));
     }
 
-    let tx_hash = Uint256::from_bytes_be(data);
-    let response = client.eth_get_transaction_by_hash(tx_hash.clone()).await?;
+    let tx_hash = Uint256::from_be_bytes(data);
+    let response = client.eth_get_transaction_by_hash(tx_hash).await?;
 
     let tx_res = match response {
         Some(a) => a,
@@ -519,7 +525,11 @@ async fn parse_sender_data(data: &[u8], client: &Web3) -> Result<(Address, Uint2
         }
     };
 
-    let sender = tx_res.from;
+    let sender = match tx_res {
+        TransactionResponse::Eip1559 { from, .. } => from,
+        TransactionResponse::Eip2930 { from, .. } => from,
+        TransactionResponse::Legacy { from, .. } => from,
+    };
     Ok((sender, tx_hash))
 }
 
@@ -752,7 +762,7 @@ mod tests {
         let (address, ammount) = parse_receiver_data(&data).unwrap();
 
         assert_eq!(address, Address::from_slice(&address_bytes).unwrap());
-        assert_eq!(ammount, Uint256::from_bytes_be(&ammount_bytes));
+        assert_eq!(ammount, Uint256::from_be_bytes(&ammount_bytes));
 
         assert_eq!(address.as_bytes(), address_bytes);
     }
@@ -768,31 +778,26 @@ mod tests {
             let xdai_client = Web3::new("https://dai.althea.net", Duration::from_secs(5));
             let latest_block = xdai_client.eth_block_number().await.unwrap();
 
-            let (start, end) =
-                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
-            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            let (start, end) = compute_start_end(0, latest_block, blocks_to_search, max_iter);
+            assert_eq!(start, latest_block - blocks_to_search.into());
             assert_eq!(end, start + max_iter.into());
 
             blocks_to_search = 9999;
-            let (start, end) =
-                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
-            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            let (start, end) = compute_start_end(0, latest_block, blocks_to_search, max_iter);
+            assert_eq!(start, latest_block - blocks_to_search.into());
             assert_eq!(end, start + blocks_to_search.into());
 
             blocks_to_search = 10000;
-            let (start, end) =
-                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
-            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            let (start, end) = compute_start_end(0, latest_block, blocks_to_search, max_iter);
+            assert_eq!(start, latest_block - blocks_to_search.into());
             assert_eq!(end, start + blocks_to_search.into());
 
             blocks_to_search = 10001;
-            let (start, end) =
-                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
-            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            let (start, end) = compute_start_end(0, latest_block, blocks_to_search, max_iter);
+            assert_eq!(start, latest_block - blocks_to_search.into());
             assert_eq!(end, start + max_iter.into());
 
-            let (start, end) =
-                compute_start_end(1, latest_block.clone(), blocks_to_search, max_iter);
+            let (start, end) = compute_start_end(1, latest_block, blocks_to_search, max_iter);
             assert_eq!(start, latest_block - 1u32.into());
             assert_eq!(end, start + 1u32.into());
         });

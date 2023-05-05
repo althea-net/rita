@@ -37,7 +37,6 @@ pub fn add_tx_to_total(amount: Uint256) {
 pub async fn tick_simulated_tx() {
     let payment_settings = settings::get_rita_common().payment;
     let eth_private_key = payment_settings.eth_private_key.unwrap();
-    let eth_address = eth_private_key.to_address();
     let our_id = match settings::get_rita_common().get_identity() {
         Some(id) => id,
         None => return,
@@ -47,7 +46,7 @@ pub async fn tick_simulated_tx() {
     let pay_threshold = get_pay_thresh();
     let simulated_transaction_fee_address = payment_settings.simulated_transaction_fee_address;
     let simulated_transaction_fee = payment_settings.simulated_transaction_fee;
-    let amount_to_pay = AMOUNT_OWED.read().unwrap().clone();
+    let amount_to_pay = *AMOUNT_OWED.read().unwrap();
     let should_pay = amount_to_pay > pay_threshold.abs().to_uint256().unwrap();
     drop(payment_settings);
     trace!(
@@ -77,11 +76,10 @@ pub async fn tick_simulated_tx() {
     let transaction_status = web3.send_transaction(
         simulated_transaction_fee_address,
         Vec::new(),
-        amount_to_pay.clone(),
-        eth_address,
+        amount_to_pay,
         eth_private_key,
         vec![
-            SendTxOption::Nonce(nonce.clone()),
+            SendTxOption::Nonce(nonce),
             SendTxOption::GasPrice(gas_price),
         ],
     );
@@ -94,7 +92,7 @@ pub async fn tick_simulated_tx() {
             update_payments(PaymentTx {
                 to: txfee_identity,
                 from: our_id,
-                amount: amount_to_pay.clone(),
+                amount: amount_to_pay,
                 txid: Some(txid),
             });
 
@@ -102,7 +100,7 @@ pub async fn tick_simulated_tx() {
             let mut amount_owed = AMOUNT_OWED.write().unwrap();
             let payment_amount = amount_to_pay;
             if payment_amount <= *amount_owed {
-                *amount_owed = amount_owed.clone() - payment_amount;
+                *amount_owed -= payment_amount;
             } else {
                 // I don't think this can ever happen unless successful
                 // payment gets called outside of this actor, or more than one

@@ -174,7 +174,7 @@ pub fn calculate_unverified_payments(router: Identity) -> Uint256 {
     let mut total_unverified_payment: Uint256 = Uint256::from(0u32);
     for iterate in payments_to_process.iter() {
         if iterate.payment.from == router && iterate.payment.to != router {
-            total_unverified_payment += iterate.payment.amount.clone();
+            total_unverified_payment += iterate.payment.amount;
         }
     }
     total_unverified_payment
@@ -187,7 +187,7 @@ pub fn calculate_unverified_payments(router: Identity) -> Uint256 {
 /// This endpoint specifically (and only this one) is fully idempotent so that we can retry
 /// txid transmissions
 pub fn validate_later(ts: ToValidate) -> Result<(), RitaCommonError> {
-    if let Some(txid) = ts.payment.txid.clone() {
+    if let Some(txid) = ts.payment.txid {
         if !get_all_successful_tx().contains(&txid) {
             // insert is safe to run multiple times just so long as we check successful tx's for duplicates
             add_unvalidated_transaction(ts);
@@ -224,7 +224,7 @@ fn remove(msg: Remove) {
     // store successful transactions so that they can't be played back to us, at least
     // during this session
     if msg.success && was_present {
-        add_successful_tx(msg.tx.payment.clone().txid.unwrap());
+        add_successful_tx(msg.tx.payment.txid.unwrap());
     }
     if was_present {
         info!("Transaction {} was removed", msg.tx);
@@ -276,7 +276,7 @@ pub async fn validate() {
         if elapsed.is_some() && elapsed.unwrap() > PAYMENT_RECEIVE_TIMEOUT {
             error!(
                 "Incoming transaction {:#066x} has timed out, payment failed!",
-                item.payment.txid.clone().unwrap()
+                item.payment.txid.unwrap()
             );
 
             // if we fail to so much as get a block height for the full duration of a payment timeout, we have problems and probably we are not counting payments correctly potentially leading to wallet
@@ -299,7 +299,7 @@ pub async fn validate() {
         else if elapsed.is_some() && from_us && elapsed.unwrap() > PAYMENT_SEND_TIMEOUT {
             error!(
                 "Outgoing transaction {:#066x} has timed out, payment failed!",
-                item.payment.txid.clone().unwrap()
+                item.payment.txid.unwrap()
             );
             to_delete.push(item.clone());
         } else {
@@ -343,7 +343,7 @@ pub async fn validate_transaction(ts: ToValidate) {
     let web3 = Web3::new(&full_node, TRANSACTION_VERIFICATION_TIMEOUT);
 
     let block_num = web3.eth_block_number().await;
-    let transaction = web3.eth_get_transaction_by_hash(txid.clone()).await;
+    let transaction = web3.eth_get_transaction_by_hash(txid).await;
 
     match (transaction, block_num) {
         (Ok(Some(transaction)), Ok(block_num)) => {
@@ -380,13 +380,38 @@ fn handle_tx_messaging(
     current_block: Uint256,
 ) {
     let from_address = ts.payment.from.eth_address;
-    let amount = ts.payment.amount.clone();
+    let amount = ts.payment.amount;
     let pmt = ts.payment.clone();
     let our_address = settings::get_rita_common()
         .payment
         .eth_address
         .expect("No Address!");
-    let to = match transaction.to {
+
+    let (tx_to, tx_from, tx_value, tx_block_number) = match transaction {
+        TransactionResponse::Eip1559 {
+            to,
+            from,
+            value,
+            block_number,
+            ..
+        } => (to, from, value, block_number),
+        TransactionResponse::Eip2930 {
+            to,
+            from,
+            value,
+            block_number,
+            ..
+        } => (to, from, value, block_number),
+        TransactionResponse::Legacy {
+            to,
+            from,
+            value,
+            block_number,
+            ..
+        } => (to, from, value, block_number),
+    };
+
+    let to = match tx_to {
         Some(val) => val,
         None => {
             error!("Invalid TX! No destination!");
@@ -402,10 +427,10 @@ fn handle_tx_messaging(
     // actually cryptographically validate the txhash locally. Instead we just compare the value we get from the full
     // node
     let to_us = to == our_address;
-    let from_us = transaction.from == our_address;
-    let value_correct = transaction.value == amount;
-    let is_in_chain = payment_in_chain(current_block.clone(), transaction.block_number.clone());
-    let is_old = payment_is_old(current_block, transaction.block_number);
+    let from_us = tx_from == our_address;
+    let value_correct = tx_value == amount;
+    let is_in_chain = payment_in_chain(current_block, tx_block_number);
+    let is_old = payment_is_old(current_block, tx_block_number);
 
     if !value_correct {
         error!("Transaction with invalid amount!");
@@ -438,7 +463,7 @@ fn handle_tx_messaging(
                 txid, from_address, amount
             );
             // update debt keeper with the details of this payment
-            let _ = payment_received(pmt.from, pmt.amount.clone());
+            let _ = payment_received(pmt.from, pmt.amount);
 
             // update the usage tracker with the details of this payment
             update_payments(pmt);
@@ -455,7 +480,7 @@ fn handle_tx_messaging(
                 success: true,
             });
             // update debt keeper with the details of this payment
-            let _ = payment_succeeded(pmt.to, pmt.amount.clone());
+            let _ = payment_succeeded(pmt.to, pmt.amount);
 
             // update the usage tracker with the details of this payment
             update_payments(pmt.clone());

@@ -37,7 +37,7 @@ lazy_static! {
 
 pub fn get_operator_fee_debt() -> Uint256 {
     let state = OPERATOR_FEE_DATA.read().unwrap();
-    state.operator_debt.clone()
+    state.operator_debt
 }
 
 #[derive(Clone)]
@@ -81,7 +81,6 @@ pub async fn tick_operator_payments() {
     let operator_settings = client.operator;
     let payment_settings = common.payment;
     let eth_private_key = payment_settings.eth_private_key.unwrap();
-    let eth_address = payment_settings.eth_address.unwrap();
     let our_balance = get_oracle_balance();
     let gas_price = get_oracle_latest_gas_price();
     let nonce = get_oracle_nonce();
@@ -90,7 +89,7 @@ pub async fn tick_operator_payments() {
         Some(val) => val,
         None => return,
     };
-    let operator_fee = operator_settings.operator_fee.clone();
+    let operator_fee = operator_settings.operator_fee;
 
     let mut state = get_operator_fee_data();
 
@@ -101,12 +100,12 @@ pub async fn tick_operator_payments() {
     set_operator_fee_data(state.clone());
 
     // reassign to an immutable variable to prevent mistakes
-    let amount_to_pay = state.operator_debt.clone();
+    let amount_to_pay = state.operator_debt;
 
     // we should pay if the amount is greater than the pay threshold and if we have the
     // balance to do so.
     let should_pay = amount_to_pay.to_int256().unwrap_or_else(|| 0u64.into()) > pay_threshold
-        && amount_to_pay <= our_balance.clone().unwrap_or_else(|| 0u64.into());
+        && amount_to_pay <= our_balance.unwrap_or_else(|| 0u64.into());
     trace!("We should pay our operator {}", should_pay);
 
     if should_pay {
@@ -130,11 +129,10 @@ pub async fn tick_operator_payments() {
             .send_transaction(
                 operator_address,
                 Vec::new(),
-                amount_to_pay.clone(),
-                eth_address,
+                amount_to_pay,
                 eth_private_key,
                 vec![
-                    SendTxOption::Nonce(nonce.clone()),
+                    SendTxOption::Nonce(nonce),
                     SendTxOption::GasPrice(gas_price),
                 ],
             )
@@ -152,10 +150,10 @@ pub async fn tick_operator_payments() {
                 update_payments(PaymentTx {
                     to: operator_identity,
                     from: our_id,
-                    amount: amount_to_pay.clone(),
+                    amount: amount_to_pay,
                     txid: Some(txid),
                 });
-                add_tx_to_total(amount_to_pay.clone());
+                add_tx_to_total(amount_to_pay);
                 state.operator_debt -= amount_to_pay;
                 set_operator_fee_data(state);
             }

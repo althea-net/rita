@@ -283,7 +283,7 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
     }
 
     let use_operator_price = operator.use_operator_price || operator.force_use_operator_price;
-    let current_operator_fee = operator_settings.operator_fee.clone();
+    let current_operator_fee = operator_settings.operator_fee;
     let new_operator_fee = Uint256::from(new_settings.operator_fee);
     if use_operator_price || new_operator_fee > current_operator_fee {
         operator.operator_fee = new_operator_fee;

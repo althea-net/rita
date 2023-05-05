@@ -164,7 +164,7 @@ pub async fn withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {
     let token_bridge = token_bridge_core_from_settings(&payment_settings);
 
     let to = msg.to;
-    let amount = msg.amount.clone();
+    let amount = msg.amount;
 
     info!("bridge withdraw handler amount {}", amount);
 
@@ -174,9 +174,7 @@ pub async fn withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {
         if !writer.withdraw_in_progress {
             writer.withdraw_in_progress = true;
             set_bridge_state(writer.clone());
-            let _res =
-                encode_relaytokens(token_bridge, to, amount.clone(), Duration::from_secs(600))
-                    .await;
+            let _res = encode_relaytokens(token_bridge, to, amount, Duration::from_secs(600)).await;
 
             detailed_state_change(DetailedBridgeState::XdaiToDai { amount });
             // Reset the lock

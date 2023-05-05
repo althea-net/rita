@@ -15,6 +15,7 @@ use std::collections::HashSet;
 use web30::amm::DAI_CONTRACT_ADDRESS;
 use web30::amm::USDC_CONTRACT_ADDRESS;
 use web30::jsonrpc::error::Web3Error;
+use web30::types::TransactionRequest;
 
 /// Transfers dai present in eth address from previous xdai_bridge iterations to the xdai chain.
 /// This also assists in rescuing any stranded dai balance because of failures in depositing flow.
@@ -24,7 +25,7 @@ pub async fn transfer_dai(
 ) -> Result<(), TokenBridgeError> {
     info!("Our DAI balance is {}, sending to xDai!", dai_balance);
     detailed_state_change(DetailedBridgeState::DaiToXdai {
-        amount: dai_balance.clone(),
+        amount: dai_balance,
     });
 
     // Remove up to U16_MAX wei from this transaction, this is well under a cent.
@@ -56,7 +57,7 @@ pub async fn process_withdraws(bridge: &TokenBridgeCore) -> bool {
                 return false;
             }
         };
-        let amount = withdraw_details.amount.clone();
+        let amount = withdraw_details.amount;
         let address = withdraw_details.to;
         match withdraw(withdraw_details).await {
             Ok(_) => {
@@ -151,7 +152,7 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
                 token,
                 *DAI_CONTRACT_ADDRESS,
                 Some(100u16.into()),
-                token_amount.clone(),
+                token_amount,
                 None,
                 Some(get_min_amount_out(token_amount)),
                 None,
@@ -193,22 +194,22 @@ pub async fn simulated_withdrawal_on_eth(bridge: &TokenBridgeCore) -> Result<(),
     let events = check_withdrawals(BLOCKS, bridge.xdai_bridge_on_xdai, client, h).await?;
 
     for event in events.iter() {
-        let txid = event.txid.clone();
-        let amount = event.amount.clone();
+        let txid = event.txid;
+        let amount = event.amount;
 
         let withdraw_info = get_relay_message_hash(
             bridge.own_address,
             bridge.xdai_web3.clone(),
             bridge.helper_on_xdai,
             event.receiver,
-            txid.clone(),
-            amount.clone(),
+            txid,
+            amount,
         )
         .await?;
 
         // check if the event has already unlocked the funds or not
         let res = match check_relayed_message(
-            event.txid.clone(),
+            event.txid,
             bridge.eth_web3.clone(),
             bridge.own_address,
             bridge.xdai_bridge_on_eth,
@@ -228,14 +229,14 @@ pub async fn simulated_withdrawal_on_eth(bridge: &TokenBridgeCore) -> Result<(),
         if res {
             trace!(
                 "Transaction with Id: {} has already been unlocked, skipping",
-                display_uint256_as_address(txid.clone())
+                display_uint256_as_address(txid)
             );
             continue;
         } else {
             //unlock this transaction
             trace!(
                 "Tx Hash is {} with the amount of {} for a withdraw event",
-                display_uint256_as_address(txid.clone()),
+                display_uint256_as_address(txid),
                 amount
             );
             let _res = bridge
@@ -258,7 +259,7 @@ fn get_min_amount_out(mut input: Uint256) -> Uint256 {
     // multiply by 1*10^12 to go from 1*10^6 value to -> 1*10^18 value
     input *= 1_000_000_000_000u128.into();
     // remove 2.5% off the top, so we need at least 95% of the face value of the USDC or USDT
-    input = input.clone() - input.clone() / 40u8.into();
+    input = input - input / 40u8.into();
     input
 }
 
@@ -274,10 +275,7 @@ pub async fn simulate_signature_submission(
     bridge
         .eth_web3
         .simulate_transaction(
-            bridge.xdai_bridge_on_eth,
-            0_u32.into(),
-            payload,
-            bridge.own_address,
+            TransactionRequest::quick_tx(bridge.own_address, bridge.xdai_bridge_on_eth, payload),
             None,
         )
         .await
