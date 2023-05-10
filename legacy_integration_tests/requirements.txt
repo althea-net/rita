@@ -2,4 +2,4 @@ termcolor==1.1.0
 toml==0.9.4
 networkx==2.5
 matplotlib==3.4.3
-joblib==0.14.0
+joblib==1.1.1
