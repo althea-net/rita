@@ -93,7 +93,15 @@ impl dyn KernelInterface {
         }
 
         let stdout = &String::from_utf8(result.stdout)?;
-        Ok(stdout.contains(&format!("1:{class_id}")))
+        for line in stdout.lines() {
+            let split = line.split_ascii_whitespace();
+            for item in split {
+                if item == &format!("1:{class_id}") {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
     }
 
     /// Determines if the provided interface has a configured qdisc

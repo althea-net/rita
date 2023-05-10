@@ -710,15 +710,29 @@ pub fn enforce_exit_clients(
                                 error!("Unable to setup enforcement class on wg_exit_v2: {:?}", e);
                             }
                         } else {
-                            // Delete exisiting enforcement class, users who are not enforced are unclassifed becuase
-                            // leaving the class in place reduces their speeds.
-                            info!("Deleting enforcement classes for {}", client.wg_pubkey);
-                            if let Err(e) = KI.delete_class("wg_exit", ip) {
-                                error!("Unable to delete class on wg_exit, is {} still enforced when they shouldnt be? {:?}", ip, e);
-                            }
+                            let action_required = match (
+                                KI.has_class(ip, "wg_exit"),
+                                KI.has_class(ip, "wg_exit_v2"),
+                            ) {
+                                (Ok(a), Ok(b)) => a | b,
+                                (Ok(a), Err(_)) => a,
+                                (Err(_), Ok(a)) => a,
+                                (Err(ea), Err(eb)) => {
+                                    error!("Failed to get qdisc class status from both exit interfaces {:?} {:?}", ea, eb);
+                                    false
+                                }
+                            };
+                            if action_required {
+                                // Delete exisiting enforcement class, users who are not enforced are unclassifed becuase
+                                // leaving the class in place reduces their speeds.
+                                info!("Deleting enforcement classes for {}", client.wg_pubkey);
+                                if let Err(e) = KI.delete_class("wg_exit", ip) {
+                                    error!("Unable to delete class on wg_exit, is {} still enforced when they shouldnt be? {:?}", ip, e);
+                                }
 
-                            if let Err(e) = KI.delete_class("wg_exit_v2", ip) {
-                                error!("Unable to delete class on wg_exit_v2, is {} still enforced when they shouldnt be? {:?}", ip, e);
+                                if let Err(e) = KI.delete_class("wg_exit_v2", ip) {
+                                    error!("Unable to delete class on wg_exit_v2, is {} still enforced when they shouldnt be? {:?}", ip, e);
+                                }
                             }
                         };
                     }
