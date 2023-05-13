@@ -47,6 +47,18 @@ pub fn generate_mesh_ip() -> Result<IpAddr, NewCluError> {
     Ok(mesh_ip)
 }
 
+pub fn generate_eth_key() -> PrivateKey {
+    // this loop should never execute more than twice, if it does the random number generator
+    // is in poor shape
+    loop {
+        let key_buf: [u8; 32] = rand::random();
+        let new_private_key = PrivateKey::from_bytes(key_buf);
+        if let Ok(key) = new_private_key {
+            return key;
+        }
+    }
+}
+
 pub fn validate_mesh_ip(ip: &IpAddr) -> bool {
     ip.is_ipv6() && !ip.is_unspecified()
 }
@@ -189,30 +201,25 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, NewClu
         }
         None => {
             info!("Eth key details not configured, generating");
-            let key_buf: [u8; 32] = rand::random();
-            let new_private_key = PrivateKey::from_bytes(key_buf)?;
+            let new_private_key = generate_eth_key();
             payment_settings.eth_private_key = Some(new_private_key);
-
-            payment_settings.eth_address = Some(new_private_key.to_address())
+            payment_settings.eth_address = Some(new_private_key.to_address());
         }
     }
 
     // Generate the althea private key from existing private key bytes
     let althea_address_option = payment_settings.althea_address;
-    match althea_address_option {
-        Some(existing_althea_address) => {
+    let eth_private_key_option = payment_settings.eth_private_key;
+    match (althea_address_option, eth_private_key_option) {
+        (Some(existing_althea_address), _) => {
             info!("Starting with Eth address {:?}", existing_althea_address);
         }
-        None => {
+        (None, Some(eth_key)) => {
             info!("Althea key details not configured, generating");
-            let key_buf = payment_settings
-                .eth_private_key
-                .expect("Didnt we just generate a valid key??")
-                .to_bytes();
-            let new_private_key = EthermintPrivateKey::from_secret(&key_buf);
-
-            payment_settings.althea_address = Some(new_private_key.to_address("althea")?);
+            let althea_address = EthermintPrivateKey::from(eth_key).to_address("althea")?;
+            payment_settings.althea_address = Some(althea_address);
         }
+        _ => {}
     }
 
     settings.payment = payment_settings;
@@ -341,9 +348,24 @@ mod tests {
     use crate::generate_mesh_ip;
     use crate::validate_mesh_ip;
     use althea_types::WgKey;
+    use clarity::PrivateKey;
+    use deep_space::EthermintPrivateKey;
+    use deep_space::PrivateKey as _;
     use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
     use std::collections::HashSet;
     use std::net::IpAddr;
+
+    #[test]
+    fn test_generate_althea_address() {
+        // this tests that address generation produces keys where the public key bytes match
+        let key_buf: [u8; 32] = rand::random();
+        let eth_key = PrivateKey::from_bytes(key_buf).unwrap();
+
+        let eth_address = eth_key.to_address();
+        let althea_key: EthermintPrivateKey = eth_key.into();
+        let althea_address = althea_key.to_address("althea").unwrap();
+        assert_eq!(althea_address.get_bytes(), eth_address.as_bytes())
+    }
 
     /// generate 1000 mesh ip's make sure we succeed and that all are unique
     #[test]

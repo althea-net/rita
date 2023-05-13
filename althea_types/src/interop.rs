@@ -63,6 +63,17 @@ impl Identity {
         }
     }
 
+    /// Returns true if this identity is converged, meaning the Althea address is
+    /// derived from and is interchangeable with the ETH address. If false we have
+    /// to avoid assumptions avoid these being the same private key
+    pub fn is_converged(&self) -> bool {
+        if let Some(althea_address) = self.althea_address {
+            althea_address.get_bytes() == self.eth_address.as_bytes()
+        } else {
+            true
+        }
+    }
+
     pub fn get_hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
@@ -95,9 +106,16 @@ impl Eq for Identity {}
 // Custom hash implementation that also ignores nickname
 impl Hash for Identity {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.mesh_ip.hash(state);
-        self.eth_address.hash(state);
-        self.wg_public_key.hash(state);
+        if self.is_converged() {
+            self.mesh_ip.hash(state);
+            self.eth_address.hash(state);
+            self.wg_public_key.hash(state);
+        } else {
+            self.mesh_ip.hash(state);
+            self.eth_address.hash(state);
+            self.althea_address.hash(state);
+            self.wg_public_key.hash(state);
+        }
     }
 }
 
