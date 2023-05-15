@@ -659,7 +659,7 @@ mod tests {
         ip.copy_from_slice(&secret[0..16]);
 
         // the starting location of the funds
-        let eth_key = PrivateKey::from_slice(&secret).unwrap();
+        let eth_key = PrivateKey::from_bytes(secret).unwrap();
         let eth_address = eth_key.to_address();
         let althea_address = EthermintPrivateKey::from_secret(&eth_key.to_bytes())
             .to_address("althea")
