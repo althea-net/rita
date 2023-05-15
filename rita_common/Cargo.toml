@@ -22,7 +22,7 @@ auto-bridge = {path = "../auto_bridge"}
 serde_json = "1.0"
 log = { version = "0.4", features = ["release_max_level_info"] }
 settings = { path = "../settings" }
-clarity = "1.1"
+clarity = "1.2"
 futures = { version = "0.3", features = ["compat"] }
 num256 = "0.5"
 num-traits="0.2"

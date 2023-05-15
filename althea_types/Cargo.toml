@@ -15,7 +15,7 @@ serde = "1.0"
 serde_json = "1.0"
 hex = "0.4"
 sodiumoxide = "0.2"
-clarity = "1.1"
+clarity = "1.2"
 arrayvec = {version= "0.7", features = ["serde"]}
 phonenumber = "0.3"
 lettre = {version = "0.10", features = ["serde"]}

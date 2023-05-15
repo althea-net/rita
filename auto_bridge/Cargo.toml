@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 web30 = "1.0"
 num256 = "0.5"
-clarity = "1.1"
+clarity = "1.2"
 rand = "0.8"
 num = "0.4"
 log = "0.4"

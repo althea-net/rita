@@ -190,7 +190,7 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, NewClu
         None => {
             info!("Eth key details not configured, generating");
             let key_buf: [u8; 32] = rand::random();
-            let new_private_key = PrivateKey::from_slice(&key_buf)?;
+            let new_private_key = PrivateKey::from_bytes(key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
 
             payment_settings.eth_address = Some(new_private_key.to_address())
@@ -290,7 +290,7 @@ fn linux_exit_init(
         None => {
             info!("Eth key details not configured, generating");
             let key_buf: [u8; 32] = rand::random();
-            let new_private_key = PrivateKey::from_slice(&key_buf)?;
+            let new_private_key = PrivateKey::from_bytes(key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
 
             payment_settings.eth_address = Some(new_private_key.to_address())
