@@ -316,29 +316,30 @@ pub fn start_exit_manager_loop() {
 
 /// Hardcode exit althea address, this is needed for transitioning routers
 fn update_exit_server_to_althea_addresses() {
-    let rita_client = settings::get_rita_client();
-    let mut exits = rita_client.exit_client.exits;
+    let mut rita_client = settings::get_rita_client();
+    let mut exits = rita_client.exit_client.exits.clone();
     for (s, e) in exits.iter_mut() {
         match &s[..] {
             "test" => {
                 if e.althea_address.is_none() {
                     e.althea_address = Some(
-                        "althea1a0qej43d2r8m3a46223xgff30cqfn6dz302clv"
-                            .parse()
-                            .expect("This shouldnt fail"),
+                        deep_space::Address::from_slice(e.eth_address.as_bytes(), "althea")
+                            .expect("This shouldnt be failing"),
                     );
                 }
             }
             "us_west" => {
                 if e.althea_address.is_none() {
                     e.althea_address = Some(
-                        "althea12d4w6nu25rlsqvlfl6afmlrp6kna0s6kkp3h0r"
-                            .parse()
-                            .expect("This shouldnt fail"),
+                        deep_space::Address::from_slice(e.eth_address.as_bytes(), "althea")
+                            .expect("This shouldnt be failing"),
                     );
                 }
             }
             _ => {}
         }
     }
+    // Save into settings
+    rita_client.exit_client.exits = exits;
+    settings::set_rita_client(rita_client);
 }
