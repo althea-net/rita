@@ -2596,6 +2596,7 @@ dependencies = [
  "clarity",
  "clu",
  "compressed_log",
+ "deep_space",
  "futures 0.3.28",
  "hex-literal",
  "ipnetwork",
