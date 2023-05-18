@@ -11,6 +11,7 @@ use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::operator_fee_manager::tick_operator_payments;
 use crate::InterfaceMode;
 use actix_async::System as AsyncSystem;
+use althea_kernel_interface::KernelInterfaceError;
 use althea_kernel_interface::KI;
 use althea_types::ExitState;
 use antenna_forwarding_client::start_antenna_forwarding_proxy;
@@ -27,6 +28,7 @@ use std::io::BufReader;
 use std::io::Read;
 use std::io::Seek;
 
+use std::net::IpAddr;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -320,7 +322,10 @@ fn manage_babeld_logs() {
     }
 }
 
-pub fn update_resolv_conf() {
+/// This code handles updating the dns servers for a router, modifying /etc/resolv.conf to ensure it forwards to
+/// the exit local dns server and also modificing /etc/config/dhcp to ensure we advertise the althea router itself (192.168.10.1)
+/// as a dns resolver
+pub fn update_dns_conf() {
     let resolv_path = "/etc/resolv.conf";
     let updated_config = "nameserver 172.168.0.254\nnameserver 8.8.8.8\nnameserver 1.0.0.1\nnameserver 74.82.42.42\nnameserver 149.112.112.10\nnameserver 64.6.65.6"
         .to_string();
@@ -332,7 +337,6 @@ pub fn update_resolv_conf() {
                 let s = line.unwrap_or("".to_string());
                 if s.trim() == "nameserver 172.168.0.254" {
                     info!("Found nameserver 172.168.0.254, no update to resolv.conf");
-                    return;
                 }
             }
             // if we get here we haven't found the nameserver and need to add it
@@ -348,6 +352,76 @@ pub fn update_resolv_conf() {
             };
         }
     };
+
+    // if we are on openwrt we can automatically configure the dhcp server, otherwise the user is on their own to santiy check their config
+    if KI.is_openwrt() {
+        // the goal of this code is to make sure that the router is the only dns server offered during the dhcp negotiation process
+        // not every device will take this dns server and use it, but many do, and some use it exclusively so it has to be correct
+
+        const DHCP_DNS_LIST_KEY: &str = "dhcp.@dnsmasq[0].server";
+
+        // First we figure out what is the current list of dns servers we suggest to clients when they recieve a dhcp addr
+        // Second we figure out the current ip of this router by looking on br-lan for ipv4 addresses that are locally routable
+        // we do this so if the router lan ip is changed from 192.168.10.1 (currently the default) then the correct ip will be
+        // inserted for dhcp clients, as previously noted if we have 192.168.10.1 as the dns server ip offered to dhcp clients but
+        // the router is for example at 192.168.10.50 then some client devices will simply display dns errors and not function
+        // others will fall back to internal dns servers and operate correctly
+        match (
+            parse_list_to_ip(KI.get_uci_var(DHCP_DNS_LIST_KEY)),
+            parse_to_ip(KI.get_uci_var("network.lan.ipaddr")),
+        ) {
+            (Ok(dns_server_list), Ok(our_lan_ip)) => {
+                // if we need to update the list of servers, potential reasons are an empty
+                // list or a list that does not have the lan ip as the first item
+                // note it's not possible for this to panic becuase if the list is empty the second half
+                // is not evaluated, if the list is not empty the first entry must exist
+                if dns_server_list.is_empty() || dns_server_list[0] != our_lan_ip {
+                    overwrite_dns_server_and_restart_dhcp(DHCP_DNS_LIST_KEY, our_lan_ip)
+                }
+            }
+            (Err(e), Ok(our_lan_ip)) => {
+                error!("We couldn't parse dhcp dns list {:?}, replacing!", e);
+                // we can't parse the dns server list, it may be invalid, we should overwrite in this case
+                overwrite_dns_server_and_restart_dhcp(DHCP_DNS_LIST_KEY, our_lan_ip)
+            }
+            (_, Err(e)) => error!("Failed to get our own lan ip? {:?}", e),
+        }
+    }
+}
+
+fn overwrite_dns_server_and_restart_dhcp(key: &str, our_lan_ip: IpAddr) {
+    let res = KI.set_uci_list(key, &[&our_lan_ip.to_string()]);
+    if let Err(e) = res {
+        error!("Failed to set dhcp server list via uci {:?}", e);
+        return;
+    }
+    let res = KI.uci_commit(key);
+    if let Err(e) = res {
+        error!("Failed to set dhcp server list via uci {:?}", e);
+        return;
+    }
+    let res = KI.openwrt_reset_dnsmasq();
+    if let Err(e) = res {
+        error!("Failed to restart dhcp config with {:?}", e);
+    }
+}
+
+fn parse_to_ip(
+    input: Result<String, KernelInterfaceError>,
+) -> Result<IpAddr, KernelInterfaceError> {
+    Ok(input?.parse()?)
+}
+
+fn parse_list_to_ip(
+    input: Result<String, KernelInterfaceError>,
+) -> Result<Vec<IpAddr>, KernelInterfaceError> {
+    let input = input?;
+    let mut ret = Vec::new();
+    for line in input.split_ascii_whitespace() {
+        let ip: IpAddr = line.parse()?;
+        ret.push(ip);
+    }
+    Ok(ret)
 }
 
 pub fn update_system_time() {
