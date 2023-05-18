@@ -14,19 +14,19 @@ impl dyn KernelInterface {
         Ok(())
     }
 
-    //Sets an arbitrary UCI variable on OpenWRT
+    /// Sets an arbitrary UCI variable on OpenWRT
     pub fn set_uci_var(&self, key: &str, value: &str) -> Result<(), KernelInterfaceError> {
         self.run_uci("uci", &["set", &format!("{key}={value}")])?;
         Ok(())
     }
 
-    //Adds an arbitrary UCI variable on OpenWRT
+    /// Adds an arbitrary UCI variable on OpenWRT
     pub fn add_uci_var(&self, key: &str, value: &str) -> Result<(), KernelInterfaceError> {
         self.run_uci("uci", &["add", key, value])?;
         Ok(())
     }
 
-    //Sets an arbitrary UCI list on OpenWRT
+    /// Sets an arbitrary UCI list on OpenWRT
     pub fn set_uci_list(&self, key: &str, value: &[&str]) -> Result<(), KernelInterfaceError> {
         if let Err(e) = self.del_uci_var(key) {
             trace!("Delete uci var failed! {:?}", e);
@@ -38,13 +38,13 @@ impl dyn KernelInterface {
         Ok(())
     }
 
-    //Deletes an arbitrary UCI variable on OpenWRT
+    /// Deletes an arbitrary UCI variable on OpenWRT
     pub fn del_uci_var(&self, key: &str) -> Result<(), KernelInterfaceError> {
         self.run_uci("uci", &["delete", key])?;
         Ok(())
     }
 
-    //Retrieves the value of a given UCI path, could be one or multiple values
+    /// Retrieves the value of a given UCI path, could be one or multiple values
     pub fn get_uci_var(&self, key: &str) -> Result<String, KernelInterfaceError> {
         let output = self.run_command("uci", &["get", key])?;
         if !output.stderr.is_empty() {
@@ -57,8 +57,8 @@ impl dyn KernelInterface {
         Ok(clean_string)
     }
 
-    //Commits changes to UCI
-    pub fn uci_commit(&self, subsection: &str) -> Result<bool, KernelInterfaceError> {
+    /// Commits changes to UCI, returns true if successful
+    pub fn uci_commit(&self, subsection: &str) -> Result<(), KernelInterfaceError> {
         let output = self.run_command("uci", &["commit", subsection])?;
         if !output.status.success() {
             return Err(KernelInterfaceError::RuntimeError(format!(
@@ -66,10 +66,10 @@ impl dyn KernelInterface {
                 String::from_utf8(output.stderr)?
             )));
         }
-        Ok(true)
+        Ok(())
     }
 
-    //Resets unsaved changes to UCI
+    /// Resets unsaved changes to UCI
     pub fn uci_revert(&self, section: &str) -> Result<(), KernelInterfaceError> {
         let output = self.run_command("uci", &["revert", section])?;
         if !output.status.success() {
@@ -146,6 +146,11 @@ impl dyn KernelInterface {
 
     pub fn openwrt_reset_network(&self) -> Result<(), KernelInterfaceError> {
         self.run_command("/etc/init.d/network", &["restart"])?;
+        Ok(())
+    }
+
+    pub fn openwrt_reset_dnsmasq(&self) -> Result<(), KernelInterfaceError> {
+        self.run_command("/etc/init.d/dnsmasq", &["restart"])?;
         Ok(())
     }
 }
