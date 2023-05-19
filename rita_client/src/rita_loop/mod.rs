@@ -369,10 +369,12 @@ pub fn update_dns_conf() {
             Ok(dns_server_list) => {
                 // an empty list uses the system resolver, this is acceptable since we just set the system resolver to
                 // point at the exit internal ip above
-                if dns_server_list[0] != EXIT_INTERNAL_IP {
-                    let mut dns_server_list = dns_server_list;
-                    dns_server_list.insert(0, EXIT_INTERNAL_IP.into());
-                    overwrite_dns_server_and_restart_dhcp(DHCP_DNS_LIST_KEY, dns_server_list)
+                if let Some(first_server_list_entry) = dns_server_list.get(0) {
+                    if *first_server_list_entry != EXIT_INTERNAL_IP {
+                        let mut dns_server_list = dns_server_list;
+                        dns_server_list.insert(0, EXIT_INTERNAL_IP.into());
+                        overwrite_dns_server_and_restart_dhcp(DHCP_DNS_LIST_KEY, dns_server_list)
+                    }
                 }
             }
             Err(e) => error!("Failed to get dns server list? {:?}", e),
