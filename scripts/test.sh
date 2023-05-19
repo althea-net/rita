@@ -35,7 +35,7 @@ docker rm -f rita-test
 set -e
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-DOCKERFOLDER=$DIR/../integration-tests/container/
+DOCKERFOLDER=$DIR/../legacy_integration_tests/container/
 REPOFOLDER=$DIR/..
 git archive --format=tar.gz -o $DOCKERFOLDER/rita.tar.gz --prefix=althea_rs/ HEAD
 pushd $DOCKERFOLDER
