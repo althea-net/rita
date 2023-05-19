@@ -79,13 +79,12 @@ lazy_static! {
 }
 
 /// Perform operator updates every UPDATE_FREQUENCY seconds,
-/// even if we are called more often than that
 const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
 
 /// How long we wait for a response from the server
-/// this value must be less than or equal to the CLIENT_LOOP_SPEED
+/// this value must be less than or equal to the UPDATE_FREQUENCY
 /// in the rita_client loop
-pub const OPERATOR_UPDATE_TIMEOUT: Duration = CLIENT_LOOP_TIMEOUT;
+pub const OPERATOR_UPDATE_TIMEOUT: Duration = UPDATE_FREQUENCY;
 
 /// Checks in with the operator server
 pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
