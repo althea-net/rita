@@ -9,6 +9,7 @@ use crate::RitaCommonError;
 use althea_types::Identity;
 use althea_types::PaymentTx;
 use bincode::Error as BincodeError;
+use clarity::utils::hex_str_to_bytes;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
@@ -143,7 +144,7 @@ impl UsageTracker {
                 let txid: Uint256 = match p.txid.parse() {
                     Ok(tx) => tx,
                     Err(_) => {
-                        println!("Removed invalid payment! {}", p.txid);
+                        warn!("Removed invalid payment! {}", p.txid);
                         // found an error, removing
                         continue;
                     }
@@ -493,12 +494,20 @@ pub fn update_payments(payment: PaymentTx) {
 
     // make sure the tx has a txid, transactions without one have not been sent yet and this store
     // should only contain sent transactions
-    let txid = match payment.txid {
-        Some(txid) => txid,
-        None => {
-            error!("Tried to store paymetn without txid?");
-            return;
+    let txid = match (payment.txid, payment.tx_hash.clone()) {
+        // invalid payment
+        (None, None) => return,
+        // impossible payment on both chains?
+        (Some(_), Some(_)) => panic!(),
+        (None, Some(tx_hash)) => {
+            // todo move this validation up a level
+            match hex_str_to_bytes(&tx_hash) {
+                Ok(val) => Uint256::from_be_bytes(&val),
+                // invalid alteha chain txid
+                Err(_) => return,
+            }
         }
+        (Some(txid), None) => txid,
     };
 
     // This handles the following edge case:
