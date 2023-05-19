@@ -209,7 +209,7 @@ const OUTDATED_TIME: Duration = Duration::new(300, 0);
 /// oracle is semi-recent.
 pub fn potential_payment_issues_detected() -> bool {
     // disable this feature if we're in development mode
-    if cfg!(feature = "integration_test") {
+    if cfg!(feature = "legacy_integration_test") {
         return false;
     }
 

@@ -63,7 +63,7 @@ dash_debug = []
 # changes operator urls
 operator_debug = []
 dev_env = []
-legacy_integration_test = ["development", "althea_kernel_interface/integration_test"]
+legacy_integration_test = ["development", "althea_kernel_interface/integration_test", "rita_common/legacy_integration_test"]
 development = ["rita_common/dash_debug","rita_client/operator_debug", "rita_exit/operator_debug"]
 # Op tools dev environement
 optools_dev_env = ["rita_client/dev_env", "rita_exit/dev_env"]
