@@ -29,6 +29,7 @@ use std::io::Read;
 use std::io::Seek;
 
 use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -359,38 +360,34 @@ pub fn update_dns_conf() {
         // not every device will take this dns server and use it, but many do, and some use it exclusively so it has to be correct
 
         const DHCP_DNS_LIST_KEY: &str = "dhcp.@dnsmasq[0].server";
+        const EXIT_INTERNAL_IP: Ipv4Addr = Ipv4Addr::new(172, 168, 0, 254);
 
-        // First we figure out what is the current list of dns servers we suggest to clients when they recieve a dhcp addr
-        // Second we figure out the current ip of this router by looking on br-lan for ipv4 addresses that are locally routable
-        // we do this so if the router lan ip is changed from 192.168.10.1 (currently the default) then the correct ip will be
-        // inserted for dhcp clients, as previously noted if we have 192.168.10.1 as the dns server ip offered to dhcp clients but
-        // the router is for example at 192.168.10.50 then some client devices will simply display dns errors and not function
-        // others will fall back to internal dns servers and operate correctly
-        match (
-            parse_list_to_ip(KI.get_uci_var(DHCP_DNS_LIST_KEY)),
-            parse_to_ip(KI.get_uci_var("network.lan.ipaddr")),
-        ) {
-            (Ok(dns_server_list), Ok(our_lan_ip)) => {
-                // if we need to update the list of servers, potential reasons are an empty
-                // list or a list that does not have the lan ip as the first item
-                // note it's not possible for this to panic becuase if the list is empty the second half
-                // is not evaluated, if the list is not empty the first entry must exist
-                if dns_server_list.is_empty() || dns_server_list[0] != our_lan_ip {
-                    overwrite_dns_server_and_restart_dhcp(DHCP_DNS_LIST_KEY, our_lan_ip)
+        // this config value is the list of servers dnsmasq uses for resolving client requests
+        // if it does not start with the exit internal nameserver add it. An empty value is acceptable
+        // since dnsmasq simply uses resolv.conf servers which we update above in that case.
+        match parse_list_to_ip(KI.get_uci_var(DHCP_DNS_LIST_KEY)) {
+            Ok(dns_server_list) => {
+                // an empty list uses the system resolver, this is acceptable since we just set the system resolver to
+                // point at the exit internal ip above
+                if dns_server_list[0] != EXIT_INTERNAL_IP {
+                    let mut dns_server_list = dns_server_list;
+                    dns_server_list.insert(0, EXIT_INTERNAL_IP.into());
+                    overwrite_dns_server_and_restart_dhcp(DHCP_DNS_LIST_KEY, dns_server_list)
                 }
             }
-            (Err(e), Ok(our_lan_ip)) => {
-                error!("We couldn't parse dhcp dns list {:?}, replacing!", e);
-                // we can't parse the dns server list, it may be invalid, we should overwrite in this case
-                overwrite_dns_server_and_restart_dhcp(DHCP_DNS_LIST_KEY, our_lan_ip)
-            }
-            (_, Err(e)) => error!("Failed to get our own lan ip? {:?}", e),
+            Err(e) => error!("Failed to get dns server list? {:?}", e),
         }
     }
 }
 
-fn overwrite_dns_server_and_restart_dhcp(key: &str, our_lan_ip: IpAddr) {
-    let res = KI.set_uci_list(key, &[&our_lan_ip.to_string()]);
+fn overwrite_dns_server_and_restart_dhcp(key: &str, ips: Vec<IpAddr>) {
+    // does the conversion from Vec<Stringt> to &[&str]
+    let ips: Vec<String> = ips.iter().map(|s| s.to_string()).collect();
+    let slice_of_strs: Vec<&str> = ips.iter().map(|s| s.as_str()).collect();
+    let reference_to_slice: &[&str] = &slice_of_strs;
+
+    let res = KI.set_uci_list(key, reference_to_slice);
+
     if let Err(e) = res {
         error!("Failed to set dhcp server list via uci {:?}", e);
         return;
@@ -404,12 +401,6 @@ fn overwrite_dns_server_and_restart_dhcp(key: &str, our_lan_ip: IpAddr) {
     if let Err(e) = res {
         error!("Failed to restart dhcp config with {:?}", e);
     }
-}
-
-fn parse_to_ip(
-    input: Result<String, KernelInterfaceError>,
-) -> Result<IpAddr, KernelInterfaceError> {
-    Ok(input?.parse()?)
 }
 
 fn parse_list_to_ip(
