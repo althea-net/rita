@@ -218,7 +218,7 @@ pub fn set_metric_factor(stream: &mut TcpStream, new_factor: u32) -> Result<(), 
 }
 
 pub fn monitor(stream: &mut TcpStream, iface: &str) -> Result<(), BabelMonitorError> {
-    let command = &format!("interface {iface} max-rtt-penalty 500 enable-timestamps true");
+    let command = &format!("interface {iface} max-rtt-penalty 2000 enable-timestamps true");
     let iface = iface.to_string();
     let result = run_command(stream, command)?;
 
