@@ -5,7 +5,6 @@ extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
 use crate::exit_manager::{get_client_pub_ipv6, get_selected_exit_ip};
 use crate::rita_loop::is_gateway_client;
-use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::{
     extend_hardware_info, reset_wifi_pass, set_router_update_instruction, set_wifi_multi_internal,
 };
