@@ -69,6 +69,39 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 "netns", "exec", &ns.name, "ip", "link", "set", "dev", "lo", "up",
             ],
         )?;
+        // nft create table inet fw4
+        KI.run_command(
+            "ip",
+            &[
+                "netns", "exec", &ns.name, "nft", "create", "table", "inet", "fw4",
+            ],
+        )?;
+        // nft add chain inet fw4 input { type filter hook input priority filter; policy accept; }
+        // nft add chain inet fw4 output { type filter hook output priority filter; policy accept; }
+        // nft add chain inet fw4 forward { type filter hook forward priority filter; policy accept; }
+        KI.run_command(
+            "ip",
+            &[
+                "netns", "exec", &ns.name, "nft", "add", "chain", "inet", "fw4", "input", "{",
+                "type", "filter", "hook", "input", "priority", "filter;", "policy", "accept;", "}",
+            ],
+        )?;
+        KI.run_command(
+            "ip",
+            &[
+                "netns", "exec", &ns.name, "nft", "add", "chain", "inet", "fw4", "output", "{",
+                "type", "filter", "hook", "output", "priority", "filter;", "policy", "accept;",
+                "}",
+            ],
+        )?;
+        KI.run_command(
+            "ip",
+            &[
+                "netns", "exec", &ns.name, "nft", "add", "chain", "inet", "fw4", "forward", "{",
+                "type", "filter", "hook", "forward", "priority", "filter;", "policy", "accept;",
+                "}",
+            ],
+        )?;
     }
     for link in spaces.linked {
         let veth_ab = format!("veth-{}-{}", link.0.name, link.1.name);

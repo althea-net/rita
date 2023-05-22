@@ -250,7 +250,7 @@ impl dyn KernelInterface {
         Ok(())
     }
 
-    /// Sets up the natting rules for forwarding ipv4 traffic
+    /// Sets up the natting rules for forwarding ipv4 and ipv6 traffic
     pub fn setup_nat(
         &self,
         external_interface: &str,
