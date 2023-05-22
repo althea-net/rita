@@ -210,6 +210,10 @@ def prep_netns(id):
     exec_or_exit(
         "ip netns exec netlab-{} sysctl -w net.ipv6.conf.all.forwarding=1".format(id))
     exec_or_exit("ip netns exec netlab-{} ip link set up lo".format(id))
+    exec_or_exit("ip netns exec netlab-{} nft create table inet fw4".format(id))
+    exec_or_exit("ip netns exec netlab-{} nft add chain inet fw4 input {{ type filter hook input priority filter; policy accept; }}".format(id))
+    exec_or_exit("ip netns exec netlab-{} nft add chain inet fw4 forward {{ type filter hook forward priority filter; policy accept; }}".format(id))
+    exec_or_exit("ip netns exec netlab-{} nft add chain inet fw4 output {{ type filter hook output priority filter; policy accept; }}".format(id))
 
 
 def traffic_diff(a, b):

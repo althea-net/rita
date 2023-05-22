@@ -324,6 +324,7 @@ fn linux_exit_init(
     settings.payment = payment_settings;
     settings.network = network_settings;
     settings.exit_network = exit_network_settings;
+
     trace!("Starting with settings (after clu) : {:?}", settings);
     assert!(settings.get_identity().is_some());
     Ok(settings)
