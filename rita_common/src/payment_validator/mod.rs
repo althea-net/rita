@@ -454,6 +454,7 @@ fn handle_tx_messaging(
                 tx: ts,
                 success: true,
             });
+
             // update debt keeper with the details of this payment
             let _ = payment_succeeded(pmt.to, pmt.amount.clone());
 
