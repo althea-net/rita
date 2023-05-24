@@ -794,7 +794,6 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
                 pmt.amount,
                 denom.expect("How did this happen when we already verified existence"),
             );
-
             // update the usage tracker with the details of this payment
             update_payments(pmt);
         }
@@ -819,13 +818,13 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
                 tx: ts,
                 success: true,
             });
+
             // update debt keeper with the details of this payment
             let _ = payment_succeeded(
                 pmt.to,
                 pmt.amount,
                 denom.expect("How did this happen when we already verified existence"),
             );
-
             // update the usage tracker with the details of this payment
             update_payments(pmt.clone());
 

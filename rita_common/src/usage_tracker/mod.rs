@@ -16,8 +16,10 @@ use num256::Uint256;
 use serde::{Deserialize, Serialize};
 use serde_json::Error as JsonError;
 use settings::set_rita_common;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fs::File;
+use std::hash::Hash;
 use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Read;
@@ -84,19 +86,27 @@ pub struct FormattedPaymentTx {
 }
 
 fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
-    match input.txid {
-        Some(txid) => FormattedPaymentTx {
+    if let Some(txid) = input.txid {
+        FormattedPaymentTx {
             to: input.to,
             from: input.from,
             amount: input.amount,
             txid: format!("{txid:#066x}"),
-        },
-        None => FormattedPaymentTx {
+        }
+    } else if let Some(tx_hash) = input.tx_hash {
+        FormattedPaymentTx {
+            to: input.to,
+            from: input.from,
+            amount: input.amount,
+            txid: tx_hash,
+        }
+    } else {
+        FormattedPaymentTx {
             to: input.to,
             from: input.from,
             amount: input.amount,
             txid: String::new(),
-        },
+        }
     }
 }
 
@@ -119,6 +129,52 @@ pub struct UsageTracker {
     pub exit_bandwidth: VecDeque<UsageHour>,
     /// A history of payments
     pub payments: VecDeque<PaymentHour>,
+}
+
+impl UsageTracker {
+    /// This function is run on startup and removes duplicate entries from usage history
+    pub fn remove_duplicate_and_invalid_payment_entires(mut self) -> UsageTracker {
+        let mut duplicate_list = HashSet::new();
+        let mut payments = self.payments.clone();
+        for hour in payments.iter_mut() {
+            for (i, p) in hour.payments.clone().iter_mut().enumerate() {
+                let txid: Uint256 = match p.txid.parse() {
+                    Ok(tx) => tx,
+                    Err(_) => {
+                        println!("Removed invalid payment! {}", p.txid);
+                        // found an error, removing
+                        hour.payments.remove(i);
+                        continue;
+                    }
+                };
+                if duplicate_list.contains(&txid) {
+                    // found a duplicate, removing
+                    hour.payments.remove(i);
+                } else {
+                    duplicate_list.insert(txid);
+                }
+            }
+        }
+        self.payments = payments;
+        self
+    }
+
+    pub fn get_txids(&self) -> HashSet<Uint256> {
+        let mut set = HashSet::new();
+        for hour in &self.payments {
+            for p in &hour.payments {
+                let txid: Uint256 = match p.txid.parse() {
+                    Ok(t) => t,
+                    Err(_) => {
+                        error!("Invalid tx id in usage tracker {}", p.txid);
+                        continue;
+                    }
+                };
+                set.insert(txid);
+            }
+        }
+        set
+    }
 }
 
 /// This function checks to see how many bytes were used
@@ -258,7 +314,7 @@ impl UsageTracker {
             Err(_e) => return blank_usage_tracker,
         };
 
-        match (
+        let res = match (
             file_exists,
             try_bincode(&unzipped_bytes),
             try_json(&unzipped_bytes),
@@ -314,7 +370,8 @@ impl UsageTracker {
                 );
                 blank_usage_tracker
             }
-        }
+        };
+        res.remove_duplicate_and_invalid_payment_entires()
     }
 }
 
@@ -429,7 +486,30 @@ fn trim_payments(size: usize, history: &mut VecDeque<PaymentHour>) {
 }
 
 pub fn update_payments(payment: PaymentTx) {
-    handle_payments(&mut (USAGE_TRACKER.write().unwrap()), &payment);
+    let history = &mut (USAGE_TRACKER.write().unwrap());
+
+    // make sure the tx has a txid, transactions without one have not been sent yet and this store
+    // should only contain sent transactions
+    let txid = match payment.txid {
+        Some(txid) => txid,
+        None => {
+            error!("Tried to store paymetn without txid?");
+            return;
+        }
+    };
+
+    // This handles the following edge case:
+    // Router A is paying router B. Router B reboots and loses all data in
+    // payment vaildator datastore. When A sends a make_payment_v2, payments that have
+    // already been accounted for get counted twice.
+    // This checks the usage history to see if this tx exists
+    // thereby preventing the above case.
+    if history.get_txids().contains(&txid) {
+        error!("Tried to insert duplicate txid into usage tracker!");
+        return;
+    }
+
+    handle_payments(history, &payment);
 }
 
 /// Internal handler function that deals with adding a payment to the list
@@ -541,7 +621,7 @@ mod tests {
 
     #[test]
     fn convert_legacy_usage_tracker() {
-        // env_logger::init();
+        //env_logger::init();
         // make a dummy usage tracker instance
         // save it as gzipped json ( pull code from the git history that you deleted and put it in this test)
         // makes sure the file exists
@@ -628,11 +708,12 @@ mod tests {
                 } else {
                     (neighbor_ids[neighbor_idx as usize], our_id)
                 };
+                let txid: u128 = rand::random();
                 payments.push(FormattedPaymentTx {
                     to,
                     from,
                     amount: amount.into(),
-                    txid: String::new(),
+                    txid: txid.to_string(),
                 })
             }
             output.push_front(PaymentHour {
