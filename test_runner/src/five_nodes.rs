@@ -1,44 +1,39 @@
-use crate::test_utils::{test_reach_all, test_routes};
-use crate::{setup_utils::*, SETUP_WAIT};
+use crate::setup_utils::*;
+use crate::utils::{
+    get_default_client_settings, test_reach_all, test_routes, validate_connections,
+};
 use log::info;
 use std::collections::HashMap;
-use std::thread;
 
-/// Runs a five node fixed network map test scenario
+/// Runs a five node fixed network map test scenario, this does basic network setup and tests reachability to
+/// all destinations
 pub fn run_five_node_test_scenario() {
     info!("Starting five node test scenario");
     let node_config = five_node_config();
     let namespaces = node_config.0;
     let expected_routes = node_config.1;
 
+    let rita_settings = get_default_client_settings();
+
     validate_connections(namespaces.clone());
 
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let res = thread_spawner(namespaces.clone());
+    let _ =
+        thread_spawner(namespaces.clone(), rita_settings).expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
-    // allow setup to finish before running tests
-    thread::sleep(SETUP_WAIT);
-
     // this sleep is for debugging so that the container can be accessed to poke around in
-    //thread::sleep(five_mins);
+    //thread::sleep(SETUP_WAIT * 500);
 
-    let res1 = test_reach_all(namespaces.clone()).expect("Could not reach all namespaces!");
-    info!("Reachability Test: {res1}");
+    test_reach_all(namespaces.clone());
 
-    let res2 = test_routes(namespaces, expected_routes);
-    // this just returns a number at the moment, which must be 12 until more test instances are added
-    info!("Routes Test: {res2}");
-
-    if res1 != 49 || res2 != 42 {
-        panic!("Failed to find the correct number of routes!");
-    }
+    test_routes(namespaces, expected_routes);
 }
 
 /// This defines the network map for a five node scenario
-fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
+pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     /*
     These are connected as such:
     A---------B
@@ -217,25 +212,4 @@ fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     expected_routes.insert(testg, testg_routes);
 
     (nsinfo, expected_routes)
-}
-
-/// Validate the list of linked namespaces
-fn validate_connections(namespaces: NamespaceInfo) {
-    for link in namespaces.linked {
-        if !namespaces.names.contains(&link.0) || !namespaces.names.contains(&link.1) {
-            panic!(
-                "One or both of these names is not in the given namespace list: {}, {}",
-                link.0.name, link.1.name
-            )
-        }
-        if link.0.name.len() + link.1.name.len() > 8 {
-            panic!(
-                "Namespace names are too long(max 4 chars): {}, {}",
-                link.0.name, link.1.name,
-            )
-        }
-        if link.0.name.eq(&link.1.name) {
-            panic!("Cannot link namespace to itself!")
-        }
-    }
 }

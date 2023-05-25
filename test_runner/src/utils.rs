@@ -1,13 +1,14 @@
 use crate::setup_utils::{Namespace, NamespaceInfo, RouteHop};
-use althea_kernel_interface::{KernelInterfaceError, KI};
+use althea_kernel_interface::KI;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use ipnetwork::IpNetwork;
-use log::{info, warn};
+use log::{info, trace, warn};
 use nix::{
     fcntl::{open, OFlag},
     sched::{setns, CloneFlags},
     sys::stat::Mode,
 };
+use settings::client::RitaClientSettings;
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -20,22 +21,35 @@ use std::{
 /// Wait this long for network convergence
 const REACHABILITY_TEST_TIMEOUT: Duration = Duration::from_secs(600);
 /// How long the reacability test should wait in between tests
-const REACHABILITY_TEST_CHECK_SPEED: Duration = Duration::from_secs(15);
+const REACHABILITY_TEST_CHECK_SPEED: Duration = Duration::from_secs(5);
+
+/// Test pingability waiting and failing if it is not successful
+pub fn test_reach_all(nsinfo: NamespaceInfo) {
+    let start = Instant::now();
+    while !test_reach_all_async(nsinfo.clone()) {
+        if Instant::now() - start > REACHABILITY_TEST_TIMEOUT {
+            panic!("Failed to ping all destinations! Did not converge")
+        }
+        thread::sleep(REACHABILITY_TEST_CHECK_SPEED)
+    }
+    info!("All nodes are rechable via ping!");
+}
 
 /// test pingability between namespaces on babel routes
-pub fn test_reach_all(nsinfo: NamespaceInfo) -> Result<u16, KernelInterfaceError> {
-    let mut count: u16 = 0;
+pub fn test_reach_all_async(nsinfo: NamespaceInfo) -> bool {
     for i in nsinfo.clone().names {
         for j in nsinfo.clone().names {
             if test_reach(i.clone(), j) {
-                count += 1;
+                // ping failed
+                return false;
             }
         }
     }
-    Ok(count)
+    true
 }
 
 fn test_reach(from: Namespace, to: Namespace) -> bool {
+    // todo replace with oping
     // ip netns exec n-1 ping6 fd00::2
     let ip = format!("fd00::{}", to.id);
     let errormsg = format!("Could not run ping6 from {} to {}", from.name, to.name);
@@ -46,15 +60,29 @@ fn test_reach(from: Namespace, to: Namespace) -> bool {
         )
         .expect(&errormsg);
     let output = from_utf8(&output.stdout).expect("could not get output for ping6!");
-    info!("ping output: {output:?} end");
+    trace!("ping output: {output:?} end");
     output.contains("1 packets transmitted, 1 received, 0% packet loss")
 }
 
-/// check the presence of all optimal routes
-pub fn test_routes(nsinfo: NamespaceInfo, expected: HashMap<Namespace, RouteHop>) -> u32 {
+/// Tests routes, waiting until they are all found and panicing if that does not happen
+pub fn test_routes(nsinfo: NamespaceInfo, expected: HashMap<Namespace, RouteHop>) {
+    let start = Instant::now();
+    while !test_routes_async(nsinfo.clone(), expected.clone()) {
+        if Instant::now() - start > REACHABILITY_TEST_TIMEOUT {
+            panic!("Failed to locate all Babel routes, network did not converge!")
+        }
+        thread::sleep(REACHABILITY_TEST_CHECK_SPEED)
+    }
+    info!("All routes found, network converged!");
+}
+
+/// check the presence of all optimal routes, returns false if there is a route missing
+pub fn test_routes_async(nsinfo: NamespaceInfo, expected: HashMap<Namespace, RouteHop>) -> bool {
     // add ALL routes for each namespace into a map to search through for the next portion
     let mut routesmap = HashMap::new();
     for ns in nsinfo.clone().names {
+        // create a thread in the babel namespace, ask it about routes, then join to bring that
+        // data back to this thread in the default namespace
         let rita_handler = thread::spawn(move || {
             let nspath = format!("/var/run/netns/{}", ns.name);
             let nsfd = open(nspath.as_str(), OFlag::O_RDONLY, Mode::empty())
@@ -75,10 +103,8 @@ pub fn test_routes(nsinfo: NamespaceInfo, expected: HashMap<Namespace, RouteHop>
         });
         routesmap = rita_handler.join().unwrap();
     }
-    let mut count = 0;
-    let mut not_found: Vec<(Namespace, Namespace)> = Vec::new();
     for ns1 in nsinfo.clone().names {
-        'neighs: for ns2 in &nsinfo.names {
+        for ns2 in &nsinfo.names {
             if &ns1 == ns2 {
                 continue;
             }
@@ -86,54 +112,16 @@ pub fn test_routes(nsinfo: NamespaceInfo, expected: HashMap<Namespace, RouteHop>
             let routes = routesmap.get(&ns1.name).unwrap();
             //within routes there must be a route that matches the expected price between the dest (fd00::id) and the expected next hop (fe80::id)
 
-            if try_route(&expected, routes, ns1.clone(), ns2.clone()) {
-                info!("We found route for {:?}, {:?}", ns1.name, ns2.name);
-                count += 1;
-                continue 'neighs;
-            } else {
+            if !try_route(&expected, routes, ns1.clone(), ns2.clone()) {
                 warn!(
                     "No route found for {:?}, {:?}, retrying...",
                     ns1.name, ns2.name
                 );
-                not_found.insert(0, (ns1.clone(), ns2.clone()));
+                return false;
             }
         }
     }
-
-    let start = Instant::now();
-    while !not_found.is_empty() {
-        info!("Retrying failed routes");
-        let namespaces = not_found.pop().unwrap();
-        let ns1 = namespaces.clone().0;
-        let ns2 = namespaces.clone().1;
-        let routes = routesmap.get(&ns1.name).unwrap();
-
-        while start.elapsed() < REACHABILITY_TEST_TIMEOUT {
-            thread::sleep(REACHABILITY_TEST_CHECK_SPEED);
-            match try_route(&expected, routes, ns1.clone(), ns2.clone()) {
-                true => {
-                    info!("We found route for {:?}, {:?}", ns1.name, ns2.name);
-                    count += 1;
-                    break;
-                }
-                false => {
-                    info!(
-                        "No route found for {:?}, {:?}, retrying...",
-                        ns1.name, ns2.name
-                    );
-                }
-            }
-        }
-        if start.elapsed() > REACHABILITY_TEST_TIMEOUT {
-            info!(
-                "Could not find missing routes after 10 minutes: {:?}, {:?}",
-                namespaces, not_found
-            );
-            return count;
-        }
-    }
-
-    count
+    true
 }
 
 /// Look for an installed route given our expected list between ns1 and ns2
@@ -164,4 +152,46 @@ fn try_route(
     }
 
     false
+}
+
+/// Gets the default client settings, configured to connected to the EVM of the Althea chain as a standin EVM environment
+pub fn get_default_client_settings() -> RitaClientSettings {
+    RitaClientSettings::new("/althea_rs/scripts/legacy_integration_test/rita-test.toml").unwrap()
+}
+
+/// Same as get_default_client_settings but directed at the Althea node by default
+pub fn get_default_client_settings_althea() -> RitaClientSettings {
+    RitaClientSettings::new("/althea_rs/scripts/legacy_integration_test/rita-test.toml").unwrap()
+}
+
+/// Validate the list of linked namespaces
+pub fn validate_connections(namespaces: NamespaceInfo) {
+    for link in namespaces.linked {
+        if !namespaces.names.contains(&link.0) || !namespaces.names.contains(&link.1) {
+            panic!(
+                "One or both of these names is not in the given namespace list: {}, {}",
+                link.0.name, link.1.name
+            )
+        }
+        if link.0.name.len() + link.1.name.len() > 8 {
+            panic!(
+                "Namespace names are too long(max 4 chars): {}, {}",
+                link.0.name, link.1.name,
+            )
+        }
+        if link.0.name.eq(&link.1.name) {
+            panic!("Cannot link namespace to itself!")
+        }
+    }
+}
+
+/// This allows the tester to exit cleanly then it gets a ctrl-c message
+/// allowing you to reuse a test env and save a lot of setup
+pub fn set_sigterm() {
+    //Setup a SIGTERM hadler
+    ctrlc::set_handler(move || {
+        info!("received Ctrl+C!");
+        std::process::exit(0);
+    })
+    .expect("Error setting Ctrl-C handler");
 }

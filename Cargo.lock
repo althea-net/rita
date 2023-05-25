@@ -3169,8 +3169,10 @@ version = "0.1.0"
 dependencies = [
  "actix",
  "althea_kernel_interface",
+ "althea_types",
  "babel_monitor",
  "clu",
+ "ctrlc",
  "docopt",
  "env_logger",
  "ipnetwork",

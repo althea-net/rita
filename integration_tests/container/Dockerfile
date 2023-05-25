@@ -20,5 +20,5 @@ RUN chmod +x /usr/bin/althea
 ADD rita.tar.gz /
 # Build the code as a caching step before running the test scenario. this dramatically reduces the total
 # runtime when running many test scenarios since the container image can be shared with pre-built rust artifacts
-RUN cargo build --release --manifest-path /althea_rs/test_runner/Cargo.toml
+RUN cargo build --profile testrunner --manifest-path /althea_rs/test_runner/Cargo.toml
 

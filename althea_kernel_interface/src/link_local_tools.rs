@@ -70,6 +70,7 @@ impl dyn KernelInterface {
                 Err(_) => panic!("Could not get netns name!"),
             };
             let ns = ns.trim();
+
             let links = read_dir("/proc/").unwrap();
 
             // in the legacy test namespaces are netlab-1 but interfaces are veth-1-2
@@ -81,8 +82,8 @@ impl dyn KernelInterface {
                 if dir.path().is_dir() {
                     let dir_name = dir.file_name().to_str().unwrap().to_string();
                     // we're looking for a pid
-                    if let Ok(number) = dir_name.parse() {
-                        let number: u16 = number;
+                    if let Ok(number) = dir_name.trim().parse() {
+                        let number: u32 = number;
                         let path = format!("/proc/{number}/net/if_inet6");
                         if let Ok(lines) = get_lines(&path) {
                             for line in lines {

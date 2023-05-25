@@ -2,9 +2,16 @@ use five_nodes::run_five_node_test_scenario;
 use log::info;
 use std::{env, time::Duration};
 
+use crate::{
+    payments_althea::run_althea_payments_test_scenario,
+    payments_eth::run_eth_payments_test_scenario, utils::set_sigterm,
+};
+
 pub mod five_nodes;
+pub mod payments_althea;
+pub mod payments_eth;
 pub mod setup_utils;
-pub mod test_utils;
+pub mod utils;
 extern crate log;
 
 /// The amount of time we wait for a network to stabalize before testing
@@ -19,6 +26,7 @@ fn main() {
         .filter(None, log::LevelFilter::Error)
         .filter(Some("tester"), log::LevelFilter::Info)
         .init();
+    set_sigterm();
 
     info!("Starting the Rita test runner");
     println!("info above?");
@@ -28,6 +36,10 @@ fn main() {
     if let Ok(test_type) = test_type {
         if test_type == "FIVE_NODES" {
             run_five_node_test_scenario();
+        } else if test_type == "PAYMENTS_ETH" {
+            run_eth_payments_test_scenario()
+        } else if test_type == "PAYMENTS_ALTHEA" {
+            run_althea_payments_test_scenario()
         } else {
             panic!("Error unknown test type {}!", test_type);
         }

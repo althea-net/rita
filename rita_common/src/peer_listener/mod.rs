@@ -114,9 +114,10 @@ impl ListenInterface {
         let network = settings::get_rita_common().network;
         let port = network.rita_hello_port;
         let disc_ip = network.discovery_ip;
-        debug!("Binding to {:?} for ListenInterface", ifname);
+        trace!("Binding to {:?} for ListenInterface", ifname);
         // Lookup interface link local ip
         let link_ip = KI.get_link_local_device_ip(ifname)?;
+        trace!("Link ip is {:?}", link_ip);
 
         // Lookup interface index
         let iface_index: u32 = KI.get_ifindex(ifname).unwrap_or(0) as u32;

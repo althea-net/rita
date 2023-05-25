@@ -32,24 +32,35 @@ pub fn is_link_local(ip: IpAddr) -> bool {
 }
 
 /// socket to string with interface id support
-fn socket_to_string(endpoint: &SocketAddr, interface_name: Option<String>) -> String {
+fn socket_to_string(
+    endpoint: &SocketAddr,
+    interface_name: Option<String>,
+) -> Result<String, KernelInterfaceError> {
     match *endpoint {
         SocketAddr::V6(endpoint) => {
             if is_link_local(IpAddr::V6(*endpoint.ip())) {
-                format!(
-                    "[{}%{}]:{}",
-                    endpoint.ip(),
-                    interface_name.expect("Link local without interface"),
-                    endpoint.port()
-                )
+                if let Some(interface_name) = interface_name {
+                    Ok(format!(
+                        "[{}%{}]:{}",
+                        endpoint.ip(),
+                        interface_name,
+                        endpoint.port()
+                    ))
+                } else {
+                    Err(KernelInterfaceError::NoInterfaceError(format!(
+                        "Endpoint {} is ipv6 link local and should have an interaface name",
+                        endpoint
+                    )))
+                }
             } else {
-                format!("[{}]:{}", endpoint.ip(), endpoint.port())
+                Ok(format!("[{}]:{}", endpoint.ip(), endpoint.port()))
             }
         }
-        SocketAddr::V4(endpoint) => format!("{}:{}", endpoint.ip(), endpoint.port()),
+        SocketAddr::V4(endpoint) => Ok(format!("{}:{}", endpoint.ip(), endpoint.port())),
     }
 }
 
+#[derive(Debug)]
 pub struct TunnelOpenArgs<'a> {
     /// the wg tunnel name
     pub interface: String,
@@ -90,8 +101,8 @@ impl dyn KernelInterface {
 
         let allowed_addresses = "::/0".to_string();
 
-        let socket_connect_str = socket_to_string(&args.endpoint, phy_name);
-        trace!("socket conenct string: {}", socket_connect_str);
+        let socket_connect_str = socket_to_string(&args.endpoint, phy_name)?;
+        trace!("socket connect string: {}", socket_connect_str);
         let output = self.run_command(
             "wg",
             &[

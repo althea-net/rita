@@ -28,7 +28,10 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::Write;
 use std::net::{IpAddr, Ipv6Addr};
+use std::path::Path;
 use std::sync::{Arc, RwLock};
+use std::thread;
+use std::time::{Duration, Instant};
 
 pub mod client;
 pub mod exit;
@@ -267,10 +270,12 @@ pub fn get_rita_common() -> RitaSettings {
                 };
                 return commonsettings;
             }
-            (_, _) => panic!(
-                "Impossible settings case in integration tests? {}",
-                settings_file
-            ),
+            (_, _) => {
+                // there's an inherent race condition here, so we wait and recurse a few times
+                warn!("Error reading settings, reading again");
+                thread::sleep(Duration::from_millis(100));
+                return get_rita_common();
+            }
         }
     }
     match &*SETTINGS.read().unwrap() {
@@ -342,9 +347,21 @@ pub fn set_rita_client(mut client_setting: RitaClientSettings) {
 pub fn get_rita_client() -> RitaClientSettings {
     if cfg!(feature = "load_from_disk") {
         let settings_file = get_settings_file_from_ns();
+
         // load settings data from the settings file
-        let ritasettings = RitaClientSettings::new(&settings_file).unwrap();
-        return ritasettings;
+        let mut ritasettings = RitaClientSettings::new(&settings_file);
+        let start = Instant::now();
+        const TIMEOUT: Duration = Duration::from_secs(2);
+        // this is inhernetly a race condition since one of rita's other threads could be writing to this file
+        // so we try a few times
+        while let (true, true) = (Path::new(&settings_file).exists(), ritasettings.is_err()) {
+            if Instant::now() - start > TIMEOUT {
+                panic!("Settings file {} is invalid!", settings_file);
+            } else {
+                ritasettings = RitaClientSettings::new(&settings_file);
+            }
+        }
+        return ritasettings.unwrap();
     }
     match &*SETTINGS.read().unwrap() {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.get_client().unwrap(),
@@ -401,6 +418,8 @@ fn get_settings_file_from_ns() -> String {
         Ok(s) => s,
         Err(_) => panic!("Could not get netns name!"),
     };
+    // otherwise we get the newline
+    let ns = ns.trim();
     let settings_file = format!("/var/tmp/settings_{ns}");
     settings_file
 }
