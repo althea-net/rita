@@ -37,8 +37,8 @@ const MAX_USAGE_ENTRIES: usize = 8_760;
 /// The number of tx's we store in our history to show
 /// prices, this data is larger than usage by a large margin
 /// so we can store less, it's also less predictable for what values
-/// map to how much time in history, 2000 is hopefully enough
-const MAX_TX_ENTRIES: usize = 2_000;
+/// map to how much time in history, 5000 is hopefully enough
+const MAX_TX_ENTRIES: usize = 5_000;
 // the number of transactions which must have been sent for us to initiate a
 // unprompted save, saving may still occur on graceful shutdown, graceful shutdown
 // essentially only occurs when prompted for an upgrade, or a reboot command is sent
