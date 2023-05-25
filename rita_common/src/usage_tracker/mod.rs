@@ -133,27 +133,30 @@ pub struct UsageTracker {
 
 impl UsageTracker {
     /// This function is run on startup and removes duplicate entries from usage history
+    /// This function is run on startup and removes duplicate entries from usage history
     pub fn remove_duplicate_and_invalid_payment_entires(mut self) -> UsageTracker {
         let mut duplicate_list = HashSet::new();
         let mut payments = self.payments.clone();
         for hour in payments.iter_mut() {
-            for (i, p) in hour.payments.clone().iter_mut().enumerate() {
+            let mut payments = Vec::new();
+            for p in hour.payments.iter() {
                 let txid: Uint256 = match p.txid.parse() {
                     Ok(tx) => tx,
                     Err(_) => {
                         println!("Removed invalid payment! {}", p.txid);
                         // found an error, removing
-                        hour.payments.remove(i);
                         continue;
                     }
                 };
                 if duplicate_list.contains(&txid) {
                     // found a duplicate, removing
-                    hour.payments.remove(i);
                 } else {
                     duplicate_list.insert(txid);
+                    payments.push(p.clone())
                 }
             }
+            // insert filtered payments list
+            hour.payments = payments;
         }
         self.payments = payments;
         self
