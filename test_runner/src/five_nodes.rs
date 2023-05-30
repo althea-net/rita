@@ -1,7 +1,5 @@
 use crate::setup_utils::*;
-use crate::utils::{
-    get_default_client_settings, test_reach_all, test_routes, validate_connections,
-};
+use crate::utils::{get_default_client_settings, test_reach_all, test_routes};
 use log::info;
 use std::collections::HashMap;
 
@@ -15,7 +13,7 @@ pub fn run_five_node_test_scenario() {
 
     let rita_settings = get_default_client_settings();
 
-    validate_connections(namespaces.clone());
+    namespaces.validate();
 
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
@@ -50,41 +48,13 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     |        \|
     E         F
     */
-    let testa = Namespace {
-        name: "n-1".to_string(),
-        id: 1,
-        cost: 25,
-    };
-    let testb = Namespace {
-        name: "n-2".to_string(),
-        id: 2,
-        cost: 500,
-    };
-    let testc = Namespace {
-        name: "n-3".to_string(),
-        id: 3,
-        cost: 15,
-    };
-    let testd = Namespace {
-        name: "n-4".to_string(),
-        id: 4,
-        cost: 10,
-    };
-    let teste = Namespace {
-        name: "n-5".to_string(),
-        id: 5,
-        cost: 40,
-    };
-    let testf = Namespace {
-        name: "n-6".to_string(),
-        id: 6,
-        cost: 20,
-    };
-    let testg = Namespace {
-        name: "n-7".to_string(),
-        id: 7,
-        cost: 15,
-    };
+    let testa = Namespace { id: 1, cost: 25 };
+    let testb = Namespace { id: 2, cost: 500 };
+    let testc = Namespace { id: 3, cost: 15 };
+    let testd = Namespace { id: 4, cost: 10 };
+    let teste = Namespace { id: 5, cost: 40 };
+    let testf = Namespace { id: 6, cost: 20 };
+    let testg = Namespace { id: 7, cost: 15 };
 
     let nsinfo = NamespaceInfo {
         names: vec![
@@ -98,13 +68,13 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
         ],
         linked: vec![
             // arbitrary connections
-            (testa.clone(), testb.clone()),
-            (testa.clone(), testc.clone()),
-            (testb.clone(), testd.clone()),
-            (testc.clone(), teste.clone()),
-            (testc.clone(), testf.clone()),
-            (testd.clone(), testf.clone()),
-            (testd.clone(), testg.clone()),
+            (1, 2),
+            (1, 3),
+            (2, 4),
+            (3, 5),
+            (3, 6),
+            (4, 6),
+            (4, 7),
         ],
     };
     // This is a Hashmap that contains the key namespace, and how it connects to each node in the network as its values.
@@ -113,12 +83,12 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     let mut expected_routes = HashMap::new();
     let testa_routes = RouteHop {
         destination: [
-            (testb.clone(), (0, testb.clone())),
-            (testc.clone(), (0, testc.clone())),
-            (testd.clone(), (35, testc.clone())),
-            (teste.clone(), (15, testc.clone())),
-            (testf.clone(), (15, testc.clone())),
-            (testg.clone(), (45, testc.clone())),
+            (2, PriceId { price: 0, id: 2 }),
+            (3, PriceId { price: 0, id: 3 }),
+            (4, PriceId { price: 35, id: 3 }),
+            (5, PriceId { price: 15, id: 3 }),
+            (6, PriceId { price: 15, id: 3 }),
+            (7, PriceId { price: 45, id: 3 }),
         ]
         .iter()
         .cloned()
@@ -126,12 +96,12 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let testb_routes = RouteHop {
         destination: [
-            (testa.clone(), (0, testa.clone())),
-            (testc.clone(), (25, testa.clone())),
-            (testd.clone(), (0, testd.clone())),
-            (teste.clone(), (40, testa.clone())),
-            (testf.clone(), (10, testd.clone())),
-            (testg.clone(), (10, testd.clone())),
+            (1, PriceId { price: 0, id: 1 }),
+            (3, PriceId { price: 25, id: 1 }),
+            (4, PriceId { price: 0, id: 4 }),
+            (5, PriceId { price: 40, id: 1 }),
+            (6, PriceId { price: 10, id: 4 }),
+            (7, PriceId { price: 10, id: 4 }),
         ]
         .iter()
         .cloned()
@@ -139,12 +109,12 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let testc_routes = RouteHop {
         destination: [
-            (testa.clone(), (0, testa.clone())),
-            (testb.clone(), (25, testa.clone())),
-            (testd.clone(), (20, testf.clone())),
-            (teste.clone(), (0, teste.clone())),
-            (testf.clone(), (0, testf.clone())),
-            (testg.clone(), (30, testf.clone())),
+            (1, PriceId { price: 0, id: 1 }),
+            (2, PriceId { price: 25, id: 1 }),
+            (4, PriceId { price: 20, id: 6 }),
+            (5, PriceId { price: 0, id: 5 }),
+            (6, PriceId { price: 0, id: 6 }),
+            (7, PriceId { price: 30, id: 6 }),
         ]
         .iter()
         .cloned()
@@ -152,12 +122,12 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let testd_routes = RouteHop {
         destination: [
-            (testa.clone(), (35, testf.clone())),
-            (testb.clone(), (0, testb.clone())),
-            (testc.clone(), (20, testf.clone())),
-            (teste.clone(), (35, testf.clone())),
-            (testf.clone(), (0, testf.clone())),
-            (testg.clone(), (0, testg.clone())),
+            (1, PriceId { price: 35, id: 6 }),
+            (2, PriceId { price: 0, id: 2 }),
+            (3, PriceId { price: 20, id: 6 }),
+            (5, PriceId { price: 35, id: 6 }),
+            (6, PriceId { price: 0, id: 6 }),
+            (7, PriceId { price: 0, id: 7 }),
         ]
         .iter()
         .cloned()
@@ -165,12 +135,12 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let teste_routes = RouteHop {
         destination: [
-            (testa.clone(), (15, testc.clone())),
-            (testb.clone(), (40, testc.clone())),
-            (testc.clone(), (0, testc.clone())),
-            (testd.clone(), (35, testc.clone())),
-            (testf.clone(), (15, testc.clone())),
-            (testg.clone(), (45, testc.clone())),
+            (1, PriceId { price: 15, id: 3 }),
+            (2, PriceId { price: 40, id: 3 }),
+            (3, PriceId { price: 0, id: 3 }),
+            (4, PriceId { price: 35, id: 3 }),
+            (6, PriceId { price: 15, id: 3 }),
+            (7, PriceId { price: 45, id: 3 }),
         ]
         .iter()
         .cloned()
@@ -178,12 +148,12 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let testf_routes = RouteHop {
         destination: [
-            (testa.clone(), (15, testc.clone())),
-            (testb.clone(), (10, testd.clone())),
-            (testc.clone(), (0, testc.clone())),
-            (testd.clone(), (0, testd.clone())),
-            (teste.clone(), (15, testc.clone())),
-            (testg.clone(), (10, testd.clone())),
+            (1, PriceId { price: 15, id: 3 }),
+            (2, PriceId { price: 10, id: 4 }),
+            (3, PriceId { price: 0, id: 3 }),
+            (4, PriceId { price: 0, id: 4 }),
+            (5, PriceId { price: 15, id: 3 }),
+            (7, PriceId { price: 10, id: 4 }),
         ]
         .iter()
         .cloned()
@@ -191,12 +161,12 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let testg_routes = RouteHop {
         destination: [
-            (testa.clone(), (45, testd.clone())),
-            (testb.clone(), (10, testd.clone())),
-            (testc.clone(), (30, testd.clone())),
-            (testd.clone(), (0, testd.clone())),
-            (teste.clone(), (45, testd.clone())),
-            (testf.clone(), (10, testd.clone())),
+            (1, PriceId { price: 45, id: 4 }),
+            (2, PriceId { price: 10, id: 4 }),
+            (3, PriceId { price: 30, id: 4 }),
+            (4, PriceId { price: 0, id: 4 }),
+            (5, PriceId { price: 45, id: 4 }),
+            (6, PriceId { price: 10, id: 4 }),
         ]
         .iter()
         .cloned()

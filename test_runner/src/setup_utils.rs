@@ -29,13 +29,19 @@ use std::{
 /// This struct holds the format for a namespace info
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Namespace {
-    /// Name assigned to the namespace
-    pub name: String,
-    /// ID number of the namespace
-    pub id: u32,
+    /// ID number of the namespace, limited to u16 for ip reasons, also having
+    /// more than u16 max instances would be a little crazy
+    pub id: u16,
     /// Local Fee of the rita instance in the namespace, used also to assign
     /// edge weight on the network graph
     pub cost: u32,
+}
+
+impl Namespace {
+    /// Gets the string format name for this namespace
+    pub fn get_name(&self) -> String {
+        format!("n-{}", self.id)
+    }
 }
 
 /// This struct holds the setup instructions for namespaces
@@ -48,29 +54,50 @@ pub struct NamespaceInfo {
     /// The string is for the namespace name(NOTE: names must be <=4 characters as interfaces
     /// cannot be more than 15 char, and we input as veth-{}-{})
     /// The u32 is for the subnet on the 3rd octet
-    pub linked: Vec<(Namespace, Namespace)>,
+    pub linked: Vec<(u16, u16)>,
 }
 
 impl NamespaceInfo {
     /// Validate the list of linked namespaces
-    pub fn validate_connections(self) {
-        for link in self.linked {
-            if !self.names.contains(&link.0) || !self.names.contains(&link.1) {
-                panic!(
-                    "One or both of these names is not in the given namespace list: {}, {}",
-                    link.0.name, link.1.name
-                )
-            }
-            if link.0.name.len() + link.1.name.len() > 8 {
-                panic!(
-                    "Namespace names are too long(max 4 chars): {}, {}",
-                    link.0.name, link.1.name,
-                )
-            }
-            if link.0.name.eq(&link.1.name) {
-                panic!("Cannot link namespace to itself!")
+    pub fn validate(&self) {
+        // list of seen IDs for duplicate detection
+        let mut seen_id = HashSet::new();
+        for space in self.names.iter() {
+            // HashSets return false if they already contain a specific entry
+            if !seen_id.insert(space.id) {
+                panic!("Duplicate id in namespace definition {}", space.id)
             }
         }
+
+        for (a, b) in self.linked.iter() {
+            if a == b {
+                panic!("Cannot link namespace to itself!")
+            }
+            match (self.get_namespace(*a), self.get_namespace(*b)) {
+                (Some(a), Some(b)) => {
+                    if a.get_name().len() + b.get_name().len() > 8 {
+                        panic!(
+                            "Namespace names are too long(max 4 chars): {}, {}",
+                            a.get_name(),
+                            b.get_name(),
+                        )
+                    }
+                }
+                (_, _) => panic!(
+                    "One or both of these names is not in the given namespace list: {}, {}",
+                    a, b
+                ),
+            }
+        }
+    }
+
+    pub fn get_namespace(&self, id: u16) -> Option<Namespace> {
+        for space in self.names.iter() {
+            if space.id == id {
+                return Some(space.clone());
+            }
+        }
+        None
     }
 }
 
@@ -79,7 +106,13 @@ impl NamespaceInfo {
 /// be used within an outer hashmap which holds the "from" namespace.
 #[derive(Clone, Eq, PartialEq)]
 pub struct RouteHop {
-    pub destination: HashMap<Namespace, (u32, Namespace)>,
+    pub destination: HashMap<u16, PriceId>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct PriceId {
+    pub price: u32,
+    pub id: u16,
 }
 
 pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
@@ -88,20 +121,35 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
     // clear namespaces
     KI.run_command("ip", &["-all", "netns", "delete", "||", "true"])?;
     // add namespaces
-    for ns in spaces.names {
-        KI.run_command("ip", &["netns", "add", &ns.name])?;
+    for ns in spaces.names.iter() {
+        KI.run_command("ip", &["netns", "add", &ns.get_name()])?;
         // ip netns exec nB ip link set dev lo up
         KI.run_command(
             "ip",
             &[
-                "netns", "exec", &ns.name, "ip", "link", "set", "dev", "lo", "up",
+                "netns",
+                "exec",
+                &ns.get_name(),
+                "ip",
+                "link",
+                "set",
+                "dev",
+                "lo",
+                "up",
             ],
         )?;
         // nft create table inet fw4
         KI.run_command(
             "ip",
             &[
-                "netns", "exec", &ns.name, "nft", "create", "table", "inet", "fw4",
+                "netns",
+                "exec",
+                &ns.get_name(),
+                "nft",
+                "create",
+                "table",
+                "inet",
+                "fw4",
             ],
         )?;
         // nft add chain inet fw4 input { type filter hook input priority filter; policy accept; }
@@ -110,34 +158,85 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         KI.run_command(
             "ip",
             &[
-                "netns", "exec", &ns.name, "nft", "add", "chain", "inet", "fw4", "input", "{",
-                "type", "filter", "hook", "input", "priority", "filter;", "policy", "accept;", "}",
-            ],
-        )?;
-        KI.run_command(
-            "ip",
-            &[
-                "netns", "exec", &ns.name, "nft", "add", "chain", "inet", "fw4", "output", "{",
-                "type", "filter", "hook", "output", "priority", "filter;", "policy", "accept;",
+                "netns",
+                "exec",
+                &ns.get_name(),
+                "nft",
+                "add",
+                "chain",
+                "inet",
+                "fw4",
+                "input",
+                "{",
+                "type",
+                "filter",
+                "hook",
+                "input",
+                "priority",
+                "filter;",
+                "policy",
+                "accept;",
                 "}",
             ],
         )?;
         KI.run_command(
             "ip",
             &[
-                "netns", "exec", &ns.name, "nft", "add", "chain", "inet", "fw4", "forward", "{",
-                "type", "filter", "hook", "forward", "priority", "filter;", "policy", "accept;",
+                "netns",
+                "exec",
+                &ns.get_name(),
+                "nft",
+                "add",
+                "chain",
+                "inet",
+                "fw4",
+                "output",
+                "{",
+                "type",
+                "filter",
+                "hook",
+                "output",
+                "priority",
+                "filter;",
+                "policy",
+                "accept;",
+                "}",
+            ],
+        )?;
+        KI.run_command(
+            "ip",
+            &[
+                "netns",
+                "exec",
+                &ns.get_name(),
+                "nft",
+                "add",
+                "chain",
+                "inet",
+                "fw4",
+                "forward",
+                "{",
+                "type",
+                "filter",
+                "hook",
+                "forward",
+                "priority",
+                "filter;",
+                "policy",
+                "accept;",
                 "}",
             ],
         )?;
     }
-    for link in spaces.linked {
-        let veth_ab = format!("veth-{}-{}", link.0.name, link.1.name);
-        let veth_ba = format!("veth-{}-{}", link.1.name, link.0.name);
-        let ip_ab = format!("192.168.{}.{}/24", link.0.id, counter);
-        let ip_ba = format!("192.168.{}.{}/24", link.1.id, counter);
-        let subnet_a = format!("192.168.{}.0/24", link.0.id);
-        let subnet_b = format!("192.168.{}.0/24", link.1.id);
+    for (a, b) in spaces.linked.iter() {
+        let a_name = spaces.get_namespace(*a).unwrap().get_name();
+        let b_name = spaces.get_namespace(*b).unwrap().get_name();
+        let veth_ab = format!("veth-{}-{}", a_name, b_name);
+        let veth_ba = format!("veth-{}-{}", b_name, a_name);
+        let ip_ab = format!("192.168.{}.{}/24", a, counter);
+        let ip_ba = format!("192.168.{}.{}/24", b, counter);
+        let subnet_a = format!("192.168.{}.0/24", a);
+        let subnet_b = format!("192.168.{}.0/24", b);
 
         counter += 1;
         // create veth to link them
@@ -148,36 +247,20 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
             ],
         )?;
         // assign each side of the veth to one of the nodes namespaces
-        KI.run_command("ip", &["link", "set", &veth_ab, "netns", &link.0.name])?;
-        KI.run_command("ip", &["link", "set", &veth_ba, "netns", &link.1.name])?;
+        KI.run_command("ip", &["link", "set", &veth_ab, "netns", &a_name])?;
+        KI.run_command("ip", &["link", "set", &veth_ba, "netns", &b_name])?;
 
         // add ip addresses on each side
         KI.run_command(
             "ip",
             &[
-                "netns",
-                "exec",
-                &link.0.name,
-                "ip",
-                "addr",
-                "add",
-                &ip_ab,
-                "dev",
-                &veth_ab,
+                "netns", "exec", &a_name, "ip", "addr", "add", &ip_ab, "dev", &veth_ab,
             ],
         )?;
         KI.run_command(
             "ip",
             &[
-                "netns",
-                "exec",
-                &link.1.name,
-                "ip",
-                "addr",
-                "add",
-                &ip_ba,
-                "dev",
-                &veth_ba,
+                "netns", "exec", &b_name, "ip", "addr", "add", &ip_ba, "dev", &veth_ba,
             ],
         )?;
 
@@ -185,30 +268,14 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         KI.run_command(
             "ip",
             &[
-                "netns",
-                "exec",
-                &link.0.name,
-                "ip",
-                "link",
-                "set",
-                "dev",
-                &veth_ab,
-                "up",
+                "netns", "exec", &a_name, "ip", "link", "set", "dev", &veth_ab, "up",
             ],
         )?;
 
         KI.run_command(
             "ip",
             &[
-                "netns",
-                "exec",
-                &link.1.name,
-                "ip",
-                "link",
-                "set",
-                "dev",
-                &veth_ba,
-                "up",
+                "netns", "exec", &b_name, "ip", "link", "set", "dev", &veth_ba, "up",
             ],
         )?;
 
@@ -217,29 +284,13 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         KI.run_command(
             "ip",
             &[
-                "netns",
-                "exec",
-                &link.0.name,
-                "ip",
-                "route",
-                "add",
-                &subnet_b,
-                "dev",
-                &veth_ab,
+                "netns", "exec", &a_name, "ip", "route", "add", &subnet_b, "dev", &veth_ab,
             ],
         )?;
         KI.run_command(
             "ip",
             &[
-                "netns",
-                "exec",
-                &link.1.name,
-                "ip",
-                "route",
-                "add",
-                &subnet_a,
-                "dev",
-                &veth_ba,
+                "netns", "exec", &b_name, "ip", "route", "add", &subnet_a, "dev", &veth_ba,
             ],
         )?;
     }
@@ -261,16 +312,20 @@ pub fn thread_spawner(
     fs::write(babelconf_path.clone(), babelconf_data).unwrap();
     for ns in namespaces.names.clone() {
         let veth_interfaces = get_veth_interfaces(namespaces.clone());
-        let veth_interfaces = veth_interfaces.get(&ns.name).unwrap().clone();
+        let veth_interfaces = veth_interfaces.get(&ns.get_name()).unwrap().clone();
         let rcsettings = rita_settings.clone();
-        let nspath = format!("/var/run/netns/{}", ns.name);
+        let nspath = format!("/var/run/netns/{}", ns.get_name());
         let nsfd = open(nspath.as_str(), OFlag::O_RDONLY, Mode::empty())
             .unwrap_or_else(|_| panic!("Could not open netns file: {}", nspath));
         let local_fee = ns.cost;
 
-        spawn_babel(ns.clone().name, babelconf_path.clone(), babeld_path.clone());
+        spawn_babel(
+            ns.clone().get_name(),
+            babelconf_path.clone(),
+            babeld_path.clone(),
+        );
 
-        let instance_info = spawn_rita(ns.name, veth_interfaces, rcsettings, nsfd, local_fee);
+        let instance_info = spawn_rita(ns.get_name(), veth_interfaces, rcsettings, nsfd, local_fee);
         instance_data.push(instance_info);
     }
     Ok(instance_data)
@@ -279,14 +334,16 @@ pub fn thread_spawner(
 /// get veth interfaces in a given namespace
 pub fn get_veth_interfaces(nsinfo: NamespaceInfo) -> HashMap<String, HashSet<String>> {
     let mut res: HashMap<String, HashSet<String>> = HashMap::new();
-    for name in nsinfo.names {
-        res.insert(name.name, HashSet::new());
+    for name in nsinfo.names.iter() {
+        res.insert(name.get_name(), HashSet::new());
     }
-    for link in nsinfo.linked {
-        let veth_ab = format!("veth-{}-{}", link.0.name, link.1.name);
-        let veth_ba = format!("veth-{}-{}", link.1.name, link.0.name);
-        res.entry(link.0.name).or_default().insert(veth_ab);
-        res.entry(link.1.name).or_default().insert(veth_ba);
+    for (a, b) in nsinfo.linked.iter() {
+        let a_name = nsinfo.get_namespace(*a).unwrap().get_name();
+        let b_name = nsinfo.get_namespace(*b).unwrap().get_name();
+        let veth_ab = format!("veth-{}-{}", a_name, b_name);
+        let veth_ba = format!("veth-{}-{}", b_name, a_name);
+        res.entry(a_name).or_default().insert(veth_ab);
+        res.entry(b_name).or_default().insert(veth_ba);
     }
     res
 }

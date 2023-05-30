@@ -1,7 +1,5 @@
 use crate::five_nodes::five_node_config;
-use crate::utils::{
-    get_default_client_settings, test_reach_all, test_routes, validate_connections,
-};
+use crate::utils::{get_default_client_settings, test_reach_all, test_routes};
 use crate::{setup_utils::*, SETUP_WAIT};
 use log::info;
 
@@ -18,7 +16,7 @@ pub fn run_eth_payments_test_scenario() {
 
     // no modifications to the default settings in this test case
 
-    validate_connections(namespaces.clone());
+    namespaces.validate();
 
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");

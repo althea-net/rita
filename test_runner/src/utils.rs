@@ -11,7 +11,6 @@ use nix::{
 use settings::client::RitaClientSettings;
 use std::{
     collections::HashMap,
-    convert::TryInto,
     net::{IpAddr, Ipv6Addr},
     str::from_utf8,
     thread,
@@ -52,11 +51,15 @@ fn test_reach(from: Namespace, to: Namespace) -> bool {
     // todo replace with oping
     // ip netns exec n-1 ping6 fd00::2
     let ip = format!("fd00::{}", to.id);
-    let errormsg = format!("Could not run ping6 from {} to {}", from.name, to.name);
+    let errormsg = format!(
+        "Could not run ping6 from {} to {}",
+        from.get_name(),
+        to.get_name()
+    );
     let output = KI
         .run_command(
             "ip",
-            &["netns", "exec", &from.name, "ping6", &ip, "-c", "1"],
+            &["netns", "exec", &from.get_name(), "ping6", &ip, "-c", "1"],
         )
         .expect(&errormsg);
     let output = from_utf8(&output.stdout).expect("could not get output for ping6!");
@@ -84,7 +87,7 @@ pub fn test_routes_async(nsinfo: NamespaceInfo, expected: HashMap<Namespace, Rou
         // create a thread in the babel namespace, ask it about routes, then join to bring that
         // data back to this thread in the default namespace
         let rita_handler = thread::spawn(move || {
-            let nspath = format!("/var/run/netns/{}", ns.name);
+            let nspath = format!("/var/run/netns/{}", ns.get_name());
             let nsfd = open(nspath.as_str(), OFlag::O_RDONLY, Mode::empty())
                 .unwrap_or_else(|_| panic!("Could not open netns file: {}", nspath));
             setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
@@ -92,7 +95,7 @@ pub fn test_routes_async(nsinfo: NamespaceInfo, expected: HashMap<Namespace, Rou
 
             if let Ok(mut stream) = open_babel_stream(babel_port, Duration::from_secs(4)) {
                 if let Ok(babel_routes) = parse_routes(&mut stream) {
-                    routesmap.insert(ns.name, babel_routes);
+                    routesmap.insert(ns.get_name(), babel_routes);
                     routesmap
                 } else {
                     routesmap
@@ -109,13 +112,14 @@ pub fn test_routes_async(nsinfo: NamespaceInfo, expected: HashMap<Namespace, Rou
                 continue;
             }
 
-            let routes = routesmap.get(&ns1.name).unwrap();
+            let routes = routesmap.get(&ns1.get_name()).unwrap();
             //within routes there must be a route that matches the expected price between the dest (fd00::id) and the expected next hop (fe80::id)
 
             if !try_route(&expected, routes, ns1.clone(), ns2.clone()) {
                 warn!(
                     "No route found for {:?}, {:?}, retrying...",
-                    ns1.name, ns2.name
+                    ns1.get_name(),
+                    ns2.get_name()
                 );
                 return false;
             }
@@ -131,10 +135,15 @@ fn try_route(
     ns1: Namespace,
     ns2: Namespace,
 ) -> bool {
-    let expected_data = expected.get(&ns1).unwrap().destination.get(&ns2).unwrap();
-    let expected_cost = expected_data.clone().0;
-    let expected_hop_id: u16 = expected_data.clone().1.id.try_into().unwrap();
-    let ns2_id: u16 = ns2.id.try_into().unwrap();
+    let expected_data = expected
+        .get(&ns1)
+        .unwrap()
+        .destination
+        .get(&ns2.id)
+        .unwrap();
+    let expected_cost = expected_data.clone().price;
+    let expected_hop_id: u16 = expected_data.clone().id;
+    let ns2_id: u16 = ns2.id;
     let neigh_ip = IpAddr::V6(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, expected_hop_id));
     let dest_ip = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, ns2_id));
     for r in routes {
@@ -162,27 +171,6 @@ pub fn get_default_client_settings() -> RitaClientSettings {
 /// Same as get_default_client_settings but directed at the Althea node by default
 pub fn get_default_client_settings_althea() -> RitaClientSettings {
     RitaClientSettings::new("/althea_rs/scripts/legacy_integration_test/rita-test.toml").unwrap()
-}
-
-/// Validate the list of linked namespaces
-pub fn validate_connections(namespaces: NamespaceInfo) {
-    for link in namespaces.linked {
-        if !namespaces.names.contains(&link.0) || !namespaces.names.contains(&link.1) {
-            panic!(
-                "One or both of these names is not in the given namespace list: {}, {}",
-                link.0.name, link.1.name
-            )
-        }
-        if link.0.name.len() + link.1.name.len() > 8 {
-            panic!(
-                "Namespace names are too long(max 4 chars): {}, {}",
-                link.0.name, link.1.name,
-            )
-        }
-        if link.0.name.eq(&link.1.name) {
-            panic!("Cannot link namespace to itself!")
-        }
-    }
 }
 
 /// This allows the tester to exit cleanly then it gets a ctrl-c message
