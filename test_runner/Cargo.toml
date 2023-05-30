@@ -23,4 +23,7 @@ clu = { path = "../clu" }
 settings = { path = "../settings", features = ["load_from_disk"] }
 rita_client = { path = "../rita_client"}
 rita_common = { path = "../rita_common"}
+rita_exit = { path = "../rita_exit"}
 ctrlc = {version = "3.2.1", features = ["termination"]}
+diesel = { version = "1.4", features = ["postgres", "r2d2"] }
+diesel_migrations = { version = "1.4", features = ["postgres"] }

@@ -235,7 +235,7 @@ fn tunnel_up(interfaces: &HashMap<String, bool>, tunnel_name: &str) -> bool {
             true
         }
     } else {
-        error!("Could not find interface in Babel, did monitor fail?");
+        error!("Could not find interface {} in Babel, did monitor fail?", tunnel_name);
         true
     }
 }

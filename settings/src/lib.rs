@@ -207,12 +207,21 @@ pub fn set_rita_common(input: RitaSettings) {
     if cfg!(feature = "load_from_disk") {
         let settings_file = get_settings_file_from_ns();
         // load settings data from the settings file
-        let mut ritasettings = RitaClientSettings::new(&settings_file).unwrap();
-        ritasettings.network = input.network;
-        ritasettings.payment = input.payment;
-        // save to file
-        set_rita_client(ritasettings);
-        return;
+        if let Ok(mut ritasettings) = RitaClientSettings::new(&settings_file) {
+            ritasettings.network = input.network;
+            ritasettings.payment = input.payment;
+            // save to file
+            set_rita_client(ritasettings);
+            return;
+        } else if let Ok(mut ritasettings) = RitaExitSettingsStruct::new(&settings_file) {
+            ritasettings.network = input.network;
+            ritasettings.payment = input.payment;
+            // save to file
+            set_rita_exit(ritasettings);
+            return;
+        } else {
+            panic!("Failed to set rita common!");
+        }
     }
     let settings_ref: &mut Option<Settings> = &mut SETTINGS.write().unwrap();
     match settings_ref {
@@ -270,9 +279,9 @@ pub fn get_rita_common() -> RitaSettings {
                 };
                 return commonsettings;
             }
-            (_, _) => {
+            (Err(eb), Err(ea)) => {
                 // there's an inherent race condition here, so we wait and recurse a few times
-                warn!("Error reading settings, reading again");
+                warn!("Error reading settings, reading again {:?} {:?}", ea, eb);
                 thread::sleep(Duration::from_millis(100));
                 return get_rita_common();
             }
@@ -373,11 +382,35 @@ pub fn get_rita_client() -> RitaClientSettings {
 
 /// Set exit settings into memory
 pub fn set_rita_exit(exit_setting: RitaExitSettingsStruct) {
+    if cfg!(feature = "load_from_disk") {
+        let settings_file = get_settings_file_from_ns();
+        // save new data to the settings file
+        exit_setting.write(&settings_file).unwrap();
+        return;
+    }
     *SETTINGS.write().unwrap() = Some(Settings::Exit(exit_setting));
 }
 
 /// Retrieve exit settings from memory
 pub fn get_rita_exit() -> RitaExitSettingsStruct {
+    if cfg!(feature = "load_from_disk") {
+        let settings_file = get_settings_file_from_ns();
+
+        // load settings data from the settings file
+        let mut ritasettings = RitaExitSettingsStruct::new(&settings_file);
+        let start = Instant::now();
+        const TIMEOUT: Duration = Duration::from_secs(2);
+        // this is inhernetly a race condition since one of rita's other threads could be writing to this file
+        // so we try a few times
+        while let (true, true) = (Path::new(&settings_file).exists(), ritasettings.is_err()) {
+            if Instant::now() - start > TIMEOUT {
+                panic!("Settings file {} is invalid!", settings_file);
+            } else {
+                ritasettings = RitaExitSettingsStruct::new(&settings_file);
+            }
+        }
+        return ritasettings.unwrap();
+    }
     let temp = &*SETTINGS.read().unwrap();
     if let Some(Settings::Exit(val)) = temp {
         val.clone()
