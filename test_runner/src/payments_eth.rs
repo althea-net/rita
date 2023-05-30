@@ -1,5 +1,7 @@
 use crate::five_nodes::five_node_config;
-use crate::utils::{get_default_client_settings, test_reach_all, test_routes};
+use crate::utils::{
+    get_default_client_settings, get_default_exit_settings, test_reach_all, test_routes,
+};
 use crate::{setup_utils::*, SETUP_WAIT};
 use log::info;
 
@@ -13,6 +15,7 @@ pub fn run_eth_payments_test_scenario() {
     let expected_routes = node_config.1;
 
     let rita_settings = get_default_client_settings();
+    let rita_exit_settings = get_default_exit_settings();
 
     // no modifications to the default settings in this test case
 
@@ -21,8 +24,8 @@ pub fn run_eth_payments_test_scenario() {
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let _rita_identities =
-        thread_spawner(namespaces.clone(), rita_settings).expect("Could not spawn Rita threads");
+    let _rita_identities = thread_spawner(namespaces.clone(), rita_settings, rita_exit_settings)
+        .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
     // allow setup to finish before running tests

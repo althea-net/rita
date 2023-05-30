@@ -8,7 +8,7 @@ use nix::{
     sched::{setns, CloneFlags},
     sys::stat::Mode,
 };
-use settings::client::RitaClientSettings;
+use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv6Addr},
@@ -165,12 +165,11 @@ fn try_route(
 
 /// Gets the default client settings, configured to connected to the EVM of the Althea chain as a standin EVM environment
 pub fn get_default_client_settings() -> RitaClientSettings {
-    RitaClientSettings::new("/althea_rs/scripts/legacy_integration_test/rita-test.toml").unwrap()
+    RitaClientSettings::new("/althea_rs/settings/test.toml").unwrap()
 }
-
-/// Same as get_default_client_settings but directed at the Althea node by default
-pub fn get_default_client_settings_althea() -> RitaClientSettings {
-    RitaClientSettings::new("/althea_rs/scripts/legacy_integration_test/rita-test.toml").unwrap()
+/// Gets the default exit settings, configured to connected to the EVM of the Althea chain as a standin EVM environment
+pub fn get_default_exit_settings() -> RitaExitSettingsStruct {
+    RitaExitSettingsStruct::new("/althea_rs/settings/test_exit.toml").unwrap()
 }
 
 /// This allows the tester to exit cleanly then it gets a ctrl-c message

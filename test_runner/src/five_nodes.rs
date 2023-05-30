@@ -1,5 +1,7 @@
 use crate::setup_utils::*;
-use crate::utils::{get_default_client_settings, test_reach_all, test_routes};
+use crate::utils::{
+    get_default_client_settings, get_default_exit_settings, test_reach_all, test_routes,
+};
 use log::info;
 use std::collections::HashMap;
 
@@ -12,14 +14,16 @@ pub fn run_five_node_test_scenario() {
     let expected_routes = node_config.1;
 
     let rita_settings = get_default_client_settings();
+    let rita_exit_settings = get_default_exit_settings();
 
     namespaces.validate();
 
+    start_postgres();
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let _ =
-        thread_spawner(namespaces.clone(), rita_settings).expect("Could not spawn Rita threads");
+    let _ = thread_spawner(namespaces.clone(), rita_settings, rita_exit_settings)
+        .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
     // this sleep is for debugging so that the container can be accessed to poke around in
@@ -34,27 +38,55 @@ pub fn run_five_node_test_scenario() {
 pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     /*
     These are connected as such:
-    A---------B
+    1---------2
     |         |
     |         |
     |         |
     |         |
     |         |
-    C         D---------G
+    3         4---------7
     |\        |
     |  \      |
     |    \    |
     |      \  |
     |        \|
-    E         F
+    5         6
     */
-    let testa = Namespace { id: 1, cost: 25 };
-    let testb = Namespace { id: 2, cost: 500 };
-    let testc = Namespace { id: 3, cost: 15 };
-    let testd = Namespace { id: 4, cost: 10 };
-    let teste = Namespace { id: 5, cost: 40 };
-    let testf = Namespace { id: 6, cost: 20 };
-    let testg = Namespace { id: 7, cost: 15 };
+    let testa = Namespace {
+        id: 1,
+        cost: 25,
+        node_type: NodeType::Client,
+    };
+    let testb = Namespace {
+        id: 2,
+        cost: 500,
+        node_type: NodeType::Client,
+    };
+    let testc = Namespace {
+        id: 3,
+        cost: 15,
+        node_type: NodeType::Client,
+    };
+    let testd = Namespace {
+        id: 4,
+        cost: 10,
+        node_type: NodeType::Exit,
+    };
+    let teste = Namespace {
+        id: 5,
+        cost: 40,
+        node_type: NodeType::Client,
+    };
+    let testf = Namespace {
+        id: 6,
+        cost: 20,
+        node_type: NodeType::Client,
+    };
+    let testg = Namespace {
+        id: 7,
+        cost: 15,
+        node_type: NodeType::Client,
+    };
 
     let nsinfo = NamespaceInfo {
         names: vec![
