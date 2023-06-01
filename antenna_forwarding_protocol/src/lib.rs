@@ -88,53 +88,48 @@ impl Display for ForwardingProtocolError {
 /// Writes data to a stream keeping in mind that we may encounter
 /// a buffer limit and have to partially complete our write
 pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), IoError> {
-    write_all_spinlock_internal(stream, buffer, 0)
-}
-
-fn write_all_spinlock_internal(
-    stream: &mut TcpStream,
-    buffer: &[u8],
-    depth: usize,
-) -> Result<(), IoError> {
     assert!(!buffer.is_empty());
-    if depth > 1_000_000 {
-        return Err(IoError::new(
-            std::io::ErrorKind::WriteZero,
-            AntennaForwardingError::SpaceAllocationError,
-        ));
-    }
+    const SPINLOCK_TIMEOUT: Duration = Duration::from_secs(600);
 
     stream.set_nonblocking(true)?;
     stream.set_nodelay(true)?;
-    let res = stream.write(buffer);
-    match res {
-        Ok(bytes) => {
-            trace!("Spinlock wrote {} bytes of {}", bytes, buffer.len());
-            if buffer.len() == bytes {
-                Ok(())
-            } else if bytes == 0 {
-                Err(IoError::new(
-                    std::io::ErrorKind::WriteZero,
-                    AntennaForwardingError::ConnectionDownError,
-                ))
-            } else {
-                trace!("Did not write all, recursing",);
-                write_all_spinlock_internal(stream, &buffer[bytes..], depth + 1)
-            }
+    let start = Instant::now();
+    loop {
+        if Instant::now() - start > SPINLOCK_TIMEOUT {
+            return Err(IoError::new(
+                std::io::ErrorKind::WriteZero,
+                AntennaForwardingError::SpaceAllocationError,
+            ));
         }
-        Err(e) => {
-            error!(
-                "Problem {:?} in spinlock trying to write {} bytes",
-                e,
-                buffer.len()
-            );
-            if e.kind() == WouldBlock {
-                // wait for the operating system to clear up some buffer space
-                thread::sleep(SPINLOCK_TIME);
-                write_all_spinlock_internal(stream, buffer, depth + 1)
-            } else {
-                error!("Socket write error is {:?}", e);
-                Err(e)
+
+        let res = stream.write(buffer);
+        match res {
+            Ok(bytes) => {
+                trace!("Spinlock wrote {} bytes of {}", bytes, buffer.len());
+                if buffer.len() == bytes {
+                    return Ok(());
+                } else if bytes == 0 {
+                    return Err(IoError::new(
+                        std::io::ErrorKind::WriteZero,
+                        AntennaForwardingError::ConnectionDownError,
+                    ));
+                } else {
+                    trace!("Did not write all, trying again",);
+                }
+            }
+            Err(e) => {
+                error!(
+                    "Problem {:?} in spinlock trying to write {} bytes",
+                    e,
+                    buffer.len()
+                );
+                if e.kind() == WouldBlock {
+                    // wait for the operating system to clear up some buffer space
+                    thread::sleep(SPINLOCK_TIME);
+                } else {
+                    error!("Socket write error is {:?}", e);
+                    return Err(e);
+                }
             }
         }
     }
