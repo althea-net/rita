@@ -23,8 +23,7 @@ impl dyn KernelInterface {
         listen_port: u16,
         private_key_path: &str,
         if_name: &str,
-        ipv6_filter_handles: HashSet<(String, u32)>,
-    ) -> Result<HashSet<(String, u32)>, Error> {
+    ) -> Result<(), Error> {
         let command = "wg".to_string();
 
         let mut args = vec![
@@ -74,36 +73,7 @@ impl dyn KernelInterface {
             }
         }
 
-        // setup traffic classes for enforcement with flow id's derived from the ip
-        // only get the flows list once
-        let mut mut_handles = ipv6_filter_handles;
-        let flows = self.get_flows(if_name)?;
-        for c in clients.iter() {
-            // Add ipv4 flows
-            let ipv4;
-            match c.internal_ip {
-                IpAddr::V4(addr) => {
-                    ipv4 = addr;
-                    if !self.has_flow_bulk(addr, &flows) {
-                        self.create_flow_by_ip(if_name, addr)?;
-                    }
-                }
-                _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
-            }
-
-            // Add ipv6 flows
-            for ip_net in c.internet_ipv6_list.iter() {
-                if !self.has_flow_bulk_ipv6(ipv4, if_name, &mut mut_handles) {
-                    self.create_flow_by_ipv6(if_name, *ip_net, ipv4)?;
-                    // Add this ipv6 handle to TcDatastore
-                    let class_id = self.get_class_id(ipv4);
-                    let to_add = (if_name.to_string(), class_id);
-                    mut_handles.insert(to_add);
-                }
-            }
-        }
-
-        Ok(mut_handles)
+        Ok(())
     }
 
     /// This function sets up the ip6table rules required to forward data from the internet to a client router
