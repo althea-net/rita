@@ -8,7 +8,7 @@ use ipnetwork::IpNetwork;
 
 use crate::KernelInterface;
 use crate::KernelInterfaceError as Error;
-use std::collections::HashSet;
+
 use std::net::Ipv4Addr;
 
 impl dyn KernelInterface {
@@ -63,21 +63,6 @@ impl dyn KernelInterface {
     pub fn has_flow_bulk(&self, ip: Ipv4Addr, tc_out: &str) -> bool {
         let class_id = self.get_class_id(ip);
         tc_out.contains(&format!("1:{class_id}"))
-    }
-
-    /// This function is the ipv6 version of has_flow_bulk, but is different in how its implemented. Since we simply cant
-    /// check for a handle to verify an ipv6 handle, we use a datastore to store a mapping for (interface, class_id)
-    pub fn has_flow_bulk_ipv6(
-        &self,
-        ipv4: Ipv4Addr,
-        iface: &str,
-        ipv6_filter_handles: &mut HashSet<(String, u32)>,
-    ) -> bool {
-        let class_id = self.get_class_id(ipv4);
-        if ipv6_filter_handles.contains(&(iface.to_string(), class_id)) {
-            return true;
-        }
-        false
     }
 
     /// Determines if the provided flow is assigned
