@@ -45,8 +45,6 @@ use settings::exit::ExitVerifSettings;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
-use std::sync::Arc;
-use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
@@ -57,31 +55,6 @@ pub mod email;
 pub mod geoip;
 pub mod sms;
 pub mod struct_tools;
-
-lazy_static! {
-    pub static ref TC_DATASTORE: Arc<RwLock<TcDatastore>> =
-        Arc::new(RwLock::new(TcDatastore::default()));
-}
-
-/// This struct holds all TC releated info needed for setting up qdiscs, classes and filters
-/// to set up enforcement on the exit
-#[derive(Default, Clone, Debug)]
-pub struct TcDatastore {
-    /// This stores all handles on a given interfaces that have a filter tc command setup to a particular class
-    /// Data is stored in the form of (Interface, class_id). This can be used to check for existing filters and prevent
-    /// adding duplicate ones
-    pub ipv6_filter_handles: HashSet<(String, u32)>,
-}
-
-// Lazy static getter
-pub fn get_tc_datastore() -> TcDatastore {
-    TC_DATASTORE.read().unwrap().clone()
-}
-
-// Lazy static setter
-pub fn set_tc_datastore(set: TcDatastore) {
-    *TC_DATASTORE.write().unwrap() = set;
-}
 
 /// one day in seconds
 pub const ONE_DAY: i64 = 86400;
@@ -430,22 +403,17 @@ pub fn setup_clients(
         != 0
     {
         info!("Setting up configs for wg_exit and wg_exit_v2");
-        let mut tc_datastore = get_tc_datastore();
-        let ipv6_filter_handles = tc_datastore.ipv6_filter_handles;
         // setup all the tunnels
         let exit_status = KI.set_exit_wg_config(
             &wg_clients,
             settings::get_rita_exit().exit_network.wg_tunnel_port,
             &settings::get_rita_exit().exit_network.wg_private_key_path,
             "wg_exit",
-            ipv6_filter_handles,
         );
 
         match exit_status {
-            Ok(a) => {
+            Ok(_a) => {
                 trace!("Successfully setup Exit WG!");
-                tc_datastore.ipv6_filter_handles = a;
-                set_tc_datastore(tc_datastore);
             }
             Err(e) => warn!(
                 "Error in Exit WG setup {:?}, 
@@ -456,21 +424,16 @@ pub fn setup_clients(
         }
 
         // Setup new tunnels
-        let mut tc_datastore = get_tc_datastore();
-        let ipv6_filter_handles = tc_datastore.ipv6_filter_handles;
         let exit_status_new = KI.set_exit_wg_config(
             &wg_clients,
             settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
             &settings::get_rita_exit().network.wg_private_key_path,
             "wg_exit_v2",
-            ipv6_filter_handles,
         );
 
         match exit_status_new {
-            Ok(a) => {
+            Ok(()) => {
                 trace!("Successfully setup Exit wg_exit_v2!");
-                tc_datastore.ipv6_filter_handles = a;
-                set_tc_datastore(tc_datastore);
             }
             Err(e) => warn!(
                 "Error in Exit wg_exit_v2 setup {:?}, 
@@ -692,10 +655,26 @@ pub fn enforce_exit_clients(
         match clients_by_id.get(&debt_entry.identity) {
             Some(client) => {
                 match client.internal_ip.parse() {
-                    // TODO no ipv6 enforcement
                     Ok(IpAddr::V4(ip)) => {
                         if debt_entry.payment_details.action == DebtAction::SuspendTunnel {
                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
+                            // create ipv4 and ipv6 flows, which are used to classify traffic, we can then limit the class specifically
+                            if let Err(e) = KI.create_flow_by_ip("wg_exit", ip) {
+                                error!("Failed to setup flow for wg_exit {:?}", e);
+                            }
+                            if let Err(e) = KI.create_flow_by_ip("wg_exit_v2", ip) {
+                                error!("Failed to setup flow for wg_exit_v2 {:?}", e);
+                            }
+                            // gets the client ipv6 flow for this exit specifically
+                            let client_ipv6 = get_client_ipv6(client);
+                            if let Ok(Some(client_ipv6)) = client_ipv6 {
+                                if let Err(e) =
+                                    KI.create_flow_by_ipv6("wg_exit_v2", client_ipv6, ip)
+                                {
+                                    error!("Failed to setup ipv6 flow for wg_exit_v2 {:?}", e);
+                                }
+                            }
+
                             if let Err(e) =
                                 KI.set_class_limit("wg_exit", free_tier_limit, free_tier_limit, ip)
                             {
