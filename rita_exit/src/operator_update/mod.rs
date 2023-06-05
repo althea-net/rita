@@ -8,6 +8,7 @@ use rita_common::KI;
 use std::time::{Duration, Instant};
 
 use crate::database::signup_client;
+use crate::rita_loop::EXIT_INTERFACE;
 
 pub struct UptimeStruct {
     pub prev_time: Duration,
@@ -57,7 +58,7 @@ pub async fn operator_update() {
                 pass,
                 exit_uptime: RITA_UPTIME.elapsed(),
                 // Since this checkin works only from b20, we only need to look on wg_exit_v2
-                users_online: KI.get_wg_exit_clients_online("wg_exit_v2").ok(),
+                users_online: KI.get_wg_exit_clients_online(EXIT_INTERFACE).ok(),
             })
             .await;
 

@@ -42,6 +42,11 @@ pub const EXIT_LOOP_SPEED: u64 = 5;
 pub const EXIT_LOOP_SPEED_DURATION: Duration = Duration::from_secs(EXIT_LOOP_SPEED);
 pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
+/// Name of the legacy exit interface
+pub const LEGACY_INTERFACE: &str = "wg_exit";
+/// Name of the primary exit interface through which user traffic is decrypted to be forwarded out to the internet
+pub const EXIT_INTERFACE: &str = "wg_exit_v2";
+
 /// Cache of rita exit state to track across ticks
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct RitaExitCache {
@@ -310,11 +315,11 @@ fn recompute_ipv6_if_needed(conn: &PgConnection) -> Result<(), Box<RitaExitError
 
 fn setup_exit_wg_tunnel() {
     // Setup legacy wg_exit
-    if let Err(e) = KI.setup_wg_if_named("wg_exit") {
+    if let Err(e) = KI.setup_wg_if_named(LEGACY_INTERFACE) {
         warn!("exit setup returned {}", e)
     }
     // Setup new wg_exit
-    if let Err(e) = KI.setup_wg_if_named("wg_exit_v2") {
+    if let Err(e) = KI.setup_wg_if_named(EXIT_INTERFACE) {
         warn!("new exit setup returned {}", e)
     }
 
@@ -333,7 +338,7 @@ fn setup_exit_wg_tunnel() {
         .map(|ipv6_subnet| (ipv6_subnet.ip(), ipv6_subnet.prefix()));
 
     // Setup legacy wg_exit
-    KI.one_time_exit_setup(None, None, mesh_ip, "wg_exit", enforcement_enabled)
+    KI.one_time_exit_setup(None, None, mesh_ip, LEGACY_INTERFACE, enforcement_enabled)
         .expect("Failed to setup wg_exit!");
 
     // Setup wg_exit_v2. Local address added is same as that used by wg_exit
@@ -341,20 +346,20 @@ fn setup_exit_wg_tunnel() {
         Some((local_ip, netmask)),
         external_v6,
         mesh_ip,
-        "wg_exit_v2",
+        EXIT_INTERFACE,
         enforcement_enabled,
     )
     .expect("Failed to setup wg_exit_v2!");
 
     KI.setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
-        "wg_exit",
+        LEGACY_INTERFACE,
         None,
     )
     .unwrap();
     KI.setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
-        "wg_exit_v2",
+        EXIT_INTERFACE,
         external_v6,
     )
     .unwrap();
