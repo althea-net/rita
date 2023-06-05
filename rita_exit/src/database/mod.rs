@@ -56,6 +56,9 @@ pub mod geoip;
 pub mod sms;
 pub mod struct_tools;
 
+pub const LEGACY_INTERFACE: &str = "wg_exit";
+pub const EXIT_INTERFACE: &str = "wg_exit_v2";
+
 /// one day in seconds
 pub const ONE_DAY: i64 = 86400;
 
@@ -402,7 +405,7 @@ pub fn setup_clients(
         .count()
         != 0
     {
-        info!("Setting up configs for wg_exit and wg_exit_v2");
+        info!("Setting up configs for wg_exit and {}", EXIT_INTERFACE);
         // setup all the tunnels
         let exit_status = KI.set_exit_wg_config(
             &wg_clients,
@@ -428,18 +431,18 @@ pub fn setup_clients(
             &wg_clients,
             settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
             &settings::get_rita_exit().network.wg_private_key_path,
-            "wg_exit_v2",
+            EXIT_INTERFACE,
         );
 
         match exit_status_new {
             Ok(()) => {
-                trace!("Successfully setup Exit wg_exit_v2!");
+                trace!("Successfully setup Exit {}!", EXIT_INTERFACE);
             }
             Err(e) => warn!(
-                "Error in Exit wg_exit_v2 setup {:?}, 
+                "Error in Exit {} setup {:?}, 
                         this usually happens when a Rita service is 
                         trying to auto restart in the background",
-                e
+                EXIT_INTERFACE, e
             ),
         }
         info!(
@@ -458,12 +461,12 @@ pub fn setup_clients(
     // 3.) Compare this to our datastore of previous clients we set up routes for
     // 4.) Set up routes for v2 or v1 based on this
     let new_wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> = KI
-        .get_last_active_handshake_time("wg_exit_v2")
+        .get_last_active_handshake_time(EXIT_INTERFACE)
         .expect("There should be a new wg_exit interface")
         .into_iter()
         .collect();
     let wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> = KI
-        .get_last_active_handshake_time("wg_exit")
+        .get_last_active_handshake_time(LEGACY_INTERFACE)
         .expect("There should be a wg_exit interface")
         .into_iter()
         .collect();
@@ -505,7 +508,7 @@ pub fn setup_clients(
             KI.setup_individual_client_routes(
                 c.internal_ip.parse().expect("Invalid ipv4 in the db!"),
                 internal_ip_v4.into(),
-                "wg_exit",
+                LEGACY_INTERFACE,
             );
         }
     }
@@ -528,22 +531,20 @@ fn find_changed_clients(
     all_v1: HashMap<WgKey, SystemTime>,
     clients_list: &[exit_db::models::Client],
 ) -> CurrentExitClientState {
-    let wg_exit = "wg_exit".to_string();
     let mut v1_clients = HashSet::new();
 
-    let wg_exit_v2 = "wg_exit_v2".to_string();
     let mut v2_clients = HashSet::new();
 
     // Look at handshakes of each client to determine if they are a V1 or V2 client
     for c in clients_list {
         match get_client_interface(c, all_v2.clone(), all_v1.clone()) {
             Ok(interface) => {
-                if interface == wg_exit {
+                if interface == ClientInterfaceType::LegacyInterface {
                     v1_clients.insert(match c.wg_pubkey.parse() {
                         Ok(a) => a,
                         Err(_) => continue,
                     });
-                } else if interface == wg_exit_v2 {
+                } else if interface == ClientInterfaceType::ExitInterface {
                     v2_clients.insert(match c.wg_pubkey.parse() {
                         Ok(a) => a,
                         Err(_) => continue,
@@ -570,11 +571,17 @@ fn find_changed_clients(
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum ClientInterfaceType {
+    LegacyInterface,
+    ExitInterface,
+}
+
 pub fn get_client_interface(
     c: &exit_db::models::Client,
     new_wg_exit_clients: HashMap<WgKey, SystemTime>,
     wg_exit_clients: HashMap<WgKey, SystemTime>,
-) -> Result<String, Box<RitaExitError>> {
+) -> Result<ClientInterfaceType, Box<RitaExitError>> {
     trace!(
         "New list is {:?} \n Old list is {:?}",
         new_wg_exit_clients,
@@ -590,13 +597,13 @@ pub fn get_client_interface(
             Err(e) => return Err(Box::new(e.clone().into())),
         }),
     ) {
-        (Some(_), None) => Ok("wg_exit_v2".into()),
-        (None, Some(_)) => Ok("wg_exit".into()),
+        (Some(_), None) => Ok(ClientInterfaceType::ExitInterface),
+        (None, Some(_)) => Ok(ClientInterfaceType::LegacyInterface),
         (Some(new), Some(old)) => {
             if new > old {
-                Ok("wg_exit_v2".into())
+                Ok(ClientInterfaceType::ExitInterface)
             } else {
-                Ok("wg_exit".into())
+                Ok(ClientInterfaceType::LegacyInterface)
             }
         }
         _ => {
@@ -604,7 +611,7 @@ pub fn get_client_interface(
                 "WG EXIT SETUP: Client {}, does not have handshake with any wg exit interface. Setting up routes on wg_exit",
                 c.wg_pubkey
             );
-            Ok("wg_exit".into())
+            Ok(ClientInterfaceType::LegacyInterface)
         }
     }
 }
@@ -659,45 +666,54 @@ pub fn enforce_exit_clients(
                         if debt_entry.payment_details.action == DebtAction::SuspendTunnel {
                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
                             // create ipv4 and ipv6 flows, which are used to classify traffic, we can then limit the class specifically
-                            if let Err(e) = KI.create_flow_by_ip("wg_exit", ip) {
-                                error!("Failed to setup flow for wg_exit {:?}", e);
+                            if let Err(e) = KI.create_flow_by_ip(LEGACY_INTERFACE, ip) {
+                                error!("Failed to setup flow for {} {:?}", LEGACY_INTERFACE, e);
                             }
-                            if let Err(e) = KI.create_flow_by_ip("wg_exit_v2", ip) {
-                                error!("Failed to setup flow for wg_exit_v2 {:?}", e);
+                            if let Err(e) = KI.create_flow_by_ip(EXIT_INTERFACE, ip) {
+                                error!("Failed to setup flow for {} {:?}", EXIT_INTERFACE, e);
                             }
                             // gets the client ipv6 flow for this exit specifically
                             let client_ipv6 = get_client_ipv6(client);
                             if let Ok(Some(client_ipv6)) = client_ipv6 {
                                 if let Err(e) =
-                                    KI.create_flow_by_ipv6("wg_exit_v2", client_ipv6, ip)
+                                    KI.create_flow_by_ipv6(EXIT_INTERFACE, client_ipv6, ip)
                                 {
-                                    error!("Failed to setup ipv6 flow for wg_exit_v2 {:?}", e);
+                                    error!(
+                                        "Failed to setup ipv6 flow for {} {:?}",
+                                        EXIT_INTERFACE, e
+                                    );
                                 }
                             }
 
                             if let Err(e) =
                                 KI.set_class_limit("wg_exit", free_tier_limit, free_tier_limit, ip)
                             {
-                                error!("Unable to setup enforcement class on wg_exit: {:?}", e);
+                                error!(
+                                    "Unable to setup enforcement class on {}: {:?}",
+                                    LEGACY_INTERFACE, e
+                                );
                             }
                             if let Err(e) = KI.set_class_limit(
-                                "wg_exit_v2",
+                                EXIT_INTERFACE,
                                 free_tier_limit,
                                 free_tier_limit,
                                 ip,
                             ) {
-                                error!("Unable to setup enforcement class on wg_exit_v2: {:?}", e);
+                                error!(
+                                    "Unable to setup enforcement class on {}: {:?}",
+                                    EXIT_INTERFACE, e
+                                );
                             }
                         } else {
                             // Delete exisiting enforcement class, users who are not enforced are unclassifed becuase
                             // leaving the class in place reduces their speeds.
                             info!("Deleting enforcement classes for {}", client.wg_pubkey);
-                            if let Err(e) = KI.delete_class("wg_exit", ip) {
-                                error!("Unable to delete class on wg_exit, is {} still enforced when they shouldnt be? {:?}", ip, e);
+                            if let Err(e) = KI.delete_class(LEGACY_INTERFACE, ip) {
+                                error!("Unable to delete class on {}, is {} still enforced when they shouldnt be? {:?}", LEGACY_INTERFACE, ip, e);
                             }
 
-                            if let Err(e) = KI.delete_class("wg_exit_v2", ip) {
-                                error!("Unable to delete class on wg_exit_v2, is {} still enforced when they shouldnt be? {:?}", ip, e);
+                            if let Err(e) = KI.delete_class(EXIT_INTERFACE, ip) {
+                                error!("Unable to delete class on {}, is {} still enforced when they shouldnt be? {:?}", EXIT_INTERFACE, ip, e);
                             }
                         };
                     }

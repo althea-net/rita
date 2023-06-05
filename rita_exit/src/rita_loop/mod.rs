@@ -15,7 +15,7 @@ use crate::{get_database_connection, network_endpoints::*, RitaExitError};
 use crate::database::struct_tools::clients_to_ids;
 use crate::database::{
     cleanup_exit_clients, enforce_exit_clients, setup_clients, validate_clients_region,
-    ExitClientSetupStates,
+    ExitClientSetupStates, EXIT_INTERFACE, LEGACY_INTERFACE,
 };
 use crate::traffic_watcher::{watch_exit_traffic, Watch};
 use actix_async::System as AsyncSystem;
@@ -310,11 +310,11 @@ fn recompute_ipv6_if_needed(conn: &PgConnection) -> Result<(), Box<RitaExitError
 
 fn setup_exit_wg_tunnel() {
     // Setup legacy wg_exit
-    if let Err(e) = KI.setup_wg_if_named("wg_exit") {
+    if let Err(e) = KI.setup_wg_if_named(LEGACY_INTERFACE) {
         warn!("exit setup returned {}", e)
     }
     // Setup new wg_exit
-    if let Err(e) = KI.setup_wg_if_named("wg_exit_v2") {
+    if let Err(e) = KI.setup_wg_if_named(EXIT_INTERFACE) {
         warn!("new exit setup returned {}", e)
     }
 
@@ -342,10 +342,10 @@ fn setup_exit_wg_tunnel() {
         None,
         mesh_ip,
         ex_nic.clone(),
-        "wg_exit",
+        LEGACY_INTERFACE,
         enforcement_enabled,
     )
-    .expect("Failed to setup wg_exit!");
+    .unwrap_or_else(|_| panic!("Failed to setup {}!", LEGACY_INTERFACE));
 
     // Setup wg_exit_v2. Local address added is same as that used by wg_exit
     KI.one_time_exit_setup(
@@ -353,19 +353,19 @@ fn setup_exit_wg_tunnel() {
         external_v6,
         mesh_ip,
         ex_nic,
-        "wg_exit_v2",
+        EXIT_INTERFACE,
         enforcement_enabled,
     )
-    .expect("Failed to setup wg_exit_v2!");
+    .unwrap_or_else(|_| panic!("Failed to setup {}!", EXIT_INTERFACE));
 
     KI.setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
-        "wg_exit",
+        LEGACY_INTERFACE,
     )
     .unwrap();
     KI.setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
-        "wg_exit_v2",
+        EXIT_INTERFACE,
     )
     .unwrap();
 }

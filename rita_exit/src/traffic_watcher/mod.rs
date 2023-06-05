@@ -26,6 +26,8 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+use crate::database::EXIT_INTERFACE;
+use crate::database::LEGACY_INTERFACE;
 use crate::RitaExitError;
 
 lazy_static! {
@@ -163,12 +165,12 @@ fn debts_logging(debts: &HashMap<Identity, i128>) {
     }
     info!("Total exit income of {:?} Wei this round", total_income);
 
-    match KI.get_wg_exit_clients_online("wg_exit") {
-        Ok(users) => info!("Total of {} wg_exit users online", users),
+    match KI.get_wg_exit_clients_online(LEGACY_INTERFACE) {
+        Ok(users) => info!("Total of {} {} users online", users, LEGACY_INTERFACE),
         Err(e) => warn!("Getting clients failed with {:?}", e),
     }
-    match KI.get_wg_exit_clients_online("wg_exit_v2") {
-        Ok(users) => info!("Total of {} wg_exit_v2 users online", users),
+    match KI.get_wg_exit_clients_online(EXIT_INTERFACE) {
+        Ok(users) => info!("Total of {} {} users online", users, EXIT_INTERFACE),
         Err(e) => warn!("Getting clients failed with {:?}", e),
     }
 }
@@ -203,7 +205,7 @@ pub fn watch(
     let id_from_ip = ret.ip_to_id;
     let destinations = get_babel_info(routes, our_id, id_from_ip);
 
-    let counters = match KI.read_wg_counters("wg_exit") {
+    let counters = match KI.read_wg_counters(LEGACY_INTERFACE) {
         Ok(res) => res,
         Err(e) => {
             warn!(
@@ -214,7 +216,7 @@ pub fn watch(
         }
     };
 
-    let new_counters = match KI.read_wg_counters("wg_exit_v2") {
+    let new_counters = match KI.read_wg_counters(EXIT_INTERFACE) {
         Ok(res) => res,
         Err(e) => {
             warn!(
