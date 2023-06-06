@@ -665,26 +665,53 @@ pub fn enforce_exit_clients(
                     Ok(IpAddr::V4(ip)) => {
                         if debt_entry.payment_details.action == DebtAction::SuspendTunnel {
                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
-                            // create ipv4 and ipv6 flows, which are used to classify traffic, we can then limit the class specifically
-                            if let Err(e) = KI.create_flow_by_ip(LEGACY_INTERFACE, ip) {
-                                error!("Failed to setup flow for {} {:?}", LEGACY_INTERFACE, e);
-                            }
-                            if let Err(e) = KI.create_flow_by_ip(EXIT_INTERFACE, ip) {
-                                error!("Failed to setup flow for {} {:?}", EXIT_INTERFACE, e);
-                            }
-                            // gets the client ipv6 flow for this exit specifically
-                            let client_ipv6 = get_client_ipv6(client);
-                            if let Ok(Some(client_ipv6)) = client_ipv6 {
-                                if let Err(e) =
-                                    KI.create_flow_by_ipv6(EXIT_INTERFACE, client_ipv6, ip)
-                                {
-                                    error!(
-                                        "Failed to setup ipv6 flow for {} {:?}",
-                                        EXIT_INTERFACE, e
+
+                            // setup flows this allows us to classify traffic we then limit the class, we delete the class as part of unenforcment but it's difficult to delete the flows
+                            // so a user who has been enforced and unenforced while the exit has been online may already have them setup
+                            match (
+                                KI.has_flow(ip, EXIT_INTERFACE),
+                                KI.has_flow(ip, LEGACY_INTERFACE),
+                            ) {
+                                (Ok(true), Ok(true)) => {
+                                    info!("Not repeating flow setup for {}", client.wg_pubkey)
+                                }
+                                // in any case of partial setup try again
+                                (Ok(false), Ok(false))
+                                | (Ok(true), Ok(false))
+                                | (Ok(false), Ok(true)) => {
+                                    // create ipv4 and ipv6 flows, which are used to classify traffic, we can then limit the class specifically
+                                    if let Err(e) = KI.create_flow_by_ip(LEGACY_INTERFACE, ip) {
+                                        error!(
+                                            "Failed to setup flow for {} {:?}",
+                                            LEGACY_INTERFACE, e
+                                        );
+                                    }
+                                    if let Err(e) = KI.create_flow_by_ip(EXIT_INTERFACE, ip) {
+                                        error!(
+                                            "Failed to setup flow for {} {:?}",
+                                            EXIT_INTERFACE, e
+                                        );
+                                    }
+                                    // gets the client ipv6 flow for this exit specifically
+                                    let client_ipv6 = get_client_ipv6(client);
+                                    if let Ok(Some(client_ipv6)) = client_ipv6 {
+                                        if let Err(e) =
+                                            KI.create_flow_by_ipv6(EXIT_INTERFACE, client_ipv6, ip)
+                                        {
+                                            error!(
+                                                "Failed to setup ipv6 flow for {} {:?}",
+                                                EXIT_INTERFACE, e
+                                            );
+                                        }
+                                    }
+                                    info!(
+                                        "Completed one time enforcement flow setup for {}",
+                                        client.wg_pubkey
                                     );
                                 }
+                                (_, Err(e)) => error!("Failed to get flow status with {:?}", e),
+                                (Err(e), _) => error!("Failed to get flow status with {:?}", e),
                             }
-
                             if let Err(e) =
                                 KI.set_class_limit("wg_exit", free_tier_limit, free_tier_limit, ip)
                             {
@@ -707,13 +734,18 @@ pub fn enforce_exit_clients(
                         } else {
                             // Delete exisiting enforcement class, users who are not enforced are unclassifed becuase
                             // leaving the class in place reduces their speeds.
-                            info!("Deleting enforcement classes for {}", client.wg_pubkey);
-                            if let Err(e) = KI.delete_class(LEGACY_INTERFACE, ip) {
-                                error!("Unable to delete class on {}, is {} still enforced when they shouldnt be? {:?}", LEGACY_INTERFACE, ip, e);
+                            if let Ok(true) = KI.has_class(ip, LEGACY_INTERFACE) {
+                                info!("Deleting enforcement classes for {}", client.wg_pubkey);
+                                if let Err(e) = KI.delete_class(LEGACY_INTERFACE, ip) {
+                                    error!("Unable to delete class on {}, is {} still enforced when they shouldnt be? {:?}", LEGACY_INTERFACE, ip, e);
+                                }
                             }
 
-                            if let Err(e) = KI.delete_class(EXIT_INTERFACE, ip) {
-                                error!("Unable to delete class on {}, is {} still enforced when they shouldnt be? {:?}", EXIT_INTERFACE, ip, e);
+                            if let Ok(true) = KI.has_class(ip, EXIT_INTERFACE) {
+                                info!("Deleting enforcement classes for {}", client.wg_pubkey);
+                                if let Err(e) = KI.delete_class(EXIT_INTERFACE, ip) {
+                                    error!("Unable to delete class on {}, is {} still enforced when they shouldnt be? {:?}", EXIT_INTERFACE, ip, e);
+                                }
                             }
                         };
                     }
