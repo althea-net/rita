@@ -242,7 +242,7 @@ impl dyn KernelInterface {
                 "default",
                 "0",
                 "r2q",
-                "2",
+                "1",
                 "direct_qlen",
                 "100000",
             ],
