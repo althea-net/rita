@@ -1,6 +1,5 @@
 use crate::blockchain_oracle::update as BlockchainOracleUpdate;
 use crate::debt_keeper::send_debt_update;
-use crate::eth_compatible_withdraw;
 use crate::handle_shaping;
 use crate::network_monitor::update_network_info;
 use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
@@ -15,7 +14,7 @@ use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_neighs;
 use babel_monitor::parse_routes;
-use futures::future::join4;
+use futures::future::join3;
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -99,11 +98,8 @@ pub fn start_rita_fast_loop() {
                     // the same reason as the validate code, during high throughput periods
                     // payments must be sent quickly to avoid enforcement
                     let tpc = tick_payment_controller();
-                    // processes user withdraw requests from the dashboard, only needed until we
-                    // migrate our endpoints to async/await
-                    let ecw = eth_compatible_withdraw();
                     // execute the above in parallel
-                    join4(bou, val, tpc, ecw).await;
+                    join3(bou, val, tpc).await;
                 });
                 info!(
                     "Common Fast tick completed in {}s {}ms",

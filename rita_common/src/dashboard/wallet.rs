@@ -10,26 +10,13 @@ use actix_web_async::HttpResponse;
 use althea_types::SystemChain;
 use clarity::Address;
 use num256::Uint256;
-use std::sync::Arc;
-use std::sync::RwLock;
 use std::time::Duration;
 use web30::client::Web3;
 use web30::types::SendTxOption;
 
-// this is required until we migrate our endpoints to async actix
-// this way we can queue a withdraw from the old futures endpoint
-// and then process it in a async/await compatible environment and use
-// the newer web30 now required by eip1550
-// only one withdraw can be queued at a time, this is only for direct withdraws
-// bridge operations go over to the auto_bridge module
-lazy_static! {
-    static ref WITHDRAW_QUEUE: Arc<RwLock<Option<(Address, Uint256)>>> =
-        Arc::new(RwLock::new(None));
-}
-
 pub const WITHDRAW_TIMEOUT: Duration = Duration::from_secs(10);
 
-fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
+async fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
     debug!("/withdraw/{:#x}/{:?} hit", address, amount);
     let payment_settings = settings::get_rita_common().payment;
     let system_chain = payment_settings.system_chain;
@@ -69,12 +56,12 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
 
     match (system_chain, withdraw_chain) {
         (SystemChain::Ethereum, SystemChain::Ethereum) => {
-            queue_eth_compatible_withdraw(address, amount)
+            eth_compatible_withdraw(address, amount).await
         }
         (SystemChain::Rinkeby, SystemChain::Rinkeby) => {
-            queue_eth_compatible_withdraw(address, amount)
+            eth_compatible_withdraw(address, amount).await
         }
-        (SystemChain::Xdai, SystemChain::Xdai) => queue_eth_compatible_withdraw(address, amount),
+        (SystemChain::Xdai, SystemChain::Xdai) => eth_compatible_withdraw(address, amount).await,
         (SystemChain::Xdai, SystemChain::Ethereum) => xdai_to_eth_withdraw(address, amount),
         (_, _) => HttpResponse::build(StatusCode::from_u16(500u16).unwrap()).json(format!(
             "System chain is {system_chain} but withdraw chain is {withdraw_chain}, withdraw impossible!"
@@ -83,55 +70,38 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
 }
 
 pub async fn withdraw(path: Path<(Address, Uint256)>) -> HttpResponse {
-    withdraw_handler(path.0, Some(path.1))
+    withdraw_handler(path.0, Some(path.1)).await
 }
 
 pub async fn withdraw_all(path: Path<Address>) -> HttpResponse {
     let address = path.into_inner();
     debug!("/withdraw_all/{} hit", address);
-    withdraw_handler(address, None)
-}
-
-fn queue_eth_compatible_withdraw(address: Address, amount: Uint256) -> HttpResponse {
-    let mut writer = WITHDRAW_QUEUE.write().unwrap();
-    *writer = Some((address, amount));
-    HttpResponse::build(StatusCode::OK).json("Withdraw queued")
-}
-
-fn get_withdraw_queue() -> Option<(Address, Uint256)> {
-    *WITHDRAW_QUEUE.write().unwrap()
-}
-
-fn set_withraw_queue(set: Option<(Address, Uint256)>) {
-    *WITHDRAW_QUEUE.write().unwrap() = set;
+    withdraw_handler(address, None).await
 }
 
 /// Withdraw for eth compatible chains, pulls from the queued withdraw
 /// and executes it
-pub async fn eth_compatible_withdraw() {
+pub async fn eth_compatible_withdraw(dest: Address, amount: Uint256) -> HttpResponse {
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, WITHDRAW_TIMEOUT);
     let payment_settings = settings::get_rita_common().payment;
 
-    if let Some((dest, amount)) = get_withdraw_queue() {
-        let transaction_status = web3
-            .send_transaction(
-                dest,
-                Vec::new(),
-                amount,
-                payment_settings.eth_private_key.unwrap(),
-                vec![
-                    SendTxOption::Nonce(get_oracle_nonce()),
-                    SendTxOption::GasPrice(get_oracle_latest_gas_price()),
-                ],
-            )
-            .await;
-        if let Err(e) = transaction_status {
-            error!("Withdraw failed with {:?} retrying later!", e);
-        } else {
-            info!("Successful withdraw of {} to {}", amount, dest);
-            set_withraw_queue(None);
-        }
+    let transaction_status = web3
+        .send_transaction(
+            dest,
+            Vec::new(),
+            amount,
+            payment_settings.eth_private_key.unwrap(),
+            vec![
+                SendTxOption::Nonce(get_oracle_nonce()),
+                SendTxOption::GasPrice(get_oracle_latest_gas_price()),
+            ],
+        )
+        .await;
+    if let Err(e) = transaction_status {
+        HttpResponse::InternalServerError().json(format!("Withdraw failed with {:?} try again!", e))
+    } else {
+        HttpResponse::Ok().json(format!("Successful withdraw of {} to {}", amount, dest))
     }
 }
 
