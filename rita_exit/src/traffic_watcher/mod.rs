@@ -8,12 +8,10 @@
 //!
 //! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
 
-use rita_common::debt_keeper::traffic_update;
-use rita_common::debt_keeper::Traffic;
-use rita_common::usage_tracker::update_usage_data;
-use rita_common::usage_tracker::UpdateUsage;
-use rita_common::usage_tracker::UsageType;
-
+use crate::rita_loop::ExitLock;
+use crate::rita_loop::EXIT_INTERFACE;
+use crate::rita_loop::LEGACY_INTERFACE;
+use crate::RitaExitError;
 use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::KI;
@@ -21,38 +19,13 @@ use althea_types::Identity;
 use althea_types::WgKey;
 use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;
+use rita_common::debt_keeper::traffic_update;
+use rita_common::debt_keeper::Traffic;
+use rita_common::usage_tracker::update_usage_data;
+use rita_common::usage_tracker::UpdateUsage;
+use rita_common::usage_tracker::UsageType;
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::Arc;
-use std::sync::RwLock;
-
-use crate::rita_loop::EXIT_INTERFACE;
-use crate::rita_loop::LEGACY_INTERFACE;
-use crate::RitaExitError;
-
-lazy_static! {
-    static ref TRAFFIC_WATCHER: Arc<RwLock<TrafficWatcher>> =
-        Arc::new(RwLock::new(TrafficWatcher::default()));
-}
-
-#[derive(Default)]
-pub struct TrafficWatcher {
-    last_seen_bytes: HashMap<WgKey, WgUsage>,
-}
-
-pub struct Watch {
-    pub users: Vec<Identity>,
-    pub routes: Vec<Route>,
-}
-
-pub fn watch_exit_traffic(msg: Watch) -> Result<(), Box<RitaExitError>> {
-    let traffic_watcher = &mut *TRAFFIC_WATCHER.write().unwrap();
-    watch(
-        &mut traffic_watcher.last_seen_bytes,
-        &msg.routes,
-        &msg.users,
-    )
-}
 
 fn get_babel_info(
     routes: &[Route],
@@ -176,11 +149,13 @@ fn debts_logging(debts: &HashMap<Identity, i128>) {
 }
 
 /// This traffic watcher watches how much traffic each we send and receive from each client.
-pub fn watch(
-    usage_history: &mut HashMap<WgKey, WgUsage>,
+pub fn watch_exit_traffic(
+    usage_history: ExitLock,
     routes: &[Route],
     clients: &[Identity],
 ) -> Result<(), Box<RitaExitError>> {
+    let mut usage_history = usage_history.write().unwrap();
+
     // Since Althea is a pay per forward network we must add a surcharge for transaction fees
     // to our own price. In the case Exit -> A -> B -> C the exit pays A a lump sum for it's own
     // fees as well as B's fees. This means the exit pays the transaction fee (a percentage) for
@@ -240,9 +215,9 @@ pub fn watch(
     trace!("merged counters are : {:?}", counters);
 
     // creates new usage entires does not actualy update the values
-    prepare_usage_history(&counters, usage_history);
+    prepare_usage_history(&counters, &mut usage_history);
 
-    counters_logging(&counters, usage_history, our_price as u32);
+    counters_logging(&counters, &mut usage_history, our_price as u32);
 
     // accounting for 'input'
     for (wg_key, bytes) in counters.clone() {

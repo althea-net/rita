@@ -17,9 +17,10 @@ use crate::database::{
     cleanup_exit_clients, enforce_exit_clients, setup_clients, validate_clients_region,
     ExitClientSetupStates,
 };
-use crate::traffic_watcher::{watch_exit_traffic, Watch};
+use crate::traffic_watcher::watch_exit_traffic;
 use actix_async::System as AsyncSystem;
 use actix_web_async::{web, App, HttpServer};
+use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::ExitClient;
 use althea_types::{Identity, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
@@ -30,7 +31,8 @@ use exit_db::schema::clients::internet_ipv6;
 use rita_common::debt_keeper::DebtAction;
 use settings::{get_rita_exit, set_rita_exit, write_config};
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
@@ -64,27 +66,34 @@ pub struct RitaExitCache {
     wg_exit_v2_clients: HashSet<WgKey>,
 }
 
+pub type ExitLock = Arc<RwLock<HashMap<WgKey, WgUsage>>>;
+
 /// Starts the rita exit billing thread, this thread deals with blocking db
 /// calls and performs various tasks required for billing. The tasks interacting
 /// with actix are the most troublesome because the actix system may restart
 /// and crash this thread. To prevent that and other crashes we have a watchdog
 /// thread which simply restarts the billing.
-/// TODO remove futures on the non http endpoint / actix parts of this
-/// TODO remove futures on the actix parts of this by moving to thread local state
 pub fn start_rita_exit_loop() {
     setup_exit_wg_tunnel();
     let mut last_restart = Instant::now();
+
+    // the last usage of the wg tunnels, if an innner thread restarts this must be preserved to prevent
+    // overbilling users
+    let usage_history = Arc::new(RwLock::new(HashMap::new()));
+
     // outer thread is a watchdog, inner thread is the runner
     thread::spawn(move || {
         // this will always be an error, so it's really just a loop statement
         // with some fancy destructuring
         while let Err(e) = {
+            // ARC will simply clone the same reference
+            let usage_history = usage_history.clone();
             thread::spawn(move || {
                 // Internal exit cache that store state across multiple ticks
                 let mut rita_exit_cache = RitaExitCache::default();
 
                 loop {
-                    rita_exit_cache = rita_exit_loop(rita_exit_cache);
+                    rita_exit_cache = rita_exit_loop(rita_exit_cache, usage_history.clone());
                 }
             })
             .join()
@@ -100,7 +109,7 @@ pub fn start_rita_exit_loop() {
     });
 }
 
-fn rita_exit_loop(rita_exit_cache: RitaExitCache) -> RitaExitCache {
+fn rita_exit_loop(rita_exit_cache: RitaExitCache, usage_history: ExitLock) -> RitaExitCache {
     let mut rita_exit_cache = rita_exit_cache;
     let start = Instant::now();
     // opening a database connection takes at least several milliseconds, as the database server
@@ -131,7 +140,7 @@ fn rita_exit_loop(rita_exit_cache: RitaExitCache) -> RitaExitCache {
 
                 let start_bill = Instant::now();
                 // watch and bill for traffic
-                bill(babel_port, start, ids);
+                bill(babel_port, start, ids, usage_history);
                 info!(
                     "Finished Rita billing in {}ms",
                     start_bill.elapsed().as_millis()
@@ -219,14 +228,14 @@ fn rita_exit_loop(rita_exit_cache: RitaExitCache) -> RitaExitCache {
     rita_exit_cache
 }
 
-fn bill(babel_port: u16, start: Instant, ids: Vec<Identity>) {
+fn bill(babel_port: u16, start: Instant, ids: Vec<Identity>, usage_history: ExitLock) {
     trace!("about to try opening babel stream");
 
     match open_babel_stream(babel_port, EXIT_LOOP_TIMEOUT) {
         Ok(mut stream) => match parse_routes(&mut stream) {
             Ok(routes) => {
                 trace!("Sending traffic watcher message?");
-                if let Err(e) = watch_exit_traffic(Watch { users: ids, routes }) {
+                if let Err(e) = watch_exit_traffic(usage_history, &routes, &ids) {
                     error!(
                         "Watch exit traffic failed with {}, in {} millis",
                         e,
