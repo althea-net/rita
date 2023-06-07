@@ -9,7 +9,6 @@ use crate::peer_listener::peerlistener_tick;
 use crate::traffic_watcher::watch;
 use crate::tunnel_manager::contact_peers::tm_contact_peers;
 use crate::tunnel_manager::tm_get_neighbors;
-use crate::update_neighbor_status;
 use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_neighs;
@@ -83,7 +82,6 @@ pub fn start_rita_fast_loop() {
                         warn!("Debt keeper update failed! {:?}", e);
                     }
 
-                    update_neighbor_status();
                     handle_shaping();
 
                     // updating blockchain info often is easier than dealing with edge cases

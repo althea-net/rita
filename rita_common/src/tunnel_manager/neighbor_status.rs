@@ -3,25 +3,13 @@ use super::PaymentState;
 use althea_types::Identity;
 use althea_types::NeighborStatus;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 
-lazy_static! {
-    static ref NEIGHBOR_STATUS: Arc<RwLock<HashMap<Identity, NeighborStatus>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-}
-
-/// A cross thread accessible object representing the status of a given interface, this is not perfect as it's
+/// A cross thread accessible function representing the status of a given interface, this is not perfect as it's
 /// a mapping by identity, meaning that if a given id has multiple tunnels using different shaped speeds it may not
 /// paint the full picture, that being said my observation is that this never seems to be the case, I can of course be wrong
-#[allow(dead_code)]
 pub fn get_neighbor_status() -> HashMap<Identity, NeighborStatus> {
-    NEIGHBOR_STATUS.read().unwrap().clone()
-}
-
-/// Handles updates to neighbor status with lazy static lock
-pub fn update_neighbor_status() {
     let tunnel_manager = get_tunnel_manager();
-    let mut external_list = NEIGHBOR_STATUS.write().unwrap();
+    let mut external_list = HashMap::new();
     for (id, tunnel_list) in tunnel_manager.tunnels.iter() {
         // we may have many tunnels with this same peer, we want to get
         // the lowest shaper value of any of the recently active tunnels
@@ -52,4 +40,5 @@ pub fn update_neighbor_status() {
             },
         );
     }
+    external_list
 }
