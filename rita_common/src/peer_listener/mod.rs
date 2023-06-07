@@ -11,12 +11,6 @@ pub mod message;
 use self::message::PeerMessage;
 use self::structs::Hello;
 use self::structs::Peer;
-use crate::peer_listener::structs::add_interface;
-use crate::peer_listener::structs::add_interface_map;
-use crate::peer_listener::structs::add_peer;
-use crate::peer_listener::structs::get_interfaces;
-use crate::peer_listener::structs::get_pl_copy;
-use crate::peer_listener::structs::remove_interface;
 use crate::peer_listener::structs::PeerListener;
 use crate::tm_identity_callback;
 use crate::IdentityCallback;
@@ -29,17 +23,16 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 pub mod structs;
 
 /// Creates a listen interface on all interfaces in the peer_interfaces hashmap.
-fn listen_to_available_ifaces() {
+fn listen_to_available_ifaces(pl_interfaces: &mut HashMap<String, ListenInterface>) {
     info!("PEER LISTENER: starting to listen to interfaces");
     let interfaces = settings::get_rita_common().network.peer_interfaces;
     let iface_list = interfaces;
     for iface in iface_list.iter() {
-        let interfaces = get_interfaces();
-        if !interfaces.contains_key(iface) {
+        if !pl_interfaces.contains_key(iface) {
             match ListenInterface::new(iface) {
                 Ok(new_listen_interface) => {
                     info!("Added interface: {:?} to interfaces list", iface);
-                    add_interface(new_listen_interface.ifname.clone(), new_listen_interface);
+                    pl_interfaces.insert(new_listen_interface.ifname.clone(), new_listen_interface);
                 }
                 Err(e) => {
                     error!(
@@ -53,49 +46,48 @@ fn listen_to_available_ifaces() {
 
     trace!(
         "PEER LISTENER: Done listening, Our interface list looks like : {:?}",
-        get_interfaces()
+        pl_interfaces
     );
 }
 
 /// Ticks the peer listener module sending ImHere messages and receiving Hello messages from all
 /// peers over UDP
-pub fn peerlistener_tick() -> PeerListener {
+pub fn peerlistener_tick(mut pl: PeerListener) -> PeerListener {
     trace!("Starting PeerListener tick!");
-
-    let pl = get_pl_copy();
     trace!("Received the PL struct: {:?}", pl);
-    let mut interfaces = get_interfaces();
 
-    send_im_here(&mut interfaces);
-    let (a, b) = receive_im_here(&mut interfaces);
+    send_im_here(&mut pl.interfaces);
+    let (a, b) = receive_im_here(&mut pl.interfaces);
     {
         for (ip, peer) in a {
-            add_peer(ip, peer);
+            pl.peers.insert(ip, peer);
         }
         for (socket, iface) in b {
-            add_interface_map(socket, iface)
+            pl.interface_map.insert(socket, iface);
         }
     }
-    receive_hello();
-    listen_to_available_ifaces();
+    receive_hello(&mut pl);
+    listen_to_available_ifaces(&mut pl.interfaces);
 
-    let pl = get_pl_copy();
+    check_and_unlisten_interfaces(&mut pl);
+
     trace!("We set the PL struct to : {:?}", pl);
     pl
 }
 
-#[allow(dead_code)]
-pub fn unlisten_interface(interface: String) {
-    info!("Peerlistener unlisten on {:?}", interface);
-    let ifname_to_delete = interface;
-    let pl = get_pl_copy();
-    if pl.interfaces.contains_key(&ifname_to_delete) {
-        remove_interface(ifname_to_delete.clone());
-        let mut common = settings::get_rita_common();
-        common.network.peer_interfaces.remove(&ifname_to_delete);
-        settings::set_rita_common(common);
-    } else {
-        error!("Tried to unlisten interface that's not present!")
+/// Checks the current rita settings for interfaces we are listening on that are no longer configured as mesh interfaces
+/// this may happen during port toggling
+pub fn check_and_unlisten_interfaces(pl: &mut PeerListener) {
+    let settings_interfaces = settings::get_rita_common().network.peer_interfaces;
+    let mut to_remove = Vec::new();
+    for (pl_iface, _) in pl.interfaces.iter() {
+        if !settings_interfaces.contains(pl_iface) {
+            info!("Peerlistener unlisten on {:?}", pl_iface);
+            to_remove.push(pl_iface.clone());
+        }
+    }
+    for i in to_remove {
+        pl.interfaces.remove(&i);
     }
 }
 
@@ -271,10 +263,9 @@ pub fn send_hello(
 }
 
 /// receive UDP hello messages over IPV6 link local ports
-pub fn receive_hello() {
+pub fn receive_hello(pl: &mut PeerListener) {
     info!("Receiving Hellos");
-    let interfaces = get_interfaces();
-    for obj in interfaces {
+    for obj in pl.interfaces.iter() {
         let listen_interface = obj.1;
 
         //datagrams are larger than im here, so buffer is larger
@@ -305,7 +296,8 @@ pub fn receive_hello() {
                 ifidx: listen_interface.ifidx,
             };
 
-            add_interface_map(sock_addr, listen_interface.ifname.clone());
+            pl.interface_map
+                .insert(sock_addr, listen_interface.ifname.clone());
 
             let encoded_msg = datagram.to_vec();
             match PeerMessage::decode(&encoded_msg) {

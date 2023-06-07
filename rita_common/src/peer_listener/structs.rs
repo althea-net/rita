@@ -1,25 +1,10 @@
+use super::ListenInterface;
+use althea_types::LocalIdentity;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::net::Ipv6Addr;
 use std::net::SocketAddr;
 use std::net::SocketAddrV6;
-use std::sync::Arc;
-use std::sync::RwLock;
-
-use althea_types::LocalIdentity;
-
-use crate::RitaCommonError;
-use crate::KI;
-
-use super::ListenInterface;
-
-lazy_static! {
-    pub static ref PEER_LISTENER: Arc<RwLock<HashMap<String, PeerListener>>> =
-        Arc::new(RwLock::new(HashMap::from([(
-            "default".to_string(),
-            PeerListener::default()
-        )])));
-}
 
 #[derive(Debug)]
 pub struct PeerListener {
@@ -72,17 +57,17 @@ impl Peer {
 
 impl Default for PeerListener {
     fn default() -> PeerListener {
-        PeerListener::new().unwrap()
+        PeerListener::new()
     }
 }
 
 impl PeerListener {
-    pub fn new() -> Result<PeerListener, RitaCommonError> {
-        Ok(PeerListener {
+    pub fn new() -> PeerListener {
+        PeerListener {
             interfaces: HashMap::new(),
             peers: HashMap::new(),
             interface_map: HashMap::new(),
-        })
+        }
     }
 }
 
@@ -128,96 +113,4 @@ impl Clone for PeerListener {
             interface_map: self.interface_map.clone(),
         }
     }
-}
-
-/// Returns a copy of PL lazy static var based on what namespace we are in
-pub fn get_pl_copy() -> PeerListener {
-    let key = get_key();
-    let pl = PEER_LISTENER.read().unwrap().clone();
-    let tmp = pl.get(&key);
-    match tmp {
-        Some(pl) => pl.to_owned(),
-        None => {
-            // we should never get here in prod as the default is created in the initialization, but this is a failsafe either way...
-            add_pl();
-            PeerListener::default()
-        }
-    }
-}
-
-/// Adds a new pl to the pl lazy static. Use only to initialize a default
-pub fn add_pl() {
-    let key = get_key();
-    let pl = PeerListener::default();
-    PEER_LISTENER.write().unwrap().insert(key, pl);
-}
-
-pub fn get_key() -> String {
-    match KI.get_namespace() {
-        Some(string) => string,
-        None => "default".to_string(),
-    }
-}
-
-pub fn get_interfaces() -> HashMap<String, ListenInterface> {
-    let key = get_key();
-    PEER_LISTENER
-        .read()
-        .unwrap()
-        .get(&key)
-        .unwrap()
-        .clone()
-        .interfaces
-}
-pub fn get_interface_map() -> HashMap<SocketAddr, String> {
-    let key = get_key();
-    PEER_LISTENER
-        .read()
-        .unwrap()
-        .get(&key)
-        .unwrap()
-        .clone()
-        .interface_map
-}
-/// add or update an interface in the map
-pub fn add_interface(name: String, listen_iterface: ListenInterface) {
-    let key = get_key();
-    PEER_LISTENER
-        .write()
-        .unwrap()
-        .get_mut(&key)
-        .unwrap()
-        .interfaces
-        .insert(name, listen_iterface);
-}
-/// remove an interface in the map
-pub fn remove_interface(name: String) {
-    let key = get_key();
-    PEER_LISTENER
-        .write()
-        .unwrap()
-        .get_mut(&key)
-        .unwrap()
-        .interfaces
-        .remove(&name);
-}
-pub fn add_peer(ip: IpAddr, peer: Peer) {
-    let key = get_key();
-    PEER_LISTENER
-        .write()
-        .unwrap()
-        .get_mut(&key)
-        .unwrap()
-        .peers
-        .insert(ip, peer);
-}
-pub fn add_interface_map(socket: SocketAddr, iface: String) {
-    let key = get_key();
-    PEER_LISTENER
-        .write()
-        .unwrap()
-        .get_mut(&key)
-        .unwrap()
-        .interface_map
-        .insert(socket, iface);
 }

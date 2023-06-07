@@ -6,6 +6,7 @@ use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::payment_controller::tick_payment_controller;
 use crate::payment_validator::validate;
 use crate::peer_listener::peerlistener_tick;
+use crate::peer_listener::structs::PeerListener;
 use crate::traffic_watcher::watch;
 use crate::tunnel_manager::contact_peers::tm_contact_peers;
 use crate::tunnel_manager::tm_get_neighbors;
@@ -129,39 +130,42 @@ pub fn peer_discovery_loop() {
         // this will always be an error, so it's really just a loop statement
         // with some fancy destructuring
         while let Err(e) = {
-            thread::spawn(move || loop {
-                let start = Instant::now();
-                info!("Common peer discovery tick!");
+            thread::spawn(move || {
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
-                    let measure_tick = Instant::now();
-                    info!("Starting PeerListener tick");
+                    let mut pl = PeerListener::new();
+                    loop {
+                        let start = Instant::now();
+                        info!("Common peer discovery tick!");
+                        let measure_tick = Instant::now();
+                        info!("Starting PeerListener tick");
 
-                    let pl_copy = peerlistener_tick();
+                        pl = peerlistener_tick(pl);
 
-                    info!(
-                        "PeerListener tick completed in {}s {}ms",
-                        measure_tick.elapsed().as_secs(),
-                        measure_tick.elapsed().subsec_millis(),
-                    );
+                        info!(
+                            "PeerListener tick completed in {}s {}ms",
+                            measure_tick.elapsed().as_secs(),
+                            measure_tick.elapsed().subsec_millis(),
+                        );
 
-                    info!("Starting TM contact peers");
-                    // Contact manual peers
-                    tm_contact_peers(pl_copy).await;
-                    info!("Done contacting peers");
-                });
+                        info!("Starting TM contact peers");
+                        // Contact manual peers
+                        tm_contact_peers(&pl).await;
+                        info!("Done contacting peers");
 
-                // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
-                // if it has been more than FAST_LOOP_SPEED seconds from start, go right ahead
-                info!("Peer Listener loop elapsed in = {:?}", start.elapsed());
-                if start.elapsed() < FAST_LOOP_SPEED {
-                    info!(
-                        "Peer listener sleeping for {:?}",
-                        FAST_LOOP_SPEED - start.elapsed()
-                    );
-                    thread::sleep(FAST_LOOP_SPEED - start.elapsed());
-                }
-                info!("Peer Listener sleeping Done!");
+                        // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
+                        // if it has been more than FAST_LOOP_SPEED seconds from start, go right ahead
+                        info!("Peer Listener loop elapsed in = {:?}", start.elapsed());
+                        if start.elapsed() < FAST_LOOP_SPEED {
+                            info!(
+                                "Peer listener sleeping for {:?}",
+                                FAST_LOOP_SPEED - start.elapsed()
+                            );
+                            thread::sleep(FAST_LOOP_SPEED - start.elapsed());
+                        }
+                        info!("Peer Listener sleeping Done!");
+                    }
+                })
             })
             .join()
         } {

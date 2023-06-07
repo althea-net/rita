@@ -2,7 +2,6 @@
 use actix_web_async::http::StatusCode;
 use actix_web_async::web::Path;
 use actix_web_async::{web::Json, HttpRequest, HttpResponse};
-use rita_common::peer_listener::unlisten_interface;
 use rita_common::{RitaCommonError, KI};
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
@@ -218,7 +217,8 @@ fn multiset_interfaces(
     }
 
     trace!("Successfully transformed ethernet mode, rebooting");
-    // reboot has been moved here to avoid doing it after every interface
+    // reboot has been moved here to avoid doing it after every interface, in theory we could do this without rebooting
+    // and some attention has been paid to maintaining that possibility
     KI.run_command("reboot", &[])?;
     Ok(())
 }
@@ -276,11 +276,9 @@ pub fn ethernet_transform_mode(
             let ret = KI.set_uci_var("network.lan.ifname", &new_list);
             return_codes.push(ret);
         }
-        // for mesh we need to send an unlisten so that Rita stops
-        // listening then we can remove the section, we also need to remove it
-        // from the config
+        // remove the section from the network and rita config, peer listener watches this setting
+        // and will yank these interfaces from active listening
         InterfaceMode::Mesh => {
-            unlisten_interface(ifname.to_string());
             network.peer_interfaces.remove(ifname);
 
             let ret = KI.del_uci_var(&filtered_ifname);

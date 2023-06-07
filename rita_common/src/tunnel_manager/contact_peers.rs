@@ -187,7 +187,7 @@ pub fn tm_neighbor_inquiry_udp_peer(peer: &Peer, pl: &PeerListener) -> Result<()
 /// takes a list of peers to contact and dispatches UDP hello messages to peers discovered via IPv6 link local
 /// multicast peer discovery, also sends http hello messages to manual peers, only resolves manual peers with
 /// hostnames if the devices is detected to be a gateway.
-pub async fn tm_contact_peers(pl: PeerListener) {
+pub async fn tm_contact_peers(pl: &PeerListener) {
     let network_settings = settings::get_rita_common().network;
     let manual_peers = network_settings.manual_peers.clone();
     let is_gateway = is_gateway();
@@ -200,7 +200,7 @@ pub async fn tm_contact_peers(pl: PeerListener) {
     let mut manual_peers_dns_fut = Vec::new();
     for (_, peer) in pl.peers.iter() {
         trace!("contacting peer found by UDP {:?}", peer);
-        if let Err(e) = tm_neighbor_inquiry_udp_peer(peer, &pl) {
+        if let Err(e) = tm_neighbor_inquiry_udp_peer(peer, pl) {
             error!("Neighbor inqury for {} failed with: {:?}", peer.ifidx, e);
         }
     }
