@@ -1,3 +1,4 @@
+use super::get_tunnel_manager_write_ref;
 use super::TUNNEL_MANAGER;
 use crate::KI;
 use std::sync::Arc;
@@ -50,7 +51,8 @@ pub fn handle_shaping() {
     // removes shaping without requiring a restart if the flag is set or
     // if it's set in the settings
     if !bandwidth_limit_enabled || shaper.reset_flag {
-        let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
+        let tm_pin = &mut *TUNNEL_MANAGER.write().unwrap();
+        let tunnel_manager = get_tunnel_manager_write_ref(tm_pin);
         for (_id, tunnel_list) in tunnel_manager.tunnels.iter_mut() {
             for tunnel in tunnel_list {
                 if tunnel.speed_limit.is_some() {
@@ -66,7 +68,8 @@ pub fn handle_shaping() {
     for shaping_command in &shaper.to_shape {
         let action = shaping_command.action;
         let iface = &shaping_command.iface;
-        let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
+        let tm_pin = &mut *TUNNEL_MANAGER.write().unwrap();
+        let tunnel_manager = get_tunnel_manager_write_ref(tm_pin);
         for (id, tunnel_list) in tunnel_manager.tunnels.iter_mut() {
             for tunnel in tunnel_list {
                 if &tunnel.iface_name == iface {

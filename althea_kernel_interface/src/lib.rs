@@ -44,6 +44,7 @@ mod is_openwrt;
 mod link_local_tools;
 mod manipulate_uci;
 mod netfilter;
+pub mod netns;
 pub mod open_tunnel;
 mod openwrt_ubus;
 pub mod opkg_feeds;

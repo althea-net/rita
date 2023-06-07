@@ -217,7 +217,7 @@ pub fn watch_exit_traffic(
     // creates new usage entires does not actualy update the values
     prepare_usage_history(&counters, &mut usage_history);
 
-    counters_logging(&counters, &mut usage_history, our_price as u32);
+    counters_logging(&counters, &usage_history, our_price as u32);
 
     // accounting for 'input'
     for (wg_key, bytes) in counters.clone() {

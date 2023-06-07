@@ -8,6 +8,7 @@ extern crate lazy_static;
 extern crate serde_derive;
 
 pub mod dashboard;
+mod error;
 pub mod exit_manager;
 pub mod extender;
 pub mod heartbeat;
@@ -16,11 +17,9 @@ pub mod operator_fee_manager;
 pub mod operator_update;
 pub mod rita_loop;
 pub mod traffic_watcher;
-
-mod error;
 pub use error::RitaClientError;
-
 use rita_common::READABLE_VERSION;
+use std::path::PathBuf;
 
 pub use crate::dashboard::auth::*;
 pub use crate::dashboard::backup_created::*;
@@ -49,7 +48,7 @@ use settings::client::{default_config_path, APP_NAME};
 #[derive(Debug, Deserialize)]
 pub struct Args {
     #[serde(default = "default_config_path")]
-    pub flag_config: String,
+    pub flag_config: PathBuf,
     pub flag_platform: String,
     pub flag_future: bool,
 }

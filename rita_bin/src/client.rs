@@ -43,7 +43,6 @@ use rita_common::utils::env_vars_contains;
 use settings::client::RitaClientSettings;
 use settings::save_settings_on_shutdown;
 use settings::FileWrite;
-use std::env;
 
 lazy_static! {
     pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
@@ -75,25 +74,23 @@ fn main() {
     .unwrap_or_else(|e| e.exit());
 
     let settings_file = args.flag_config;
-    println!("Settings file {settings_file}");
+    println!("Settings file {}", settings_file.display());
 
     // load the settings file, setup a thread to save it out every so often
     // and populate the memory cache of settings used throughout the program
     let settings: RitaClientSettings = {
         let platform = &args.flag_platform;
 
-        RitaClientSettings::new_watched(&settings_file).unwrap();
+        RitaClientSettings::new_watched(settings_file.clone()).unwrap();
         let mut s = settings::get_rita_client();
 
-        settings::set_flag_config(settings_file.to_string());
-
-        settings::set_git_hash(env!("GIT_HASH").to_string());
+        settings::set_flag_config(settings_file.clone());
 
         s.set_future(args.flag_future);
 
         let s = clu::init(platform, s);
 
-        s.write(&settings_file).unwrap();
+        s.write(settings_file).unwrap();
         settings::set_rita_client(s.clone());
         println!("Look the client settings! {s:?}");
         s

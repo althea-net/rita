@@ -11,7 +11,7 @@ use deep_space::Address as AltheaAddress;
 use ipnetwork::IpNetwork;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub const APP_NAME: &str = "rita";
 
@@ -25,8 +25,8 @@ pub fn default_save_interval() -> u64 {
     172800
 }
 
-pub fn default_config_path() -> String {
-    format!("/etc/{APP_NAME}.toml")
+pub fn default_config_path() -> PathBuf {
+    format!("/etc/{APP_NAME}.toml").into()
 }
 
 /// This struct represents an exit server cluster, meaning
@@ -176,9 +176,11 @@ impl RitaClientSettings {
         Ok(ret)
     }
 
-    pub fn new_watched(file_name: &str) -> Result<Self, SettingsError> {
-        if !Path::new(file_name).exists() {
-            return Err(SettingsError::FileNotFoundError(file_name.to_string()));
+    pub fn new_watched(file_name: PathBuf) -> Result<Self, SettingsError> {
+        if !file_name.exists() {
+            return Err(SettingsError::FileNotFoundError(
+                file_name.display().to_string(),
+            ));
         }
 
         let config_toml = std::fs::read_to_string(file_name)?;

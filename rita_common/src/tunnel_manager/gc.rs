@@ -1,5 +1,5 @@
 use super::Tunnel;
-use crate::tunnel_manager::TUNNEL_MANAGER;
+use crate::tunnel_manager::{get_tunnel_manager_write_ref, TUNNEL_MANAGER};
 use crate::KI;
 use althea_types::Identity;
 use babel_monitor::structs::Interface;
@@ -27,7 +27,8 @@ pub fn tm_trigger_gc(
     tunnel_handshake_timeout: Duration,
     babel_interfaces: Vec<Interface>,
 ) {
-    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
+    let tm_pin = &mut *TUNNEL_MANAGER.write().unwrap();
+    let tunnel_manager = get_tunnel_manager_write_ref(tm_pin);
 
     let interfaces = into_interfaces_hashmap(&babel_interfaces);
     trace!("Starting tunnel gc {:?}", interfaces);
@@ -235,7 +236,10 @@ fn tunnel_up(interfaces: &HashMap<String, bool>, tunnel_name: &str) -> bool {
             true
         }
     } else {
-        error!("Could not find interface {} in Babel, did monitor fail?", tunnel_name);
+        error!(
+            "Could not find interface {} in Babel, did monitor fail?",
+            tunnel_name
+        );
         true
     }
 }

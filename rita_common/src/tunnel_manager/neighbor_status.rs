@@ -4,7 +4,7 @@ use althea_types::Identity;
 use althea_types::NeighborStatus;
 use std::collections::HashMap;
 
-/// A cross thread accessible function representing the status of a given interface, this is not perfect as it's
+/// A cross thread accessible function for requesting the status of a given interface, this is not perfect as it's
 /// a mapping by identity, meaning that if a given id has multiple tunnels using different shaped speeds it may not
 /// paint the full picture, that being said my observation is that this never seems to be the case, I can of course be wrong
 pub fn get_neighbor_status() -> HashMap<Identity, NeighborStatus> {

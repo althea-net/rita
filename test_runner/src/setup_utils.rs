@@ -837,7 +837,7 @@ pub fn start_postgres() {
     // run diesel migrations
     diesel_migrations::run_pending_migrations_in_directory(
         &conn,
-        &migration_directory,
+        migration_directory,
         &mut stdout(),
     )
     .unwrap();

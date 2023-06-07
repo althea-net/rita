@@ -124,7 +124,7 @@ pub struct Withdraw {
 }
 
 /// Since our withdraw function is async and cannot be called from the previous sync context
-/// we use this function to setup information about the withdrawal in the sync cUint256::from_bytes_be(&[12_u8])ontext. We setup
+/// we use this function to setup information about the withdrawal in the sync context. We setup
 /// a bool and Withdraw struct inside a lazy static variable that we can read from later when
 /// we initiate the withdrawal from an async context.
 pub fn setup_withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {

@@ -1,4 +1,4 @@
-use crate::tunnel_manager::Tunnel;
+use crate::tunnel_manager::{get_tunnel_manager_write_ref, Tunnel};
 use crate::{peer_listener::structs::Peer, RitaCommonError};
 use althea_types::LocalIdentity;
 
@@ -38,6 +38,7 @@ pub fn tm_identity_callback(msg: IdentityCallback) -> Result<(Tunnel, bool), Rit
         _ => tm_get_port(),
     };
     // must be called after tm_get_port to avoid a deadlock
-    let mut tunnel_manager = TUNNEL_MANAGER.write().unwrap();
+    let tm_pin = &mut *TUNNEL_MANAGER.write().unwrap();
+    let tunnel_manager = get_tunnel_manager_write_ref(tm_pin);
     tunnel_manager.open_tunnel(msg.local_identity, msg.peer, our_port)
 }

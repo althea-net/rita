@@ -28,10 +28,8 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::Write;
 use std::net::{IpAddr, Ipv6Addr};
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use std::thread;
-use std::time::{Duration, Instant};
 
 pub mod client;
 pub mod exit;
@@ -57,15 +55,13 @@ pub const APAC_IP: IpAddr = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0x13
 pub const SA_IP: IpAddr = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0x1337, 0x6e2f));
 
 lazy_static! {
-    static ref GIT_HASH: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
+    static ref FLAG_CONFIG: Arc<RwLock<HashMap<u32, PathBuf>>> =
+        Arc::new(RwLock::new(HashMap::new()));
 }
 
 lazy_static! {
-    static ref FLAG_CONFIG: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
-}
-
-lazy_static! {
-    static ref SETTINGS: Arc<RwLock<Option<Settings>>> = Arc::new(RwLock::new(None));
+    static ref SETTINGS: Arc<RwLock<HashMap<u32, Settings>>> =
+        Arc::new(RwLock::new(HashMap::new()));
 }
 
 #[derive()]
@@ -109,15 +105,19 @@ pub trait WrappedSettingsAdaptor {
 // Doing so will disable local reads/writes and instead call the adaptor's relevant fns
 // Can only be called once if no other settings exist in the SETTINGS global
 pub fn set_adaptor<T: 'static + WrappedSettingsAdaptor + Send + Sync>(adaptor: T) {
-    let settings_ref: &mut Option<Settings> = &mut SETTINGS.write().unwrap();
-    match settings_ref {
+    let netns = KI.check_integration_test_netns();
+    let mut settings_ref = SETTINGS.write().unwrap();
+    match settings_ref.contains_key(&netns) {
         // make sure this only gets called once on start
-        Some(_) => panic!("Attempted to set settings adapter to a non-empty SETTINGS global"),
+        true => panic!("Attempted to set settings adapter to a non-empty SETTINGS global"),
         // if there are no settings, then save as Adaptor
-        None => {
-            *settings_ref = Some(Settings::Adaptor(AdaptorSettings {
-                adaptor: Box::new(adaptor),
-            }))
+        false => {
+            settings_ref.insert(
+                netns,
+                Settings::Adaptor(AdaptorSettings {
+                    adaptor: Box::new(adaptor),
+                }),
+            );
         }
     }
 }
@@ -139,19 +139,18 @@ impl RitaSettings {
 
 /// write the current SETTINGS from memory to file
 pub fn write_config() -> Result<(), SettingsError> {
-    if cfg!(feature = "load_from_disk") {
-        // settings already saved in any set step
-        return Ok(());
-    }
-    match &*SETTINGS.read().unwrap() {
+    let netns = KI.check_integration_test_netns();
+    match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.write_config(),
         Some(Settings::Client(settings)) => {
             let filename = FLAG_CONFIG.read().unwrap();
-            settings.write(&filename)
+            let filename = filename.get(&netns).unwrap();
+            settings.write(filename.clone())
         }
         Some(Settings::Exit(settings)) => {
             let filename = FLAG_CONFIG.read().unwrap();
-            settings.write(&filename)
+            let filename = filename.get(&netns).unwrap();
+            settings.write(filename.clone())
         }
         None => panic!("expected settings but got none"),
     }
@@ -181,7 +180,8 @@ pub fn save_settings_on_shutdown() {
 
 /// get a JSON value of all settings
 pub fn get_config_json() -> Result<serde_json::Value, SettingsError> {
-    match &*SETTINGS.read().unwrap() {
+    let netns = KI.check_integration_test_netns();
+    match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.get_config_json(),
         Some(Settings::Client(settings)) => settings.get_all(),
         Some(Settings::Exit(settings)) => settings.get_all(),
@@ -191,7 +191,9 @@ pub fn get_config_json() -> Result<serde_json::Value, SettingsError> {
 
 /// merge a json of a subset of settings into global settings
 pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), SettingsError> {
-    let settings_ref: &mut Option<Settings> = &mut SETTINGS.write().unwrap();
+    let netns = KI.check_integration_test_netns();
+    let mut settings_ref = SETTINGS.write().unwrap();
+    let settings_ref = settings_ref.get_mut(&netns);
     match settings_ref {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.merge_client_json(changed_settings),
         Some(Settings::Client(client_settings)) => client_settings.merge(changed_settings),
@@ -204,27 +206,9 @@ pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), Sett
 /// Does not currently save the identity paramater, as we don't
 /// need to modify that in a generic context.
 pub fn set_rita_common(input: RitaSettings) {
-    if cfg!(feature = "load_from_disk") {
-        let settings_file = get_settings_file_from_ns();
-        // load settings data from the settings file
-        if let Ok(mut ritasettings) = RitaClientSettings::new(&settings_file) {
-            ritasettings.network = input.network;
-            ritasettings.payment = input.payment;
-            // save to file
-            set_rita_client(ritasettings);
-            return;
-        } else if let Ok(mut ritasettings) = RitaExitSettingsStruct::new(&settings_file) {
-            ritasettings.network = input.network;
-            ritasettings.payment = input.payment;
-            // save to file
-            set_rita_exit(ritasettings);
-            return;
-        } else {
-            panic!("Failed to set rita common!");
-        }
-    }
-    let settings_ref: &mut Option<Settings> = &mut SETTINGS.write().unwrap();
-    match settings_ref {
+    let netns = KI.check_integration_test_netns();
+    let mut settings_ref = SETTINGS.write().unwrap();
+    match settings_ref.get_mut(&netns) {
         Some(Settings::Adaptor(adapt)) => {
             let mut client_settings = adapt
                 .adaptor
@@ -254,40 +238,8 @@ pub fn set_rita_common(input: RitaSettings) {
 
 /// get the current settings and extract generic RitaSettings from it
 pub fn get_rita_common() -> RitaSettings {
-    if cfg!(feature = "load_from_disk") {
-        let settings_file = get_settings_file_from_ns();
-
-        match (
-            RitaClientSettings::new(&settings_file),
-            RitaExitSettingsStruct::new(&settings_file),
-        ) {
-            (Ok(ritasettings), _) => {
-                // load settings data from the settings file
-                let commonsettings = RitaSettings {
-                    payment: ritasettings.payment.clone(),
-                    network: ritasettings.network.clone(),
-                    identity: ritasettings.get_identity(),
-                };
-                return commonsettings;
-            }
-            (_, Ok(ritasettings)) => {
-                // load settings data from the settings file
-                let commonsettings = RitaSettings {
-                    payment: ritasettings.payment.clone(),
-                    network: ritasettings.network.clone(),
-                    identity: ritasettings.get_identity(),
-                };
-                return commonsettings;
-            }
-            (Err(eb), Err(ea)) => {
-                // there's an inherent race condition here, so we wait and recurse a few times
-                warn!("Error reading settings, reading again {:?} {:?}", ea, eb);
-                thread::sleep(Duration::from_millis(100));
-                return get_rita_common();
-            }
-        }
-    }
-    match &*SETTINGS.read().unwrap() {
+    let netns = KI.check_integration_test_netns();
+    match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(adapt)) => {
             let settings = adapt.adaptor.get_client().unwrap();
             RitaSettings {
@@ -310,69 +262,46 @@ pub fn get_rita_common() -> RitaSettings {
     }
 }
 
-pub fn set_git_hash(git_hash: String) {
-    *GIT_HASH.write().unwrap() = git_hash;
-}
-
 pub fn get_git_hash() -> String {
-    let ret = &*GIT_HASH.read().unwrap();
-    ret.clone()
+    env!("GIT_HASH").to_string()
 }
 
-pub fn set_flag_config(flag_config: String) {
-    *FLAG_CONFIG.write().unwrap() = flag_config;
+pub fn set_flag_config(flag_config: PathBuf) {
+    let netns = KI.check_integration_test_netns();
+    FLAG_CONFIG.write().unwrap().insert(netns, flag_config);
 }
 
-pub fn get_flag_config() -> String {
-    let ret = &*FLAG_CONFIG.read().unwrap();
-    ret.clone()
+pub fn get_flag_config() -> PathBuf {
+    let netns = KI.check_integration_test_netns();
+    FLAG_CONFIG.read().unwrap().get(&netns).unwrap().clone()
 }
 
 /// set client settings into local or adaptor memory
 /// panics if called on exit settings
-pub fn set_rita_client(mut client_setting: RitaClientSettings) {
-    if cfg!(feature = "load_from_disk") {
-        let settings_file = get_settings_file_from_ns();
-        // save new data to the settings file
-        client_setting.write(&settings_file).unwrap();
-        return;
-    }
-    client_setting.log.enabled = true;
-    let settings_ref = &mut *SETTINGS.write().unwrap();
-    match settings_ref {
+pub fn set_rita_client(client_setting: RitaClientSettings) {
+    let netns = KI.check_integration_test_netns();
+    let mut settings_ref = SETTINGS.write().unwrap();
+    match settings_ref.get(&netns) {
         // if there's an adaptor already saved, then use it to set there
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.set_client(client_setting).unwrap(),
         // if there's a client setting, then save over it
-        Some(Settings::Client(_)) => *settings_ref = Some(Settings::Client(client_setting)),
+        Some(Settings::Client(_)) => {
+            settings_ref.insert(netns, Settings::Client(client_setting));
+        }
         // error if there's an exit here
         Some(Settings::Exit(_)) => panic!("attempted to save client settings over exit settings"),
         // if there are no settings, then save as Client
-        None => *settings_ref = Some(Settings::Client(client_setting)),
+        None => {
+            settings_ref.insert(netns, Settings::Client(client_setting));
+        }
     }
 }
 
 /// get client settings from local or adaptor memory
 /// panics if called on exit settings
 pub fn get_rita_client() -> RitaClientSettings {
-    if cfg!(feature = "load_from_disk") {
-        let settings_file = get_settings_file_from_ns();
-
-        // load settings data from the settings file
-        let mut ritasettings = RitaClientSettings::new(&settings_file);
-        let start = Instant::now();
-        const TIMEOUT: Duration = Duration::from_secs(2);
-        // this is inhernetly a race condition since one of rita's other threads could be writing to this file
-        // so we try a few times
-        while let (true, true) = (Path::new(&settings_file).exists(), ritasettings.is_err()) {
-            if Instant::now() - start > TIMEOUT {
-                panic!("Settings file {} is invalid!", settings_file);
-            } else {
-                ritasettings = RitaClientSettings::new(&settings_file);
-            }
-        }
-        return ritasettings.unwrap();
-    }
-    match &*SETTINGS.read().unwrap() {
+    let netns = KI.check_integration_test_netns();
+    match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.get_client().unwrap(),
         Some(Settings::Client(settings)) => settings.clone(),
         Some(Settings::Exit(_)) => panic!("expected client settings, but got exit setttings"),
@@ -382,36 +311,18 @@ pub fn get_rita_client() -> RitaClientSettings {
 
 /// Set exit settings into memory
 pub fn set_rita_exit(exit_setting: RitaExitSettingsStruct) {
-    if cfg!(feature = "load_from_disk") {
-        let settings_file = get_settings_file_from_ns();
-        // save new data to the settings file
-        exit_setting.write(&settings_file).unwrap();
-        return;
-    }
-    *SETTINGS.write().unwrap() = Some(Settings::Exit(exit_setting));
+    let netns = KI.check_integration_test_netns();
+    SETTINGS
+        .write()
+        .unwrap()
+        .insert(netns, Settings::Exit(exit_setting));
 }
 
 /// Retrieve exit settings from memory
 pub fn get_rita_exit() -> RitaExitSettingsStruct {
-    if cfg!(feature = "load_from_disk") {
-        let settings_file = get_settings_file_from_ns();
-
-        // load settings data from the settings file
-        let mut ritasettings = RitaExitSettingsStruct::new(&settings_file);
-        let start = Instant::now();
-        const TIMEOUT: Duration = Duration::from_secs(2);
-        // this is inhernetly a race condition since one of rita's other threads could be writing to this file
-        // so we try a few times
-        while let (true, true) = (Path::new(&settings_file).exists(), ritasettings.is_err()) {
-            if Instant::now() - start > TIMEOUT {
-                panic!("Settings file {} is invalid!", settings_file);
-            } else {
-                ritasettings = RitaExitSettingsStruct::new(&settings_file);
-            }
-        }
-        return ritasettings.unwrap();
-    }
-    let temp = &*SETTINGS.read().unwrap();
+    let netns = KI.check_integration_test_netns();
+    let temp = SETTINGS.read().unwrap();
+    let temp = temp.get(&netns);
     if let Some(Settings::Exit(val)) = temp {
         val.clone()
     } else {
@@ -421,7 +332,8 @@ pub fn get_rita_exit() -> RitaExitSettingsStruct {
 
 /// This code checks to see if the current device/setting is an exit or not
 pub fn check_if_exit() -> bool {
-    match &*SETTINGS.read().unwrap() {
+    let netns = KI.check_integration_test_netns();
+    match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(_)) => false,
         Some(Settings::Client(_)) => false,
         Some(Settings::Exit(_)) => true,
@@ -443,32 +355,18 @@ pub fn json_merge(a: &mut Value, b: &Value) {
     }
 }
 
-/// Gets the current namespace that rita is executing in and returns the name of the
-/// settings file associated with this instance of rita. ONLY FOR INTEGRATION TESTV2
-fn get_settings_file_from_ns() -> String {
-    let ns = KI.run_command("ip", &["netns", "identify"]).unwrap();
-    let ns = match String::from_utf8(ns.stdout) {
-        Ok(s) => s,
-        Err(_) => panic!("Could not get netns name!"),
-    };
-    // otherwise we get the newline
-    let ns = ns.trim();
-    let settings_file = format!("/var/tmp/settings_{ns}");
-    settings_file
-}
-
 /// FileWrite does the actual write of settings to disk.
 /// Must be called from the context that holds the settings var in memory.
 /// In the case of adaptor settings, must be called in the wrapping binary.  
 pub trait FileWrite {
-    fn write(&self, file_name: &str) -> Result<(), SettingsError>;
+    fn write(&self, file_name: PathBuf) -> Result<(), SettingsError>;
 }
 
 impl<T> FileWrite for T
 where
     T: Serialize,
 {
-    fn write(&self, file_name: &str) -> Result<(), SettingsError> {
+    fn write(&self, file_name: PathBuf) -> Result<(), SettingsError> {
         let ser = toml::Value::try_from(self)?;
         let ser = toml::to_string(&ser)?;
         let mut file = File::create(file_name)?;

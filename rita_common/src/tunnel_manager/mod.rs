@@ -28,6 +28,7 @@ use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
+use std::hash::Hash;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::sync::Arc;
@@ -35,12 +36,29 @@ use std::sync::RwLock;
 use std::time::Instant;
 
 lazy_static! {
-    static ref TUNNEL_MANAGER: Arc<RwLock<TunnelManager>> =
-        Arc::new(RwLock::new(TunnelManager::default()));
+    static ref TUNNEL_MANAGER: Arc<RwLock<HashMap<u32, TunnelManager>>> =
+        Arc::new(RwLock::new(HashMap::new()));
 }
 
+/// Gets TunnelManager copy from the static ref, or default if no value has been set
 pub fn get_tunnel_manager() -> TunnelManager {
-    TUNNEL_MANAGER.read().unwrap().clone()
+    let netns = KI.check_integration_test_netns();
+    TUNNEL_MANAGER
+        .read()
+        .unwrap()
+        .clone()
+        .get(&netns)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Gets a write ref for the tunnel manager lock, since this is a mutable reference
+/// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
+/// but still hold the lock in the local thread to prevent parallel modification
+pub fn get_tunnel_manager_write_ref(input: &mut HashMap<u32, TunnelManager>) -> &mut TunnelManager {
+    let netns = KI.check_integration_test_netns();
+    input.entry(netns).or_insert_with(TunnelManager::default);
+    input.get_mut(&netns).unwrap()
 }
 
 /// Used to trigger the enforcement handler
@@ -256,7 +274,7 @@ pub fn tm_monitor_check(interface_list: &[Interface]) {
         interface_map.insert(int.name.clone());
     }
 
-    let rita_tunnels = &TUNNEL_MANAGER.read().unwrap().tunnels;
+    let rita_tunnels = get_tunnel_manager().tunnels;
     for (_, tunnels) in rita_tunnels.iter() {
         for tun in tunnels.iter() {
             if !interface_map.contains(&tun.iface_name) {
@@ -307,7 +325,8 @@ pub fn tm_get_tunnels() -> Result<Vec<Tunnel>, RitaCommonError> {
 /// allocation has failed so we can use it without issues.
 fn tm_get_port() -> u16 {
     let udp_table = KI.used_ports();
-    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
+    let tm_pin = &mut *TUNNEL_MANAGER.write().unwrap();
+    let tunnel_manager = get_tunnel_manager_write_ref(tm_pin);
 
     loop {
         let port = match tunnel_manager.free_ports.pop_front() {
@@ -551,7 +570,8 @@ pub struct TunnelStateChange {
 
 /// Called by DebtKeeper with the updated billing status of every tunnel every round
 pub fn tm_tunnel_state_change(msg: TunnelStateChange) -> Result<(), RitaCommonError> {
-    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
+    let tm_pin = &mut *TUNNEL_MANAGER.write().unwrap();
+    let tunnel_manager = get_tunnel_manager_write_ref(tm_pin);
     for tunnel in msg.tunnels {
         tunnel_state_change(tunnel, &mut tunnel_manager.tunnels);
     }

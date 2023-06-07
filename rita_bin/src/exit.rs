@@ -102,8 +102,6 @@ fn main() {
         let settings_file = args.flag_config;
         let settings = RitaExitSettingsStruct::new_watched(&settings_file).unwrap();
 
-        settings::set_git_hash(env!("GIT_HASH").to_string());
-
         let settings = clu::exit_init("linux", settings);
         settings::set_rita_exit(settings.clone());
         sanity_check_config();
