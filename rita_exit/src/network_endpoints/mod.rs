@@ -8,6 +8,7 @@ use crate::rita_exit::database::db_client::DbClient;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::TruncateTables;
 
+use crate::RitaExitError;
 #[cfg(feature = "development")]
 use actix::SystemService;
 #[cfg(feature = "development")]
@@ -22,14 +23,13 @@ use num256::Int256;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::payment_validator::calculate_unverified_payments;
+use settings::get_rita_exit;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::net::SocketAddr;
 use std::time::SystemTime;
-
-use crate::{RitaExitError, EXIT_WG_PRIVATE_KEY};
 
 /// helper function for returning from secure_setup_request()
 fn secure_setup_return(
@@ -123,7 +123,8 @@ fn decrypt_exit_client_id(
 pub async fn secure_setup_request(
     request: (Json<EncryptedExitClientIdentity>, HttpRequest),
 ) -> HttpResponse {
-    let our_secretkey: WgKey = *EXIT_WG_PRIVATE_KEY;
+    let exit_settings = get_rita_exit();
+    let our_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
     let our_secretkey = our_secretkey.into();
 
     let their_wg_pubkey = request.0.pubkey;
@@ -183,7 +184,8 @@ pub async fn secure_setup_request(
 }
 
 pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
-    let our_secretkey: WgKey = *EXIT_WG_PRIVATE_KEY;
+    let exit_settings = get_rita_exit();
+    let our_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
     let our_secretkey = our_secretkey.into();
 
     let their_wg_pubkey = request.pubkey;
@@ -239,7 +241,8 @@ pub async fn get_exit_timestamp_http(_req: HttpRequest) -> HttpResponse {
 /// This function takes a list of exit ips in a cluster from its config, signs the list and
 /// sends it to the client
 pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
-    let our_secretkey: WgKey = *EXIT_WG_PRIVATE_KEY;
+    let exit_settings = get_rita_exit();
+    let our_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
     let our_secretkey = our_secretkey.into();
 
     let their_nacl_pubkey = request.pubkey.into();

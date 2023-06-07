@@ -26,12 +26,6 @@ use crate::rita_loop::EXIT_INTERFACE;
 use crate::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::rita_loop::LEGACY_INTERFACE;
 use crate::RitaExitError;
-use crate::EXIT_ALLOWED_COUNTRIES;
-use crate::EXIT_DESCRIPTION;
-use crate::EXIT_NETWORK_SETTINGS;
-use crate::EXIT_PRICE;
-use crate::EXIT_SYSTEM_CHAIN;
-use crate::EXIT_VERIF_SETTINGS;
 use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
 use althea_types::WgKey;
@@ -44,10 +38,10 @@ use rita_common::debt_keeper::DebtAction;
 use rita_common::utils::secs_since_unix_epoch;
 use rita_common::KI;
 use settings::exit::ExitVerifSettings;
+use settings::get_rita_exit;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
-use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 
@@ -62,29 +56,15 @@ pub mod struct_tools;
 pub const ONE_DAY: i64 = 86400;
 
 pub fn get_exit_info() -> ExitDetails {
-    const UPDATE_INTERVAL: Duration = Duration::from_secs(60);
-    let last_update = EXIT_PRICE.read().unwrap().1;
-    if Instant::now() > last_update && ((Instant::now() - last_update) > UPDATE_INTERVAL) {
-        let mut exit_price = EXIT_PRICE.write().unwrap();
-        let old_exit_price = exit_price.0;
-        exit_price.0 = settings::get_rita_exit().exit_network.exit_price;
-        exit_price.1 = Instant::now();
-        info!(
-            "Updated exit price from settings {} -> {}",
-            exit_price.0, old_exit_price
-        );
-    }
-
-    let exit_network = &EXIT_NETWORK_SETTINGS;
-    let payment = *EXIT_SYSTEM_CHAIN;
+    let exit_settings = get_rita_exit();
     ExitDetails {
-        server_internal_ip: exit_network.own_internal_ip.into(),
-        wg_exit_port: exit_network.wg_tunnel_port,
-        exit_price: EXIT_PRICE.read().unwrap().0,
-        exit_currency: payment,
-        netmask: exit_network.netmask,
-        description: EXIT_DESCRIPTION.clone(),
-        verif_mode: match EXIT_VERIF_SETTINGS.clone() {
+        server_internal_ip: exit_settings.exit_network.own_internal_ip.into(),
+        wg_exit_port: exit_settings.exit_network.wg_tunnel_port,
+        exit_price: exit_settings.exit_network.exit_price,
+        exit_currency: exit_settings.payment.system_chain,
+        netmask: exit_settings.exit_network.netmask,
+        description: exit_settings.description,
+        verif_mode: match exit_settings.verif_settings {
             Some(ExitVerifSettings::Email(_mailer_settings)) => ExitVerifMode::Email,
             Some(ExitVerifSettings::Phone(_phone_settings)) => ExitVerifMode::Phone,
             None => ExitVerifMode::Off,
@@ -99,6 +79,7 @@ pub async fn signup_client(
     client: ExitClientIdentity,
     from_ops: bool,
 ) -> Result<ExitState, Box<RitaExitError>> {
+    let exit_settings = get_rita_exit();
     info!("got setup request {:?}", client);
     let gateway_ip = get_gateway_ip_single(client.global.mesh_ip)?;
     info!("got gateway ip {:?}", client);
@@ -122,7 +103,7 @@ pub async fn signup_client(
             return Ok(ExitState::Denied {
                 message: format!(
                     "Partially changed registration details! Please reset your router and re-register with all new details. Backup your key first! {}",
-                    display_hashset(&EXIT_ALLOWED_COUNTRIES),
+                    display_hashset(&exit_settings.allowed_countries),
                 ),
             })
         },
@@ -133,7 +114,7 @@ pub async fn signup_client(
     let their_record = create_or_update_user_record(&conn, &client, user_country)?;
 
     // either update and grab an existing entry or create one
-    match (verify_status, EXIT_VERIF_SETTINGS.clone(), from_ops) {
+    match (verify_status, exit_settings.verif_settings, from_ops) {
         (true, _, true) => {
             verify_client(&client, true, &conn)?;
             let client_internal_ip = match their_record.internal_ip.parse() {
@@ -177,7 +158,7 @@ pub async fn signup_client(
         (false, _, _) => Ok(ExitState::Denied {
             message: format!(
                 "This exit only accepts connections from {}",
-                display_hashset(&EXIT_ALLOWED_COUNTRIES),
+                display_hashset(&exit_settings.allowed_countries),
             ),
         }),
     }
