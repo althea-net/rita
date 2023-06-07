@@ -12,7 +12,7 @@ use babel_monitor::parse_interfaces;
 use babel_monitor::set_local_fee;
 use babel_monitor::set_metric_factor;
 use babel_monitor::structs::BabelMonitorError;
-use settings::get_rita_client;
+use settings::get_rita_common;
 use std::net::TcpStream;
 use std::thread;
 use std::time::Duration;
@@ -34,7 +34,7 @@ pub fn start_rita_slow_loop() {
         // with some fancy destructuring
         while let Err(e) = {
             thread::spawn(move || loop {
-                let model = get_rita_client().network.device;
+                let model = get_rita_common().network.device;
                 let hw_info = get_hardware_info(model.clone());
                 match (model, hw_info) {
                     (None, _) => error!("Model name not found?"),
