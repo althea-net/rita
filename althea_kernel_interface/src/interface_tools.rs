@@ -253,31 +253,6 @@ impl dyn KernelInterface {
         }
     }
 
-    /// Gets the network namespace name that holds the thread this function was called from.
-    /// If the calling thread was not inside a network namespace/in the default namespace, this
-    /// function returns a None
-    pub fn get_namespace(&self) -> Option<String> {
-        let output = match self.run_command("ip", &["netns", "identify"]) {
-            Ok(output) => output,
-            Err(_) => {
-                warn!("Could not run ip netns- is ip netns installed?");
-                return None;
-            }
-        };
-        match String::from_utf8(output.stdout) {
-            Ok(mut s) => {
-                s.truncate(s.len() - 1);
-                if !s.is_empty() {
-                    return Some(s);
-                }
-                None
-            }
-            Err(_) => {
-                warn!("Could not get ip netns name from stdout!");
-                None
-            }
-        }
-    }
 }
 
 #[test]
