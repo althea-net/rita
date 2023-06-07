@@ -6,11 +6,13 @@ use crate::KI;
 use crate::TUNNEL_HANDSHAKE_TIMEOUT;
 use crate::TUNNEL_TIMEOUT;
 use actix_async::System as AsyncSystem;
+use althea_kernel_interface::hardware_info::get_hardware_info;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_interfaces;
 use babel_monitor::set_local_fee;
 use babel_monitor::set_metric_factor;
 use babel_monitor::structs::BabelMonitorError;
+use settings::get_rita_client;
 use std::net::TcpStream;
 use std::thread;
 use std::time::Duration;
@@ -32,6 +34,19 @@ pub fn start_rita_slow_loop() {
         // with some fancy destructuring
         while let Err(e) = {
             thread::spawn(move || loop {
+                let model = get_rita_client().network.device;
+                let hw_info = get_hardware_info(model.clone());
+                match (model, hw_info) {
+                    (None, _) => error!("Model name not found?"),
+                    (Some(mdl), Ok(info)) => {
+                        if mdl.contains("mikrotik_hap-ac2") && info.load_avg_fifteen_minute > 4.0 {
+                            info!("15 minute load average > 4, rebooting!");
+                            let _res = KI.run_command("reboot", &[]);
+                        }
+                    },
+                    (Some(_), Err(_)) => error!("Could not get hardware info!"),
+                }
+
                 info!("Common Slow tick!");
                 let start = Instant::now();
 
@@ -44,7 +59,6 @@ pub fn start_rita_slow_loop() {
                     info!("Common Slow tick async completed!");
                     AsyncSystem::current().stop();
                 });
-
 
                 // This checks that all tunnels are attached to babel. This may not be the case when babel restarts
                 let babel_port = settings::get_rita_common().network.babel_port;
@@ -92,7 +106,7 @@ pub fn start_rita_slow_loop() {
                 // auto recovery when babel crashes or otherwise behaves poorly
                 num_babel_failures += 1;
                 if num_babel_failures > BABEL_RESTART_COUNT {
-                    error!("We have not successfully talked to babel in {} loop ierations, restarting babel", num_babel_failures);
+                    error!("We have not successfully talked to babel in {} loop iterations, restarting babel", num_babel_failures);
                     // we restart babel here and then rely on the tm_monitor_check function to re-attach the tunnels in the next loop
                     // iteration
                     KI.restart_babel();

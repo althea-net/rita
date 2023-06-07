@@ -74,7 +74,7 @@ fn main() {
     .and_then(|d| d.deserialize())
     .unwrap_or_else(|e| e.exit());
 
-    let settings_file = args.flag_config.clone();
+    let settings_file = args.flag_config;
     println!("Settings file {settings_file}");
 
     // load the settings file, setup a thread to save it out every so often
