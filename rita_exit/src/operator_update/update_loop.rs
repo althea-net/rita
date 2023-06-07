@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 /// This function spawns a thread soley responsible for performing the operator update
 pub fn start_operator_update_loop() {
     let mut last_restart = Instant::now();
+    let rita_started = Instant::now();
     // outer thread is a watchdog inner thread is the runner
     thread::spawn(move || {
         // this will always be an error, so it's really just a loop statement
@@ -20,7 +21,7 @@ pub fn start_operator_update_loop() {
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
                     // Check in with Operator
-                    operator_update().await;
+                    operator_update(rita_started).await;
                 });
 
                 info!(

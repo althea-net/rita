@@ -21,11 +21,6 @@ impl Default for UptimeStruct {
     }
 }
 
-lazy_static! {
-    /// stores the startup time for Rita, used to compute uptime
-    static ref RITA_UPTIME: Instant = Instant::now();
-}
-
 /// Perform operator updates every UPDATE_FREQUENCY seconds,
 const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
 
@@ -33,7 +28,7 @@ const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
 pub const OPERATOR_UPDATE_TIMEOUT: Duration = Duration::from_secs(4);
 
 /// Checks in with the operator server
-pub async fn operator_update() {
+pub async fn operator_update(rita_started: Instant) {
     let url: &str;
     if cfg!(feature = "dev_env") {
         url = "http://0.0.0.0:8080/exitcheckin";
@@ -56,7 +51,7 @@ pub async fn operator_update() {
             .send_json(&OperatorExitCheckinMessage {
                 id,
                 pass,
-                exit_uptime: RITA_UPTIME.elapsed(),
+                exit_uptime: rita_started.elapsed(),
                 // Since this checkin works only from b20, we only need to look on wg_exit_v2
                 users_online: KI.get_wg_exit_clients_online(EXIT_INTERFACE).ok(),
             })
