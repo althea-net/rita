@@ -716,7 +716,7 @@ pub fn spawn_babel(ns: String, babelconf_path: String, babeld_path: String) {
         // unless the pid file is deleted since that will indicate another instance
         // of babel is running
         let _ = remove_file(pid_path.clone());
-        let babeld_pid = pid_path.clone();
+        let babeld_pid = pid_path;
         let babeld_log = format!("/var/log/babeld-{ns}.log");
         // 1 here is for log
         let res = KI.run_command(
@@ -746,7 +746,7 @@ pub fn spawn_babel(ns: String, babelconf_path: String, babeld_path: String) {
         );
         info!("res of babel {res:?}");
         // waits for babel to finish starting up and create it's pid file
-        while !Path::new(&pid_path).exists() {
+        while !Path::new(&babeld_pid).exists() {
             thread::sleep(Duration::from_millis(100));
         }
     })

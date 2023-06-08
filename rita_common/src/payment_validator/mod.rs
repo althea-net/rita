@@ -254,9 +254,12 @@ fn remove(msg: Remove) {
 /// the timeout we attempt to restart our node.
 fn checked(msg: ToValidate) {
     if remove_unvalidated_transaction(msg.clone()) {
-        let mut checked_tx = msg.clone();
+        let mut checked_tx = msg;
         checked_tx.checked = true;
-        error!("Tried to mark a tx {:?} we don't have as checked!", msg);
+        error!(
+            "Tried to mark a tx {:?} we don't have as checked!",
+            checked_tx
+        );
         #[cfg(feature = "development")]
         panic!("Tried to mark a tx {:?} we don't have as checked!", msg);
     }
