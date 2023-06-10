@@ -1,8 +1,10 @@
 use crate::five_nodes::five_node_config;
+use crate::setup_utils::namespaces::setup_ns;
+use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
     get_default_client_settings, get_default_exit_settings, test_reach_all, test_routes,
 };
-use crate::{setup_utils::*, SETUP_WAIT};
+use crate::SETUP_WAIT;
 use log::info;
 
 use std::thread;

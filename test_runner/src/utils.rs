@@ -1,4 +1,4 @@
-use crate::setup_utils::{Namespace, NamespaceInfo, RouteHop};
+use crate::setup_utils::namespaces::{Namespace, NamespaceInfo, RouteHop};
 use althea_kernel_interface::KI;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use ipnetwork::IpNetwork;

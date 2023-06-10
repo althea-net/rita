@@ -1,4 +1,6 @@
-use crate::setup_utils::*;
+use crate::setup_utils::database::start_postgres;
+use crate::setup_utils::namespaces::*;
+use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
     get_default_client_settings, get_default_exit_settings, test_reach_all, test_routes,
 };
