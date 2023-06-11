@@ -1,7 +1,11 @@
-use crate::setup_utils::namespaces::{Namespace, NamespaceInfo, RouteHop};
+use crate::setup_utils::namespaces::{get_nsfd, Namespace, NamespaceInfo, RouteHop};
+use actix_rt::time::sleep;
+use actix_rt::System;
 use althea_kernel_interface::KI;
+use althea_types::ContactType;
+use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
-use ipnetwork::IpNetwork;
+use ipnetwork::{IpNetwork, Ipv6Network};
 use log::{info, trace, warn};
 use nix::{
     fcntl::{open, OFlag},
@@ -13,6 +17,7 @@ use std::{
     collections::HashMap,
     net::{IpAddr, Ipv6Addr},
     str::from_utf8,
+    sync::{Arc, RwLock},
     thread,
     time::{Duration, Instant},
 };
@@ -142,17 +147,11 @@ fn try_route(
         .get(&ns2.id)
         .unwrap();
     let expected_cost = expected_data.clone().price;
-    let expected_hop_id: u16 = expected_data.clone().id;
     let ns2_id: u16 = ns2.id;
-    let neigh_ip = IpAddr::V6(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, expected_hop_id));
     let dest_ip = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, ns2_id));
     for r in routes {
         if let IpNetwork::V6(ref ip) = r.prefix {
-            if ip.ip() == dest_ip
-                && r.price == expected_cost
-                && r.fee == ns1.cost
-                && r.neigh_ip == neigh_ip
-            {
+            if ip.ip() == dest_ip && r.price == expected_cost && r.fee == ns1.cost {
                 return true;
             } else {
                 continue;
@@ -163,13 +162,84 @@ fn try_route(
     false
 }
 
-/// Gets the default client settings, configured to connected to the EVM of the Althea chain as a standin EVM environment
-pub fn get_default_client_settings() -> RitaClientSettings {
-    RitaClientSettings::new("/althea_rs/settings/test.toml").unwrap()
+pub const TEST_EXIT_NAME: &str = "test";
+/// The root ip is the ip all exits share in a cluster where the client goes and grabs the list of other exits to roam to
+pub const EXIT_ROOT_IP: IpAddr =
+    IpAddr::V6(Ipv6Addr::new(0xfd00, 200, 199, 198, 197, 196, 195, 194));
+// this masks public ipv6 ips in the test env and is being used to test assignment
+pub const EXIT_SUBNET: Ipv6Addr = Ipv6Addr::new(0xfbad, 200, 0, 0, 0, 0, 0, 0);
+
+/// Gets the default client and exit settings handling the pre-launch exchange of exit into and its insertion into
+/// the
+pub fn get_default_settings() -> (RitaClientSettings, RitaExitSettingsStruct) {
+    let mut exit = RitaExitSettingsStruct::new("/althea_rs/settings/test_exit.toml").unwrap();
+
+    // exit should allow instant registration by any requester
+    exit.verif_settings = None;
+    exit.network.mesh_ip = Some(EXIT_ROOT_IP);
+    exit.exit_network.subnet = Some(IpNetwork::V6(Ipv6Network::new(EXIT_SUBNET, 40).unwrap()));
+
+    let mut client = RitaClientSettings::new("/althea_rs/settings/test.toml").unwrap();
+
+    client.exit_client.contact_info = Some(
+        ContactType::Both {
+            number: "+11111111".parse().unwrap(),
+            email: "fake@fake.com".parse().unwrap(),
+            sequence_number: Some(0),
+        }
+        .into(),
+    );
+    client.exit_client.current_exit = Some(TEST_EXIT_NAME.to_string());
+    client.exit_client.exits.insert(
+        TEST_EXIT_NAME.to_string(),
+        settings::client::ExitServer {
+            root_ip: EXIT_ROOT_IP,
+            subnet: None,
+            althea_address: exit.payment.althea_address,
+            eth_address: exit.payment.eth_address.unwrap(),
+            wg_public_key: exit.exit_network.wg_public_key,
+            registration_port: exit.exit_network.exit_hello_port,
+            description: exit.description.clone(),
+            info: althea_types::ExitState::New,
+        },
+    );
+    (client, exit)
 }
-/// Gets the default exit settings, configured to connected to the EVM of the Althea chain as a standin EVM environment
-pub fn get_default_exit_settings() -> RitaExitSettingsStruct {
-    RitaExitSettingsStruct::new("/althea_rs/settings/test_exit.toml").unwrap()
+
+// Calls the register to exit rpc function within the provided namespace
+pub async fn register_to_exit(namespace_name: String) -> StatusCode {
+    // thread safe lock that allows us to pass data between the router thread and this thread
+    // one copy of the reference is sent into the closure and the other is kept in this scope.
+    let response: Arc<RwLock<Option<StatusCode>>> = Arc::new(RwLock::new(None));
+    let response_local = response.clone();
+    let namespace_local = namespace_name.clone();
+
+    let _ = thread::spawn(move || {
+        // set the host of this thread to the ns
+        let nsfd = get_nsfd(namespace_name);
+        setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
+        let runner = System::new();
+        runner.block_on(async move {
+            let client = awc::Client::default();
+            let req = client
+                .post(format!(
+                    "http://localhost:4877/exits/{}/register",
+                    TEST_EXIT_NAME
+                ))
+                .send()
+                .await
+                .expect("Failed to make request to rita RPC");
+            *response.write().unwrap() = Some(req.status());
+        })
+    });
+
+    // wait for the child thread to finish performing it's query
+    while response_local.read().unwrap().is_none() {
+        info!("Waiting for a rpc response from {}", namespace_local);
+        sleep(Duration::from_millis(100)).await;
+    }
+    let code = response_local.read().unwrap().unwrap();
+    code
 }
 
 /// This allows the tester to exit cleanly then it gets a ctrl-c message

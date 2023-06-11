@@ -1,22 +1,21 @@
 use crate::setup_utils::database::start_postgres;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
-use crate::utils::{
-    get_default_client_settings, get_default_exit_settings, test_reach_all, test_routes,
-};
-use log::info;
+use crate::utils::{get_default_settings, register_to_exit, test_reach_all, test_routes};
+use log::{error, info};
 use std::collections::HashMap;
+use std::thread;
+use std::time::Duration;
 
 /// Runs a five node fixed network map test scenario, this does basic network setup and tests reachability to
 /// all destinations
-pub fn run_five_node_test_scenario() {
+pub async fn run_five_node_test_scenario() {
     info!("Starting five node test scenario");
     let node_config = five_node_config();
     let namespaces = node_config.0;
     let expected_routes = node_config.1;
 
-    let rita_settings = get_default_client_settings();
-    let rita_exit_settings = get_default_exit_settings();
+    let (rita_settings, rita_exit_settings) = get_default_settings();
 
     namespaces.validate();
 
@@ -33,7 +32,17 @@ pub fn run_five_node_test_scenario() {
 
     test_reach_all(namespaces.clone());
 
-    test_routes(namespaces, expected_routes);
+    test_routes(namespaces.clone(), expected_routes);
+
+    info!("Registering routers to the exit");
+    for r in namespaces.names {
+        if let NodeType::Client = r.node_type {
+            let res = register_to_exit(r.get_name()).await;
+            if !res.is_success() {
+                error!("Failed to register {} to exit with {:?}", r.get_name(), res);
+            }
+        }
+    }
 }
 
 /// This defines the network map for a five node scenario

@@ -1,4 +1,8 @@
 use althea_kernel_interface::{KernelInterfaceError, KI};
+use nix::{
+    fcntl::{open, OFlag},
+    sys::stat::Mode,
+};
 use std::collections::{HashMap, HashSet};
 
 /// This struct holds the format for a namespace info
@@ -442,4 +446,11 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
     }
 
     Ok(())
+}
+
+/// Translates a namespace ID to a filedescriptor
+pub fn get_nsfd(namespace_name: String) -> i32 {
+    let nspath = format!("/var/run/netns/{}", namespace_name);
+    open(nspath.as_str(), OFlag::O_RDONLY, Mode::empty())
+        .unwrap_or_else(|_| panic!("Could not open netns file: {}", nspath))
 }

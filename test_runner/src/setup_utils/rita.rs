@@ -1,14 +1,11 @@
 use super::babel::spawn_babel;
+use super::namespaces::get_nsfd;
 use super::namespaces::NamespaceInfo;
 use super::namespaces::NodeType;
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::Identity;
 use log::info;
-use nix::{
-    fcntl::{open, OFlag},
-    sched::{setns, CloneFlags},
-    sys::stat::Mode,
-};
+use nix::sched::{setns, CloneFlags};
 use rita_client::{
     dashboard::start_client_dashboard,
     rita_loop::{start_antenna_forwarder, start_rita_client_loops},
@@ -22,6 +19,7 @@ use rita_exit::{
     rita_loop::{start_rita_exit_endpoints, start_rita_exit_loop},
     start_rita_exit_dashboard,
 };
+use settings::set_flag_config;
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
 use std::{
     collections::{HashMap, HashSet},
@@ -57,9 +55,6 @@ pub fn thread_spawner(
     for ns in namespaces.names.clone() {
         let veth_interfaces = get_veth_interfaces(namespaces.clone());
         let veth_interfaces = veth_interfaces.get(&ns.get_name()).unwrap().clone();
-        let nspath = format!("/var/run/netns/{}", ns.get_name());
-        let nsfd = open(nspath.as_str(), OFlag::O_RDONLY, Mode::empty())
-            .unwrap_or_else(|_| panic!("Could not open netns file: {}", nspath));
 
         spawn_babel(
             ns.clone().get_name(),
@@ -75,7 +70,6 @@ pub fn thread_spawner(
                     ns.get_name(),
                     veth_interfaces,
                     rita_settings.clone(),
-                    nsfd,
                     ns.cost,
                 );
                 instance_data.client_identities.push(instance_info);
@@ -85,7 +79,6 @@ pub fn thread_spawner(
                     ns.get_name(),
                     veth_interfaces,
                     rita_exit_settings.clone(),
-                    nsfd,
                     ns.cost as u64,
                     ns.cost,
                 );
@@ -118,11 +111,11 @@ pub fn spawn_rita(
     ns: String,
     veth_interfaces: HashSet<String>,
     mut rcsettings: RitaClientSettings,
-    nsfd: i32,
     local_fee: u32,
 ) -> Identity {
     let ns_dup = ns.clone();
     let wg_keypath = format!("/var/tmp/{ns}");
+    let config_path = format!("/var/tmp/settings-{ns}.toml");
     // thread safe lock that allows us to pass data between the router thread and this thread
     // one copy of the reference is sent into the closure and the other is kept in this scope.
     let router_identity_ref: Arc<RwLock<Option<Identity>>> = Arc::new(RwLock::new(None));
@@ -130,6 +123,7 @@ pub fn spawn_rita(
 
     let _rita_handler = thread::spawn(move || {
         // set the host of this thread to the ns
+        let nsfd = get_nsfd(ns.clone());
         setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
 
         // NOTE: this is why the names for the namespaces must include a number identifier, as it is used in
@@ -154,6 +148,7 @@ pub fn spawn_rita(
 
         // mirrored from rita_bin/src/client.rs
         let s = clu::init("linux", rcsettings);
+        set_flag_config(config_path.into());
         settings::set_rita_client(s.clone());
 
         // pass the data to the calling thread via thread safe lock
@@ -189,12 +184,12 @@ pub fn spawn_rita_exit(
     ns: String,
     veth_interfaces: HashSet<String>,
     mut resettings: RitaExitSettingsStruct,
-    nsfd: i32,
     exit_fee: u64,
     local_fee: u32,
 ) -> Identity {
     let ns_dup = ns.clone();
     let wg_keypath = format!("/var/tmp/{ns}");
+    let config_path = format!("/var/tmp/settings-{ns}.toml");
     // thread safe lock that allows us to pass data between the router thread and this thread
     // one copy of the reference is sent into the closure and the other is kept in this scope.
     let router_identity_ref: Arc<RwLock<Option<Identity>>> = Arc::new(RwLock::new(None));
@@ -202,6 +197,7 @@ pub fn spawn_rita_exit(
 
     let _rita_handler = thread::spawn(move || {
         // set the host of this thread to the ns
+        let nsfd = get_nsfd(ns.clone());
         setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
 
         // NOTE: this is why the names for the namespaces must include a number identifier, as it is used in
@@ -210,7 +206,7 @@ pub fn spawn_rita_exit(
         let nsname: Vec<&str> = nameclone.split('-').collect();
         let id: u32 = nsname.get(1).unwrap().parse().unwrap();
 
-        resettings.network.mesh_ip = Some(IpAddr::V6(Ipv6Addr::new(
+        resettings.network.mesh_ip_v2 = Some(IpAddr::V6(Ipv6Addr::new(
             0xfd00,
             0,
             0,
@@ -224,11 +220,18 @@ pub fn spawn_rita_exit(
         resettings.network.peer_interfaces = veth_interfaces;
         resettings.payment.local_fee = local_fee;
         resettings.exit_network.exit_price = exit_fee;
+        let veth_exit_to_native = format!("vout-{}-o", ns);
+        resettings.network.external_nic = Some(veth_exit_to_native);
         // each exit instance connects to one database in the default net namespace
         resettings.db_uri = "postgresql://postgres@10.0.0.1/test".to_string();
 
         // mirrored from rita_bin/src/exit.rs
-        let resettings = clu::exit_init("linux", resettings);
+        let mut resettings = clu::exit_init("linux", resettings);
+
+        // the exit must be added to the cluster after generating appropriate details
+        resettings.exit_network.cluster_exits = vec![resettings.get_identity().unwrap()];
+
+        set_flag_config(config_path.into());
         settings::set_rita_exit(resettings.clone());
 
         // pass the data to the calling thread via thread safe lock

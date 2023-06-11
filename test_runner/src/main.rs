@@ -17,7 +17,8 @@ extern crate log;
 /// The amount of time we wait for a network to stabalize before testing
 pub const SETUP_WAIT: Duration = Duration::from_secs(60);
 
-fn main() {
+#[actix_rt::main]
+async fn main() {
     println!("About to init env logger");
     // custom logger filter gives error logs for all modules but info for only the test_runner
     // if you want to see logs for the rita instances you can adjust this per module in Rita by level
@@ -35,7 +36,7 @@ fn main() {
     info!("Starting tests with {:?}", test_type);
     if let Ok(test_type) = test_type {
         if test_type == "FIVE_NODES" {
-            run_five_node_test_scenario();
+            run_five_node_test_scenario().await;
         } else if test_type == "PAYMENTS_ETH" {
             run_eth_payments_test_scenario()
         } else if test_type == "PAYMENTS_ALTHEA" {

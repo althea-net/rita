@@ -3199,8 +3199,10 @@ name = "test_runner"
 version = "0.1.0"
 dependencies = [
  "actix",
+ "actix-rt",
  "althea_kernel_interface",
  "althea_types",
+ "awc",
  "babel_monitor",
  "clu",
  "ctrlc",
