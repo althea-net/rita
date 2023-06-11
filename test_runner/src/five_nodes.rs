@@ -4,8 +4,6 @@ use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{get_default_settings, register_to_exit, test_reach_all, test_routes};
 use log::{error, info};
 use std::collections::HashMap;
-use std::thread;
-use std::time::Duration;
 
 /// Runs a five node fixed network map test scenario, this does basic network setup and tests reachability to
 /// all destinations

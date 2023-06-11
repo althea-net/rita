@@ -81,8 +81,8 @@ fn default_enable_enforcement() -> bool {
     true
 }
 
-fn default_node_grpc() -> Option<String> {
-    None
+fn default_node_grpc() -> String {
+    "http://althea.zone:9090".to_string()
 }
 
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
@@ -121,7 +121,7 @@ pub struct PaymentSettings {
     pub accepted_denoms: Option<HashMap<String, Denom>>,
     /// GRPC Node used to create a contact object to interact with althea blockchain
     #[serde(default = "default_node_grpc")]
-    pub cosmos_node_grpc: Option<String>,
+    pub cosmos_node_grpc: String,
     /// A list of nodes to query for blockchain data
     /// this is kept seperate from the version for DAO settings node
     /// list in order to allow for the DAO and payments to exist on different

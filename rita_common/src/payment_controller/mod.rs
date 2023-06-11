@@ -202,13 +202,7 @@ async fn make_althea_payment(
 
     let to_address = pmt.to.get_althea_address();
 
-    let cosmos_node_grpc = match payment_settings.cosmos_node_grpc {
-        Some(a) => a,
-        None => {
-            error!("Did we forget to configure a cosmos_node_grpc in config? None found!");
-            return Err(PaymentControllerError::FailedToSendPayment);
-        }
-    };
+    let cosmos_node_grpc = payment_settings.cosmos_node_grpc;
 
     // Convert Debt keeper denom to USDC
     pmt.amount = normalize_payment_amount(
