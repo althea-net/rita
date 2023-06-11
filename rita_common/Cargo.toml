@@ -52,3 +52,4 @@ env_logger = "0.10"
 # disables cors for dash debugging
 dash_debug = []
 legacy_integration_test = []
+integration_test = []

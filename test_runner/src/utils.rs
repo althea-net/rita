@@ -13,9 +13,10 @@ use nix::{
     sys::stat::Mode,
 };
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
+use std::net::{IpAddr, Ipv4Addr};
 use std::{
     collections::HashMap,
-    net::{IpAddr, Ipv6Addr},
+    net::Ipv6Addr,
     str::from_utf8,
     sync::{Arc, RwLock},
     thread,
@@ -202,6 +203,15 @@ pub fn get_default_settings() -> (RitaClientSettings, RitaExitSettingsStruct) {
             info: althea_types::ExitState::New,
         },
     );
+
+    // first node is passed through to the host machine for testing second node is used
+    // for testnet queries
+    const NODE_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(7, 7, 7, 2));
+    exit.payment.althea_grpc_list = vec![format!("http://{}:9091", NODE_IP)];
+    exit.payment.eth_node_list = vec![format!("http://{}:8545", NODE_IP)];
+    client.payment.althea_grpc_list = vec![format!("http://{}:9091", NODE_IP)];
+    client.payment.eth_node_list = vec![format!("http://{}:8545", NODE_IP)];
+
     (client, exit)
 }
 

@@ -480,7 +480,7 @@ fn get_xdai_transaction_details(transaction: TransactionResponse) -> Transaction
 }
 
 async fn handle_althea_tx_checking(ts: ToValidate) {
-    let cosmos_node_grpc = get_rita_common().payment.cosmos_node_grpc;
+    let cosmos_node_grpc = get_rita_common().payment.althea_grpc_list[0].clone();
     let althea_contact = Contact::new(
         &cosmos_node_grpc,
         ALTHEA_CONTACT_TIMEOUT,

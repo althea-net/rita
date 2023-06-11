@@ -38,7 +38,7 @@ pub async fn get_system_blockchain(_req: HttpRequest) -> HttpResponse {
 pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
     match id {
         SystemChain::Ethereum => {
-            payment.node_list = vec![
+            payment.eth_node_list = vec![
                 "https://eth.althea.org:443".to_string(),
                 "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
             ];
@@ -49,7 +49,7 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             set_oracle_balance(Some(0u32.into()));
         }
         SystemChain::Xdai => {
-            payment.node_list = vec!["https://dai.althea.org/".to_string()];
+            payment.eth_node_list = vec!["https://dai.althea.org/".to_string()];
             set_oracle_net_version(100);
             payment.system_chain = SystemChain::Xdai;
             payment.withdraw_chain = SystemChain::Xdai;
@@ -57,7 +57,7 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             set_oracle_balance(Some(0u32.into()));
         }
         SystemChain::Rinkeby => {
-            payment.node_list =
+            payment.eth_node_list =
                 vec!["https://rinkeby.infura.io/v3/174d2ebf288a452fab8a8f90eab57be7".to_string()];
             set_oracle_net_version(4);
             payment.system_chain = SystemChain::Rinkeby;

@@ -202,7 +202,7 @@ async fn make_althea_payment(
 
     let to_address = pmt.to.get_althea_address();
 
-    let cosmos_node_grpc = payment_settings.cosmos_node_grpc;
+    let cosmos_node_grpc = payment_settings.althea_grpc_list[0].clone();
 
     // Convert Debt keeper denom to USDC
     pmt.amount = normalize_payment_amount(

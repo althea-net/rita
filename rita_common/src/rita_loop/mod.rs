@@ -42,10 +42,10 @@ pub fn set_gateway(input: bool) {
 /// to load balance across fullnodes
 pub fn get_web3_server() -> String {
     let common = settings::get_rita_common();
-    if common.payment.node_list.is_empty() {
+    if common.payment.eth_node_list.is_empty() {
         panic!("no full nodes configured!");
     }
-    let node_list = common.payment.node_list;
+    let node_list = common.payment.eth_node_list;
     let mut rng = thread_rng();
     let val = rng.gen_range(0..node_list.len());
 

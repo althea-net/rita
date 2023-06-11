@@ -97,7 +97,11 @@ pub struct BlockchainOracle {
 
 // Set Xdai default
 fn default_net_version() -> u64 {
-    100u64
+    if cfg!(feature = "integration_test") {
+        417834u64
+    } else {
+        100u64
+    }
 }
 
 /// payment_threshold : This is the amount at which a router will make a payment. Below this value, the router will not may a payment since
@@ -244,7 +248,7 @@ async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: Str
             set_oracle_last_updated(Instant::now());
         }
         Err(e) => {
-            warn!("Failed to get latest block number with {:?}", e);
+            error!("Failed to get latest block number with {:?}", e);
             return;
         }
     }
@@ -406,7 +410,7 @@ mod tests {
 
         let or = ORACLE.read().unwrap();
         assert_eq!(or.nonce, 0u128.into());
-        assert_eq!(or.net_version, 100);
+        assert_eq!(or.net_version, 417834);
         drop(or);
 
         check_net_version("Some node", ORACLE.read().unwrap().net_version, 17u64);

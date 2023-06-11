@@ -81,8 +81,8 @@ fn default_enable_enforcement() -> bool {
     true
 }
 
-fn default_node_grpc() -> String {
-    "http://althea.zone:9090".to_string()
+fn default_node_grpc() -> Vec<String> {
+    vec!["http://althea.zone:9090".to_string()]
 }
 
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
@@ -121,13 +121,10 @@ pub struct PaymentSettings {
     pub accepted_denoms: Option<HashMap<String, Denom>>,
     /// GRPC Node used to create a contact object to interact with althea blockchain
     #[serde(default = "default_node_grpc")]
-    pub cosmos_node_grpc: String,
-    /// A list of nodes to query for blockchain data
-    /// this is kept seperate from the version for DAO settings node
-    /// list in order to allow for the DAO and payments to exist on different
-    /// chains, provided in name:port format
+    pub althea_grpc_list: Vec<String>,
+    /// A list of ethereum nodes to query for blockchain data
     #[serde(default = "default_node_list")]
-    pub node_list: Vec<String>,
+    pub eth_node_list: Vec<String>,
     #[serde(default = "default_system_chain")]
     pub system_chain: SystemChain,
     /// defines the blockchain to use for currency withdraws, this may not
@@ -186,8 +183,8 @@ impl Default for PaymentSettings {
             enable_enforcement: true,
             eth_private_key: None,
             eth_address: None,
-            cosmos_node_grpc: default_node_grpc(),
-            node_list: default_node_list(),
+            althea_grpc_list: default_node_grpc(),
+            eth_node_list: default_node_list(),
             system_chain: default_system_chain(),
             withdraw_chain: default_system_chain(),
             debts_file: default_debts_file(),
