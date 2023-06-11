@@ -60,11 +60,6 @@ pub fn dummy_neigh_tunnel() -> RitaNeighbor {
                     "0x9CAFD25b8b5982F1edA0691DEF8997C55a4d8188",
                 )
                 .unwrap(),
-                althea_address: Some(
-                    "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
-                        .parse()
-                        .unwrap(),
-                ),
                 wg_public_key: WgKey::from_str("8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=")
                     .unwrap(),
                 nickname: None,

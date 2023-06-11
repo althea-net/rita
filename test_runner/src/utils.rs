@@ -195,7 +195,6 @@ pub fn get_default_settings() -> (RitaClientSettings, RitaExitSettingsStruct) {
         settings::client::ExitServer {
             root_ip: EXIT_ROOT_IP,
             subnet: None,
-            althea_address: exit.payment.althea_address,
             eth_address: exit.payment.eth_address.unwrap(),
             wg_public_key: exit.exit_network.wg_public_key,
             registration_port: exit.exit_network.exit_hello_port,

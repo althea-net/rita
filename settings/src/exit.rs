@@ -249,7 +249,6 @@ impl RitaExitSettingsStruct {
         Some(Identity::new(
             self.network.mesh_ip?,
             self.payment.eth_address?,
-            self.payment.althea_address?,
             self.network.wg_public_key?,
             self.network.nickname,
         ))

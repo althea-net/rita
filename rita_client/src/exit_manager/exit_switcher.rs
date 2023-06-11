@@ -970,11 +970,6 @@ mod tests {
         Identity {
             mesh_ip: ip,
             eth_address: Address::from_str("0x5CC9aF89B1bf70565d75d0822027694Af38Ca017").unwrap(),
-            althea_address: Some(
-                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
-                    .parse()
-                    .unwrap(),
-            ),
             wg_public_key: WgKey::from_str("QkzYfnCeTp1iYKUyMjAVsmwPiemx4Yyqc83G17cebyM=").unwrap(),
             nickname: None,
         }

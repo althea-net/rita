@@ -666,18 +666,13 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
     }
 
     let from_address_eth = ts.payment.from.eth_address;
-    let from_address_althea = ts.payment.from.althea_address;
+    let from_address_althea = ts.payment.from.get_althea_address();
 
     let amount = ts.payment.amount;
 
-    let our_address_eth = settings::get_rita_common()
-        .payment
-        .eth_address
-        .expect("No Address!");
-    let our_address_althea = settings::get_rita_common()
-        .payment
-        .althea_address
-        .expect("Althea address should be initialized");
+    let our_id = settings::get_rita_common().get_identity().unwrap();
+    let our_address_eth = our_id.eth_address;
+    let our_address_althea = our_id.get_althea_address();
 
     let to = match transaction.to {
         Some(a) => a,
@@ -907,11 +902,6 @@ mod tests {
             eth_address: "0xE39bDB2e345ACf7B0C7B1A28dFA26288C3094A6A"
                 .parse()
                 .unwrap(),
-            althea_address: Some(
-                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
-                    .parse()
-                    .unwrap(),
-            ),
             wg_public_key: "NZnbEv9w5lC3JG3hacwh5cq8C5NnsAUJLrNKYL91fS0="
                 .parse()
                 .unwrap(),
@@ -923,11 +913,6 @@ mod tests {
             eth_address: "0xE39bDB2e345ACf7B0C7B1A28dFA26288C3094A6A"
                 .parse()
                 .unwrap(),
-            althea_address: Some(
-                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
-                    .parse()
-                    .unwrap(),
-            ),
             wg_public_key: "PiMD6fCsgyNKwz9AVqP/GRT3+o6h6e9Y0KPEdFct/yw="
                 .parse()
                 .unwrap(),

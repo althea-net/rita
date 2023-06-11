@@ -115,11 +115,6 @@ pub async fn tick_operator_payments() {
             eth_address: operator_address,
             // this key has no meaning, it's here so that we don't have to change
             // the identity indexing
-            althea_address: Some(
-                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
-                    .parse()
-                    .unwrap(),
-            ),
             wg_public_key: "YJhxFPv+NVeU5e+eBmwIXFd/pVdgk61jUHojuSt8IU0="
                 .parse()
                 .unwrap(),

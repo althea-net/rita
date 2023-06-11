@@ -798,9 +798,6 @@ mod tests {
             "0x0000000000000000000000000000000000000001"
                 .parse()
                 .unwrap(),
-            "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
-                .parse()
-                .unwrap(),
             "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
                 .unwrap(),
@@ -818,9 +815,6 @@ mod tests {
         Identity::new(
             array.into(),
             "0x0000000000000000000000000000000000000001"
-                .parse()
-                .unwrap(),
-            "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
                 .parse()
                 .unwrap(),
             "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
@@ -1315,11 +1309,6 @@ mod tests {
             eth_address: "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
                 .parse()
                 .unwrap(),
-            althea_address: Some(
-                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
-                    .parse()
-                    .unwrap(),
-            ),
             wg_public_key: "zgAlhyOQy8crB0ewrsWt3ES9SvFguwx5mq9i2KiknmA="
                 .parse()
                 .unwrap(),
@@ -1342,11 +1331,6 @@ mod tests {
             eth_address: "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
                 .parse()
                 .unwrap(),
-            althea_address: Some(
-                "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
-                    .parse()
-                    .unwrap(),
-            ),
             wg_public_key: "uNu3IMSgt3SY2+MvtEwjEpx45lOk7q/7sWC3ff80GXE="
                 .parse()
                 .unwrap(),

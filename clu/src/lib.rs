@@ -5,7 +5,6 @@ extern crate lazy_static;
 
 use althea_kernel_interface::KI;
 use clarity::PrivateKey;
-use deep_space::{EthermintPrivateKey, PrivateKey as AltheaPrivateKey};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use regex::Regex;
@@ -207,21 +206,6 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, NewClu
         }
     }
 
-    // Generate the althea private key from existing private key bytes
-    let althea_address_option = payment_settings.althea_address;
-    let eth_private_key_option = payment_settings.eth_private_key;
-    match (althea_address_option, eth_private_key_option) {
-        (Some(existing_althea_address), _) => {
-            info!("Starting with Eth address {:?}", existing_althea_address);
-        }
-        (None, Some(eth_key)) => {
-            info!("Althea key details not configured, generating");
-            let althea_address = EthermintPrivateKey::from(eth_key).to_address("althea")?;
-            payment_settings.althea_address = Some(althea_address);
-        }
-        _ => {}
-    }
-
     settings.payment = payment_settings;
 
     trace!("Starting with settings (after clu) : {:?}", settings);
@@ -301,23 +285,6 @@ fn linux_exit_init(
             payment_settings.eth_private_key = Some(new_private_key);
 
             payment_settings.eth_address = Some(new_private_key.to_address())
-        }
-    }
-
-    let althea_address_option = payment_settings.althea_address;
-    match althea_address_option {
-        Some(existing_althea_address) => {
-            info!("Starting with Eth address {:?}", existing_althea_address);
-        }
-        None => {
-            info!("Althea key details not configured, generating");
-            let key_buf = payment_settings
-                .eth_private_key
-                .expect("Didnt we just generate this??")
-                .to_bytes();
-            let new_private_key = EthermintPrivateKey::from_secret(&key_buf);
-
-            payment_settings.althea_address = Some(new_private_key.to_address("althea")?);
         }
     }
 

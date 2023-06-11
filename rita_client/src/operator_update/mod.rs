@@ -560,7 +560,6 @@ fn update_payment_settings(
         } else {
             payment.local_fee = new_settings.relay;
         }
-        payment.light_client_fee = new_settings.phone_relay;
     } else {
         info!("User has disabled the OperatorUpdate!");
     }

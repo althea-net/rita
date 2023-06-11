@@ -699,11 +699,6 @@ pub fn get_test_id() -> Identity {
         eth_address: "0x4288C538A553357Bb6c3b77Cf1A60Da6E77931F6"
             .parse()
             .unwrap(),
-        althea_address: Some(
-            "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
-                .parse()
-                .unwrap(),
-        ),
         wg_public_key: "GIaAXDi1PbGq3PsKqBnT6kIPoE2K1Ssv9HSb7++dzl4="
             .parse()
             .unwrap(),
@@ -761,9 +756,6 @@ pub mod tests {
         let id = Identity::new(
             "0.0.0.0".parse().unwrap(),
             Address::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap(),
-            "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
-                .parse()
-                .unwrap(),
             "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
                 .unwrap(),

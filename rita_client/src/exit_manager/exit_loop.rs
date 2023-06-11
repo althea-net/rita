@@ -36,9 +36,6 @@ pub fn start_exit_manager_loop() {
                 let em_state = &mut ExitManager::default();
                 let runner = AsyncSystem::new();
 
-                // can be removed once all clients are transitioned
-                update_exit_server_to_althea_addresses();
-
                 runner.block_on(async move {
                     loop {
                         let start = Instant::now();
@@ -215,7 +212,6 @@ pub fn start_exit_manager_loop() {
                                     let exit_id = Identity::new(
                                         current_exit_id.expect("There should be a selected mesh ip here"),
                                         exit.eth_address,
-                                        exit.althea_address.expect("This should be updated at init"),
                                         exit.wg_public_key,
                                         None,
                                     );
@@ -312,35 +308,4 @@ pub fn start_exit_manager_loop() {
             last_restart = Instant::now();
         }
     });
-}
-
-/// Hardcode exit althea address, this is needed for transitioning routers
-fn update_exit_server_to_althea_addresses() {
-    let mut rita_client = settings::get_rita_client();
-    let mut exits = rita_client.exit_client.exits.clone();
-    for (s, e) in exits.iter_mut() {
-        match &s[..] {
-            "test" => {
-                if e.althea_address.is_none() {
-                    e.althea_address = Some(
-                        deep_space::Address::from_slice(e.eth_address.as_bytes(), "althea")
-                            .expect("This shouldnt be failing"),
-                    );
-                }
-            }
-            "us_west" => {
-                if e.althea_address.is_none() {
-                    e.althea_address = Some(
-                        deep_space::Address::from_slice(e.eth_address.as_bytes(), "althea")
-                            .expect("This shouldnt be failing"),
-                    );
-                    info!("Updated us west alteha address to {:?}", e.althea_address)
-                }
-            }
-            _ => {}
-        }
-    }
-    // update rita client settings
-    rita_client.exit_client.exits = exits;
-    settings::set_rita_client(rita_client);
 }

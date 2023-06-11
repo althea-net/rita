@@ -23,8 +23,6 @@ use std::time::{Duration, SystemTime};
 pub struct Identity {
     pub mesh_ip: IpAddr,
     pub eth_address: Address,
-    // set to an option to allow for backwards compatibilty
-    pub althea_address: Option<AltheaAddress>,
     pub wg_public_key: WgKey,
     pub nickname: Option<ArrayString<32>>,
 }
@@ -32,32 +30,37 @@ pub struct Identity {
 impl Display for Identity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.nickname {
-            Some(nick) => write!(
+            Some(nick) => {
+                write!(
                 f,
                 "nickname: {}, mesh_ip: {}, eth_address: {}, althea_address: {:?}, wg_pubkey {}",
-                nick, self.mesh_ip, self.eth_address, self.althea_address, self.wg_public_key
-            ),
+                nick, self.mesh_ip, self.eth_address, self.get_althea_address(), self.wg_public_key
+            )
+            }
             None => write!(
                 f,
                 "mesh_ip: {}, eth_address: {}, althea_address: {:?}, wg_pubkey {}",
-                self.mesh_ip, self.eth_address, self.althea_address, self.wg_public_key
+                self.mesh_ip,
+                self.eth_address,
+                self.get_althea_address(),
+                self.wg_public_key
             ),
         }
     }
 }
 
+pub const ALTHEA_PREFIX: &str = "althea";
+
 impl Identity {
     pub fn new(
         mesh_ip: IpAddr,
         eth_address: Address,
-        althea_address: AltheaAddress,
         wg_public_key: WgKey,
         nickname: Option<ArrayString<32>>,
     ) -> Identity {
         Identity {
             mesh_ip,
             eth_address,
-            althea_address: Some(althea_address),
             wg_public_key,
             nickname,
         }
@@ -66,12 +69,8 @@ impl Identity {
     /// Returns true if this identity is converged, meaning the Althea address is
     /// derived from and is interchangeable with the ETH address. If false we have
     /// to avoid assumptions avoid these being the same private key
-    pub fn is_converged(&self) -> bool {
-        if let Some(althea_address) = self.althea_address {
-            althea_address.get_bytes() == self.eth_address.as_bytes()
-        } else {
-            true
-        }
+    pub fn get_althea_address(&self) -> AltheaAddress {
+        AltheaAddress::from_slice(self.eth_address.as_bytes(), ALTHEA_PREFIX).unwrap()
     }
 
     pub fn get_hash(&self) -> u64 {
@@ -94,7 +93,6 @@ impl PartialEq for Identity {
     fn eq(&self, other: &Identity) -> bool {
         self.mesh_ip == other.mesh_ip
             && self.eth_address == other.eth_address
-            && self.althea_address == other.althea_address
             && self.wg_public_key == other.wg_public_key
     }
 }
@@ -106,16 +104,9 @@ impl Eq for Identity {}
 // Custom hash implementation that also ignores nickname
 impl Hash for Identity {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        if self.is_converged() {
-            self.mesh_ip.hash(state);
-            self.eth_address.hash(state);
-            self.wg_public_key.hash(state);
-        } else {
-            self.mesh_ip.hash(state);
-            self.eth_address.hash(state);
-            self.althea_address.hash(state);
-            self.wg_public_key.hash(state);
-        }
+        self.mesh_ip.hash(state);
+        self.eth_address.hash(state);
+        self.wg_public_key.hash(state);
     }
 }
 

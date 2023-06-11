@@ -7,7 +7,6 @@ use crate::{json_merge, set_rita_client, setup_accepted_denoms, SettingsError};
 use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
 use clarity::Address;
-use deep_space::Address as AltheaAddress;
 use ipnetwork::IpNetwork;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
@@ -43,9 +42,6 @@ pub struct ExitServer {
     /// Subnet for backwards compatilibity
     #[serde(default)]
     pub subnet: Option<IpNetwork>,
-
-    /// Ethermint address of exit for althea chain
-    pub althea_address: Option<AltheaAddress>,
 
     /// eth address of this exit cluster
     pub eth_address: Address,
@@ -267,7 +263,6 @@ impl RitaClientSettings {
         Some(Identity::new(
             self.network.mesh_ip?,
             self.payment.eth_address?,
-            self.payment.althea_address?,
             self.network.wg_public_key?,
             self.network.nickname,
         ))

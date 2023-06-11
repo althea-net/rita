@@ -3,7 +3,6 @@ use althea_types::SystemChain;
 use auto_bridge::default_bridge_addresses;
 use auto_bridge::TokenBridgeAddresses;
 use clarity::{Address, PrivateKey};
-use deep_space::Address as AltheaAddress;
 use num256::Int256;
 use num256::Uint256;
 use std::collections::HashMap;
@@ -94,9 +93,6 @@ pub struct PaymentSettings {
     /// the field size of the price field in Babel
     #[serde(default = "default_local_fee")]
     pub local_fee: u32,
-    /// What we charge light client (phone) nodes specifically, denominated in wei/byte
-    #[serde(default = "default_local_fee")]
-    pub light_client_fee: u32,
     /// A price limit, we will not pay more than this
     #[serde(default = "default_max_fee")]
     pub max_fee: u32,
@@ -123,8 +119,6 @@ pub struct PaymentSettings {
     pub eth_address: Option<Address>,
     /// Payment denoms that payment validator accepts. Ex usdc -> Denom {ibc/hash, 1_000_000}
     pub accepted_denoms: Option<HashMap<String, Denom>>,
-    /// Althea chain ethermint public key, generated from eth private key
-    pub althea_address: Option<AltheaAddress>,
     /// GRPC Node used to create a contact object to interact with althea blockchain
     #[serde(default = "default_node_grpc")]
     pub cosmos_node_grpc: Option<String>,
@@ -183,7 +177,6 @@ impl Default for PaymentSettings {
     fn default() -> Self {
         PaymentSettings {
             local_fee: default_local_fee(),
-            light_client_fee: default_local_fee(),
             max_fee: default_max_fee(),
             free_tier_throughput: default_free_tier_throughput(),
             client_can_use_free_tier: default_client_can_use_free_tier(),
@@ -193,7 +186,6 @@ impl Default for PaymentSettings {
             enable_enforcement: true,
             eth_private_key: None,
             eth_address: None,
-            althea_address: None,
             cosmos_node_grpc: default_node_grpc(),
             node_list: default_node_list(),
             system_chain: default_system_chain(),

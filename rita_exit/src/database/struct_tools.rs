@@ -23,11 +23,6 @@ pub fn to_identity(client: &Client) -> Result<Identity, Box<RitaExitError>> {
             Ok(a) => a,
             Err(e) => return Err(Box::new(e.into())),
         },
-        althea_address: match client.althea_address.clone().parse() {
-            Ok(a) => Some(a),
-            // Not all clients will have althea addresses yet
-            Err(_) => None,
-        },
         wg_public_key: match client.wg_pubkey.clone().parse() {
             Ok(a) => a,
             Err(e) => return Err(Box::new(e.into())),
@@ -113,10 +108,6 @@ pub fn client_to_new_db_client(
         mesh_ip: client.global.mesh_ip.to_string(),
         wg_pubkey: client.global.wg_public_key.to_string(),
         eth_address: client.global.eth_address.to_string().to_lowercase(),
-        althea_address: match client.global.althea_address {
-            Some(a) => a.to_string().to_lowercase(),
-            None => "".to_string(),
-        },
         nickname: client.global.nickname.unwrap_or_default().to_string(),
         internal_ip: new_ip.to_string(),
         internet_ipv6: {

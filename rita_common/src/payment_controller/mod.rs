@@ -189,14 +189,7 @@ async fn make_althea_payment(
         }
     };
 
-    // Validate that we have a valid to and from address
-    let our_address = match pmt.from.althea_address {
-        Some(a) => a,
-        None => {
-            error!("how are we making a a payment over althea chain with no althea address");
-            return Err(PaymentControllerError::FailedToSendPayment);
-        }
-    };
+    let our_address = pmt.from.get_althea_address();
 
     // our althea private key is generated from our eth private key
     let our_private_key = match payment_settings.eth_private_key {
@@ -207,13 +200,7 @@ async fn make_althea_payment(
         }
     };
 
-    let to_address = match pmt.to.althea_address {
-        Some(a) => a,
-        None => {
-            error!("how are we making a a payment over althea chain with no to address");
-            return Err(PaymentControllerError::FailedToSendPayment);
-        }
-    };
+    let to_address = pmt.to.get_althea_address();
 
     let cosmos_node_grpc = match payment_settings.cosmos_node_grpc {
         Some(a) => a,
