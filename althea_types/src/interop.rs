@@ -335,13 +335,20 @@ pub struct LightClientLocalIdentity {
 /// This represents a generic payment that may be to or from us
 /// it contains a txid from a published transaction
 /// that should be validated against the blockchain
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
     pub amount: Uint256,
     // txhash of the payment this could either be on Ethereum or Althea as both are 256 bit integers
     pub txid: Uint256,
+}
+
+// Ensure that duplicate txid are always treated as the same object
+impl Hash for PaymentTx {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.txid.hash(state);
+    }
 }
 
 /// This represents a generic payment that may be to or from us, it does not contain a txid meaning it is

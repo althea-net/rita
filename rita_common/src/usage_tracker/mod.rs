@@ -551,7 +551,7 @@ pub fn save_usage_on_shutdown() {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
 
     use super::MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE;
     use super::{get_current_hour, FormattedPaymentTx, PaymentHour, UsageHour, UsageTracker};
@@ -710,8 +710,8 @@ mod tests {
         id
     }
 
-    // generates a random identity, never use in production, your money will be stolen
-    fn random_identity() -> Identity {
+    /// generates a random identity, never use in production, your money will be stolen
+    pub fn random_identity() -> Identity {
         let secret: [u8; 32] = rand::random();
         let mut ip: [u8; 16] = [0; 16];
         ip.copy_from_slice(&secret[0..16]);

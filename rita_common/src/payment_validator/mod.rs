@@ -32,6 +32,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Write as _;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
@@ -82,7 +84,7 @@ pub enum PaymentAddress {
     Althea(AltheaAddress),
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ToValidate {
     /// details of the payment from the user in the format they where sent
     pub payment: PaymentTx,
@@ -91,6 +93,13 @@ pub struct ToValidate {
     /// if we have managed to talk to a full node about this
     /// transaction ever
     pub checked: bool,
+}
+
+// Ensure that duplicate txid are always treated as the same object
+impl Hash for ToValidate {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.payment.txid.hash(state);
+    }
 }
 
 impl fmt::Display for ToValidate {
@@ -170,15 +179,12 @@ pub fn store_payment(pmt: PaymentTx) {
     let mut data = get_successful_tx_sent();
     let neighbor = pmt.to;
 
-    if let std::collections::hash_map::Entry::Vacant(e) = data.entry(neighbor) {
+    if let Some(e) = data.get_mut(&neighbor) {
+        e.insert(pmt);
+    } else {
         let mut set = HashSet::new();
         set.insert(pmt);
-        e.insert(set);
-    } else {
-        let set = data
-            .get_mut(&neighbor)
-            .expect("This key should have an initialized set");
-        set.insert(pmt);
+        data.insert(neighbor, set);
     }
 
     set_successful_tx_sent(data);
@@ -210,6 +216,17 @@ pub fn calculate_unverified_payments(router: Identity) -> Uint256 {
     total_unverified_payment
 }
 
+/// Checks if we already have a given txid in our to_validate list
+/// true if we have it false if we do not
+fn check_for_unvalidated_tx(ts: &ToValidate) -> bool {
+    for tx in get_unvalidated_transactions() {
+        if tx.payment.txid == ts.payment.txid {
+            return true;
+        }
+    }
+    false
+}
+
 /// Message to insert transactions into payment validator, once inserted they will remain
 /// until they are validated, dropped for validity issues, or time out without being inserted
 /// into the blockchain. Transactions that are too old are prevented from being played back
@@ -217,11 +234,13 @@ pub fn calculate_unverified_payments(router: Identity) -> Uint256 {
 /// This endpoint specifically (and only this one) is fully idempotent so that we can retry
 /// txid transmissions
 pub fn validate_later(ts: ToValidate) -> Result<(), RitaCommonError> {
-    if !get_all_successful_tx().contains(&ts.payment) {
+    if !get_all_successful_tx().contains(&ts.payment) && !check_for_unvalidated_tx(&ts) {
         // insert is safe to run multiple times just so long as we check successful tx's for duplicates
         add_unvalidated_transaction(ts);
+        Ok(())
+    } else {
+        Err(RitaCommonError::DuplicatePayment)
     }
-    Ok(())
 }
 
 struct Remove {
@@ -813,6 +832,36 @@ mod tests {
     use deep_space::utils::decode_any;
 
     use super::*;
+    use crate::usage_tracker::tests::random_identity;
+
+    fn generate_fake_payment() -> ToValidate {
+        let amount: u128 = rand::random();
+        let txid: u128 = rand::random();
+        let tx = PaymentTx {
+            to: random_identity(),
+            from: random_identity(),
+            amount: amount.into(),
+            txid: txid.into(),
+        };
+        ToValidate {
+            payment: tx,
+            received: Instant::now(),
+            checked: false,
+        }
+    }
+
+    #[test]
+    /// Attempts to insert a duplicate tx into the to_validate list
+    fn test_duplicate_tx() {
+        // check that we can't put duplicates in to_validate
+        let payment = generate_fake_payment();
+        assert!(validate_later(payment.clone()).is_ok());
+        assert!(validate_later(payment).is_err());
+        // check that we can't put dupliates in that we have already validated
+        let payment = generate_fake_payment();
+        add_successful_tx(payment.clone().payment);
+        assert!(validate_later(payment).is_err());
+    }
 
     #[test]
     fn test_payment_txid_datastore() {

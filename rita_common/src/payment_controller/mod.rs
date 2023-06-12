@@ -6,10 +6,10 @@
 use crate::blockchain_oracle::{
     get_oracle_balance, get_oracle_latest_gas_price, get_oracle_nonce, set_oracle_nonce,
 };
-use crate::debt_keeper::{normalize_payment_amount, payment_failed};
-use crate::payment_validator::{
-    get_payment_txids, validate_later, ToValidate, ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT,
-};
+use crate::debt_keeper::normalize_payment_amount;
+use crate::debt_keeper::payment_failed;
+use crate::payment_validator::{get_payment_txids, validate_later, ToValidate};
+use crate::payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT};
 use crate::rita_loop::get_web3_server;
 use althea_types::interop::UnpublishedPaymentTx;
 use althea_types::SystemChain;

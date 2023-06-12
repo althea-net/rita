@@ -93,7 +93,7 @@ pub async fn tick_simulated_tx() {
                 to: txfee_identity,
                 from: our_id,
                 amount: amount_to_pay,
-                txid: txid,
+                txid,
             });
 
             // update the billing now that the payment has gone through
