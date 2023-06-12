@@ -22,6 +22,7 @@ use crate::blockchain_oracle::{
 use crate::debt_keeper::payment_failed;
 use crate::payment_validator::{get_payment_txids, validate_later, ToValidate};
 use crate::rita_loop::get_web3_server;
+use crate::RitaCommonError;
 
 pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
 pub const MAX_TXID_RETRIES: u8 = 15u8;
@@ -374,8 +375,11 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         checked: false,
     };
 
-    if let Err(e) = validate_later(ts.clone()) {
-        error!("Received error trying to validate {:?} Error: {:?}", ts, e);
+    match validate_later(ts.clone()) {
+        Ok(()) | Err(RitaCommonError::DuplicatePayment) => {}
+        Err(e) => {
+            error!("Received error trying to validate {:?} Error: {:?}", ts, e);
+        }
     }
 
     Ok(())

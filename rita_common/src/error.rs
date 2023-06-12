@@ -32,6 +32,8 @@ pub enum RitaCommonError {
     BincodeError(Box<bincode::ErrorKind>),
     SendRequestError(SendRequestError),
     JsonPayloadError(JsonPayloadError),
+    DuplicatePayment,
+    PaymentFailed(String),
 }
 
 impl From<LoggerError> for RitaCommonError {
@@ -106,6 +108,8 @@ impl Display for RitaCommonError {
                 f, "Capacity Error: {a}",
             ),
             RitaCommonError::MiscStringError(a) => write!(f, "{a}",),
+            RitaCommonError::PaymentFailed(a) => write!(f, "{a}",),
+            RitaCommonError::DuplicatePayment => write!(f, "Duplicated payment!",),
             RitaCommonError::KernelInterfaceError(a) => write!(f, "{a}",),
             RitaCommonError::StdError(a) => write!(f, "{a}",),
             RitaCommonError::Lowest20Error(a) => write!(

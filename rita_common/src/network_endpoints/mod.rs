@@ -2,8 +2,8 @@
 
 use crate::payment_validator::{validate_later, ToValidate};
 use crate::peer_listener::structs::Peer;
-use crate::tm_identity_callback;
 use crate::tunnel_manager::id_callback::IdentityCallback;
+use crate::{tm_identity_callback, RitaCommonError};
 
 use actix_web_async::http::StatusCode;
 use actix_web_async::web::Json;
@@ -22,11 +22,13 @@ pub async fn make_payments(item: Json<PaymentTx>) -> HttpResponse {
         received: Instant::now(),
         checked: false,
     };
-    if let Err(e) = validate_later(ts) {
-        return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(&format!("{e}"));
-    }
 
-    HttpResponse::Ok().json("Payment Received!")
+    match validate_later(ts) {
+        Ok(()) | Err(RitaCommonError::DuplicatePayment) => {
+            HttpResponse::Ok().json("Payment Received!")
+        }
+        Err(e) => HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(&format!("{e}")),
+    }
 }
 
 /// The recieve side of the make payments v2 call. This processes a list of payments instead of a single payment
@@ -41,8 +43,11 @@ pub async fn make_payments_v2(item: Json<HashSet<PaymentTx>>) -> HttpResponse {
         };
 
         // Duplicates will be removed here
-        if let Err(e) = validate_later(ts) {
-            build_err.push_str(&format!("{e}\n"));
+        match validate_later(ts) {
+            Ok(()) | Err(RitaCommonError::DuplicatePayment) => {}
+            Err(e) => {
+                build_err.push_str(&format!("{e}\n"));
+            }
         }
     }
 
