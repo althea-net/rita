@@ -9,7 +9,6 @@ use crate::RitaCommonError;
 use althea_types::Identity;
 use althea_types::PaymentTx;
 use bincode::Error as BincodeError;
-use clarity::utils::hex_str_to_bytes;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
@@ -87,27 +86,12 @@ pub struct FormattedPaymentTx {
 }
 
 fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
-    if let Some(txid) = input.txid {
-        FormattedPaymentTx {
-            to: input.to,
-            from: input.from,
-            amount: input.amount,
-            txid: format!("{txid:#066x}"),
-        }
-    } else if let Some(tx_hash) = input.tx_hash {
-        FormattedPaymentTx {
-            to: input.to,
-            from: input.from,
-            amount: input.amount,
-            txid: tx_hash,
-        }
-    } else {
-        FormattedPaymentTx {
-            to: input.to,
-            from: input.from,
-            amount: input.amount,
-            txid: String::new(),
-        }
+    let txid = input.txid;
+    FormattedPaymentTx {
+        to: input.to,
+        from: input.from,
+        amount: input.amount,
+        txid: format!("{txid:#066x}"),
     }
 }
 
@@ -492,31 +476,13 @@ fn trim_payments(size: usize, history: &mut VecDeque<PaymentHour>) {
 pub fn update_payments(payment: PaymentTx) {
     let history = &mut (USAGE_TRACKER.write().unwrap());
 
-    // make sure the tx has a txid, transactions without one have not been sent yet and this store
-    // should only contain sent transactions
-    let txid = match (payment.txid, payment.tx_hash.clone()) {
-        // invalid payment
-        (None, None) => return,
-        // impossible payment on both chains?
-        (Some(_), Some(_)) => panic!(),
-        (None, Some(tx_hash)) => {
-            // todo move this validation up a level
-            match hex_str_to_bytes(&tx_hash) {
-                Ok(val) => Uint256::from_be_bytes(&val),
-                // invalid alteha chain txid
-                Err(_) => return,
-            }
-        }
-        (Some(txid), None) => txid,
-    };
-
     // This handles the following edge case:
     // Router A is paying router B. Router B reboots and loses all data in
     // payment vaildator datastore. When A sends a make_payment_v2, payments that have
     // already been accounted for get counted twice.
     // This checks the usage history to see if this tx exists
     // thereby preventing the above case.
-    if history.get_txids().contains(&txid) {
+    if history.get_txids().contains(&payment.txid) {
         error!("Tried to insert duplicate txid into usage tracker!");
         return;
     }

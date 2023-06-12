@@ -23,6 +23,7 @@ use deep_space::client::ChainStatus;
 use deep_space::utils::decode_any;
 use deep_space::Address as AltheaAddress;
 use deep_space::Contact;
+use futures::future::join;
 use futures::future::join_all;
 use num256::Uint256;
 use num_traits::Num;
@@ -94,14 +95,12 @@ pub struct ToValidate {
 
 impl fmt::Display for ToValidate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.payment.txid {
-            Some(txid) => write!(
-                f,
-                "(txid: {:#066x}, from: {}",
-                txid, self.payment.from.wg_public_key
-            ),
-            None => write!(f, "(txid: None, from: {}", self.payment.from.wg_public_key),
-        }
+        write!(
+            f,
+            "(txid: {:#066x}, from: {}",
+            self.payment.txid, self.payment.from.wg_public_key
+        )?;
+        Ok(())
     }
 }
 
@@ -288,21 +287,13 @@ pub async fn validate() {
         if elapsed.is_some() && elapsed.unwrap() > PAYMENT_RECEIVE_TIMEOUT {
             error!(
                 "Incoming transaction {} has timed out, payment failed!",
-                if let Some(txid) = item.payment.txid {
-                    format!("{:#066x}", txid)
-                } else {
-                    item.payment.tx_hash.clone().unwrap()
-                }
+                format!("{:#066x}", item.payment.txid)
             );
 
             // if we fail to so much as get a block height for the full duration of a payment timeout, we have problems and probably we are not counting payments correctly potentially leading to wallet
             // drain and other bad outcomes. So we should restart with the hope that the system will be restored to a working state by this last resort action
             if !item.checked {
-                let msg = format!("We failed to check txid {} against full nodes for the full duration of it's timeout period, please check full nodes",if let Some(txid) = item.payment.txid {
-                    format!("{:#066x}", txid)
-                } else {
-                    item.payment.tx_hash.unwrap()
-                });
+                let msg = format!("We failed to check txid {:#066x} against full nodes for the full duration of it's timeout period, please check full nodes", item.payment.txid);
                 error!("{}", msg);
 
                 let sys = actix_async::System::current();
@@ -318,12 +309,8 @@ pub async fn validate() {
         // transactions
         else if elapsed.is_some() && from_us && elapsed.unwrap() > PAYMENT_SEND_TIMEOUT {
             error!(
-                "Outgoing transaction {} has timed out, payment failed!",
-                if let Some(txid) = item.payment.txid {
-                    format!("{:#066x}", txid)
-                } else {
-                    item.payment.tx_hash.clone().unwrap()
-                }
+                "Outgoing transaction {:#066x} has timed out, payment failed!",
+                item.payment.txid
             );
             to_delete.push(item.clone());
         } else {
@@ -361,49 +348,19 @@ pub async fn validate() {
 /// is at least some configurable number of blocks behind the head.
 pub async fn validate_transaction(ts: ToValidate) {
     trace!("validating transaction");
-    // we validate that a txid is present before adding to the validation list
-    let txid = ts.payment.clone().txid;
-    let txhash = ts.payment.clone().tx_hash;
-
-    match (txid, txhash) {
-        (Some(_), Some(_)) => {
-            error!("We recieved both an eth and althea chain receipt for a payment! Trying to verify only althea chain");
-            handle_althea_tx_checking(ts).await;
-        }
-        // Received a payment on eth chain
-        (Some(_), None) => {
-            handle_xdai_tx_checking(ts).await;
-        }
-        // Recieved payment on althea chain
-        (None, Some(_)) => {
-            handle_althea_tx_checking(ts).await;
-        }
-        // Recieved a receipt with no txid or txhash??
-        (None, None) => {
-            error!(
-                "Someone tried to insert an unpublished transaction to validate!? {:?}",
-                ts
-            );
-            // in a development env we want to draw attention to this case
-            #[cfg(feature = "development")]
-            panic!(
-                "Someone tried to insert an unpublished transaction to validate!? {:?}",
-                ts
-            );
-            remove(Remove {
-                tx: ts,
-                success: false,
-            })
-        }
-    }
+    // check both in parallel since we don't know what chain this is on
+    join(
+        handle_althea_tx_checking(ts.clone()),
+        handle_xdai_tx_checking(ts),
+    )
+    .await;
 }
 
 async fn handle_xdai_tx_checking(ts: ToValidate) {
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, TRANSACTION_VERIFICATION_TIMEOUT);
 
-    // already verfied that it exists
-    let txid = ts.payment.txid.unwrap();
+    let txid = ts.payment.txid;
 
     let eth_block_num = web3.eth_block_number().await;
     let eth_transaction = web3.eth_get_transaction_by_hash(txid).await;
@@ -487,8 +444,8 @@ async fn handle_althea_tx_checking(ts: ToValidate) {
         ALTHEA_CHAIN_PREFIX,
     )
     .unwrap();
-    // already verfied that it exists
-    let txhash = ts.payment.tx_hash.clone().unwrap();
+    // convert to hex string
+    let txhash = ts.payment.txid.to_str_radix(16);
 
     let althea_chain_status = althea_contact.get_chain_status().await;
     let althea_transaction = althea_contact.get_tx_by_hash(txhash.clone()).await;
@@ -634,7 +591,6 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
     // txid is for eth chain and txhash is for althea chain, only one of these should be
     // Some(..). This was verified before
     let txid = ts.payment.txid;
-    let txhash = ts.payment.tx_hash.clone();
 
     // Verify that denom is valid
     let mut denom: Option<Denom> = None;
@@ -660,7 +616,6 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
     }
 
     let from_address_eth = ts.payment.from.eth_address;
-    let from_address_althea = ts.payment.from.get_althea_address();
 
     let amount = ts.payment.amount;
 
@@ -738,17 +693,7 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
     }
 
     if is_old {
-        if txid.is_some() {
-            error!(
-                "Transaction is more than 6 hours old! {:#066x}",
-                txid.unwrap()
-            );
-        } else {
-            error!(
-                "Transaction is more than 6 hours old! {:?}",
-                txhash.unwrap()
-            );
-        }
+        error!("Transaction is more than 6 hours old! {:#066x}", txid);
         remove(Remove {
             tx: ts,
             success: false,
@@ -764,21 +709,10 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
                 tx: ts,
                 success: true,
             });
-            if txid.is_some() {
-                info!(
-                    "payment {:#066x} from {} for {} wei successfully validated!",
-                    txid.unwrap(),
-                    from_address_eth,
-                    amount
-                );
-            } else {
-                info!(
-                    "payment {:?} from {:?} for {} wei successfully validated!",
-                    txhash.unwrap(),
-                    from_address_althea,
-                    amount
-                );
-            }
+            info!(
+                "payment {:#066x} from {} for {} wei successfully validated!",
+                txid, from_address_eth, amount
+            );
 
             // update debt keeper with the details of this payment
             let _ = payment_received(
@@ -791,19 +725,10 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
         }
         // we successfully paid someone
         (false, true, true) => {
-            if txid.is_some() {
-                info!(
-                    "payment {:#066x} from {} for {} wei successfully sent!",
-                    txid.unwrap(),
-                    from_address_eth,
-                    amount
-                );
-            } else {
-                info!(
-                    "payment {:?} from {:?} for {} wei successfully sent!",
-                    txhash, from_address_althea, amount
-                );
-            }
+            info!(
+                "payment {:#066x} from {} for {} wei successfully sent!",
+                txid, from_address_eth, amount
+            );
 
             // remove this transaction from our storage
             remove(Remove {
@@ -919,8 +844,7 @@ mod tests {
             to: exit_id,
             from: client_id,
             amount: 10u8.into(),
-            txid: Some(1u8.into()),
-            tx_hash: None,
+            txid: 1u8.into(),
         };
 
         store_payment(pmt1.clone());
@@ -931,8 +855,7 @@ mod tests {
             to: exit_id,
             from: client_id,
             amount: 100u8.into(),
-            txid: Some(2u8.into()),
-            tx_hash: None,
+            txid: 2u8.into(),
         };
         store_payment(pmt2.clone());
 
@@ -943,8 +866,7 @@ mod tests {
             to: exit_id,
             from: client_id,
             amount: 100u8.into(),
-            txid: Some(2u8.into()),
-            tx_hash: None,
+            txid: 2u8.into(),
         };
 
         store_payment(pmt3.clone());

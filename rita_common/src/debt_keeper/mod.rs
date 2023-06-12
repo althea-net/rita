@@ -21,8 +21,9 @@ use crate::tunnel_manager::TunnelStateChange;
 use crate::RitaCommonError;
 
 use althea_types::Denom;
+use althea_types::Identity;
 use althea_types::SystemChain;
-use althea_types::{Identity, PaymentTx};
+use althea_types::UnpublishedPaymentTx;
 use num256::{Int256, Uint256};
 use num_traits::identities::Zero;
 use num_traits::CheckedMul;
@@ -314,7 +315,7 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
                         ));
                     }
                 }
-                queue_payment(PaymentTx {
+                queue_payment(UnpublishedPaymentTx {
                     to: *to,
                     from: match settings::get_rita_common().get_identity() {
                         Some(id) => id,
@@ -325,8 +326,6 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
                         }
                     },
                     amount,
-                    txid: None, // not yet published
-                    tx_hash: None,
                 });
             }
         }

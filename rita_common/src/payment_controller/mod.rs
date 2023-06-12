@@ -3,6 +3,15 @@
 //! until it is successfully in a block, see payment_validator, once the payment is on
 //! the blockchain it's up to the reciever to validate that it's correct
 
+use crate::blockchain_oracle::{
+    get_oracle_balance, get_oracle_latest_gas_price, get_oracle_nonce, set_oracle_nonce,
+};
+use crate::debt_keeper::{normalize_payment_amount, payment_failed};
+use crate::payment_validator::{
+    get_payment_txids, validate_later, ToValidate, ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT,
+};
+use crate::rita_loop::get_web3_server;
+use althea_types::interop::UnpublishedPaymentTx;
 use althea_types::SystemChain;
 use althea_types::{Denom, PaymentTx};
 use awc;
@@ -22,15 +31,6 @@ use std::time::Instant;
 use web30::client::Web3;
 use web30::types::SendTxOption;
 
-use crate::blockchain_oracle::{
-    get_oracle_balance, get_oracle_latest_gas_price, get_oracle_nonce, set_oracle_nonce,
-};
-use crate::debt_keeper::{normalize_payment_amount, payment_failed};
-use crate::payment_validator::{
-    get_payment_txids, validate_later, ToValidate, ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT,
-};
-use crate::rita_loop::get_web3_server;
-
 pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
 pub const MAX_TXID_RETRIES: u8 = 15u8;
 
@@ -43,7 +43,7 @@ lazy_static! {
 pub struct PaymentController {
     /// this is a vec of outgoing transactions for the payment
     /// controller loop to pick up next time it runs
-    outgoing_queue: Vec<PaymentTx>,
+    outgoing_queue: Vec<UnpublishedPaymentTx>,
     /// this queue tracks payments that we have failed to send to our
     /// neighbor this is where we have sent the actual funds on the chain
     /// but have failed to notify the neighbor we did so. In this edge case
@@ -55,7 +55,7 @@ pub struct PaymentController {
 
 /// Pushes a payment tx onto the payment controller queue, to be processed
 /// on the next payment controller loop run
-pub fn queue_payment(payment: PaymentTx) {
+pub fn queue_payment(payment: UnpublishedPaymentTx) {
     info!("Payment of {:?} queued!", payment);
     let mut data = PAYMENT_DATA.write().unwrap();
     data.outgoing_queue.push(payment);
@@ -109,7 +109,7 @@ impl Error for PaymentControllerError {}
 /// This function is called by the async loop in order to perform payment
 /// controller actions
 pub async fn tick_payment_controller() {
-    let outgoing_payments: Vec<PaymentTx>;
+    let outgoing_payments: Vec<UnpublishedPaymentTx>;
     let resend_queue: Vec<ResendInfo>;
 
     {
@@ -151,7 +151,7 @@ pub async fn tick_payment_controller() {
 
 /// This is called by debt_keeper to make payments. It sends a
 /// PaymentTx to the `mesh_ip` in its `to` field.
-async fn make_payment(pmt: PaymentTx) -> Result<(), PaymentControllerError> {
+async fn make_payment(pmt: UnpublishedPaymentTx) -> Result<(), PaymentControllerError> {
     let common = settings::get_rita_common();
     let network_settings = common.network;
     let payment_settings = common.payment;
@@ -172,7 +172,7 @@ async fn make_payment(pmt: PaymentTx) -> Result<(), PaymentControllerError> {
 }
 
 async fn make_althea_payment(
-    mut pmt: PaymentTx,
+    mut pmt: UnpublishedPaymentTx,
     payment_settings: PaymentSettings,
     network_settings: NetworkSettings,
 ) -> Result<(), PaymentControllerError> {
@@ -273,7 +273,7 @@ async fn make_althea_payment(
     };
 
     // setup tx hash
-    pmt.tx_hash = Some(transaction.txhash);
+    let pmt = pmt.publish(transaction.txhash.parse().unwrap());
 
     send_make_payment_endpoints(pmt.clone(), network_settings, None, Some(cosmos_node_grpc)).await;
 
@@ -292,7 +292,7 @@ async fn make_althea_payment(
 }
 
 async fn make_xdai_payment(
-    mut pmt: PaymentTx,
+    pmt: UnpublishedPaymentTx,
     payment_settings: PaymentSettings,
     network_settings: NetworkSettings,
 ) -> Result<(), PaymentControllerError> {
@@ -352,7 +352,7 @@ async fn make_xdai_payment(
                             tx_id, balance, pmt.amount, our_address, pmt.to.eth_address, nonce);
 
     // add published txid to submission
-    pmt.txid = Some(tx_id);
+    let pmt = pmt.publish(tx_id);
 
     send_make_payment_endpoints(pmt.clone(), network_settings, Some(full_node), None).await;
 
@@ -372,7 +372,7 @@ async fn make_xdai_payment(
 
 fn sanity_check_balance(
     balance: Option<Uint256>,
-    pmt: &PaymentTx,
+    pmt: &UnpublishedPaymentTx,
 ) -> Result<(), PaymentControllerError> {
     match balance {
         Some(value) => {
@@ -457,7 +457,6 @@ async fn send_make_payment_endpoints(
     let (neigh_ack_v2, neigh_ack) = join(neigh_ack_v2, neigh_ack).await;
 
     let tx_id = pmt.txid;
-    let tx_hash = pmt.tx_hash;
     match (neigh_ack_v2, neigh_ack) {
         (Ok(mut val2), Ok(mut val)) => {
             // THis is probably a b20 router
@@ -465,13 +464,7 @@ async fn send_make_payment_endpoints(
                 (true, _) => {
                     info!(
                         "Payment pmt with tx identifier: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
-                        {
-                            if tx_id.is_some() {
-                                format!("{:#066x}", tx_id.unwrap())
-                            } else {
-                                tx_hash.unwrap()
-                            }
-                        },
+                        format!("{:#066x}", tx_id),
                         val2.status(),
                         val2.body().await,
                         neighbor_url_v2,
@@ -488,25 +481,13 @@ async fn send_make_payment_endpoints(
                 (false, true) => {
                     error!(
                         "Make_payment_v2 with tx identifier {} failed with status {:?} and body {:?}",
-                        {
-                            if tx_id.is_some() {
-                                format!("{:#066x}", tx_id.unwrap())
-                            } else {
-                                tx_hash.clone().unwrap()
-                            }
-                        },
+                        format!("{:#066x}", tx_id),
                         val2.status(),
                         val2.body().await
                     );
                     info!(
                         "Payment pmt with tx identifier: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
-                        {
-                            if tx_id.is_some() {
-                                format!("{:#066x}", tx_id.unwrap())
-                            } else {
-                                tx_hash.unwrap()
-                            }
-                        },
+                        format!("{:#066x}", tx_id),
                         val.status(),
                         val.body().await,
                         neighbor_url,
@@ -523,13 +504,7 @@ async fn send_make_payment_endpoints(
                 _ => {
                     error!(
                         "We published txid: {} to url {} but our neighbor responded with status {:?} and body {:?}, will retry",
-                        {
-                            if tx_id.is_some() {
-                                format!("{:#066x}", tx_id.unwrap())
-                            } else {
-                                tx_hash.unwrap()
-                            }
-                        }, neighbor_url, val.status(), val.body().await);
+                                format!("{:#066x}", tx_id), neighbor_url, val.status(), val.body().await);
                     queue_resend(resend_info);
                 }
             }
@@ -539,13 +514,7 @@ async fn send_make_payment_endpoints(
             if val.status().is_success() {
                 info!(
                     "Payment pmt with txid: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
-                    {
-                        if tx_id.is_some() {
-                            format!("{:#066x}", tx_id.unwrap())
-                        } else {
-                            tx_hash.unwrap()
-                        }
-                    },
+                    format!("{:#066x}", tx_id),
                     val.status(),
                     val.body().await,
                     neighbor_url,
@@ -561,13 +530,7 @@ async fn send_make_payment_endpoints(
             } else {
                 error!(
                     "Make_payment with tx identifier {} failed with status {:?} and body {:?}",
-                    {
-                        if tx_id.is_some() {
-                            format!("{:#066x}", tx_id.unwrap())
-                        } else {
-                            tx_hash.unwrap()
-                        }
-                    },
+                    format!("{:#066x}", tx_id),
                     val.status(),
                     val.body().await
                 );
@@ -579,13 +542,7 @@ async fn send_make_payment_endpoints(
             if val2.status().is_success() {
                 info!(
                     "Payment pmt with txid: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
-                    {
-                        if tx_id.is_some() {
-                            format!("{:#066x}", tx_id.unwrap())
-                        } else {
-                            tx_hash.unwrap()
-                        }
-                    },
+                    format!("{:#066x}", tx_id),
                     val2.status(),
                     val2.body().await,
                     neighbor_url_v2,
@@ -601,13 +558,7 @@ async fn send_make_payment_endpoints(
             } else {
                 error!(
                     "Make_payment_v2 with txid {} failed with status {:?} and body {:?}",
-                    {
-                        if tx_id.is_some() {
-                            format!("{:#066x}", tx_id.unwrap())
-                        } else {
-                            tx_hash.unwrap()
-                        }
-                    },
+                    format!("{:#066x}", tx_id),
                     val2.status(),
                     val2.body().await
                 );
@@ -617,13 +568,7 @@ async fn send_make_payment_endpoints(
             // Why is make payment failing here? Call a resend
             error!(
                 "We published txid: {} but failed to notify our neighbor with {:?}, will retry",
-                {
-                    if tx_id.is_some() {
-                        format!("{:#066x}", tx_id.unwrap())
-                    } else {
-                        tx_hash.unwrap()
-                    }
-                },
+                format!("{:#066x}", tx_id),
                 e
             );
             queue_resend(resend_info)
@@ -642,7 +587,6 @@ struct ResendInfo {
 /// retry up to MAX_TXID_RETIRES times
 async fn resend_txid(input: ResendInfo) -> Result<(), PaymentControllerError> {
     let tx_id = input.pmt.txid;
-    let tx_hash = input.pmt.tx_hash.clone();
 
     let mut input = input;
     input.attempt += 1;
@@ -651,13 +595,7 @@ async fn resend_txid(input: ResendInfo) -> Result<(), PaymentControllerError> {
     if input.attempt > MAX_TXID_RETRIES {
         error!(
             "We have failed to send txid {} this payment will remain uncredited!",
-            {
-                if tx_id.is_some() {
-                    format!("{:#066x}", tx_id.unwrap())
-                } else {
-                    tx_hash.unwrap()
-                }
-            },
+            { format!("{:#066x}", tx_id) },
         );
         return Err(PaymentControllerError::ResendFailed);
     }
@@ -671,11 +609,7 @@ async fn resend_txid(input: ResendInfo) -> Result<(), PaymentControllerError> {
 
     if neigh_ack.is_err() || !neigh_ack.unwrap().status().is_success() {
         error!("retry failed with published txid: {}", {
-            if tx_id.is_some() {
-                format!("{:#066x}", tx_id.unwrap())
-            } else {
-                tx_hash.unwrap()
-            }
+            format!("{:#066x}", tx_id)
         },);
         queue_resend(input);
     }
