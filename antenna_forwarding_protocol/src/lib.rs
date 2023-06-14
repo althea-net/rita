@@ -87,7 +87,7 @@ impl Display for ForwardingProtocolError {
 
 /// Writes data to a stream keeping in mind that we may encounter
 /// a buffer limit and have to partially complete our write
-pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), IoError> {
+pub fn write_all_spinlock(stream: &mut TcpStream, mut buffer: &[u8]) -> Result<(), IoError> {
     assert!(!buffer.is_empty());
     const SPINLOCK_TIMEOUT: Duration = Duration::from_secs(600);
 
@@ -115,6 +115,8 @@ pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), I
                     ));
                 } else {
                     trace!("Did not write all, trying again",);
+                    // truncate the buffer with the bytes we have written
+                    buffer = &buffer[bytes..];
                 }
             }
             Err(e) => {
