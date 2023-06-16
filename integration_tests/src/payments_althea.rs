@@ -103,8 +103,8 @@ pub async fn run_althea_payments_test_scenario() {
         Some(end_node.clone().unwrap()),
         "1.2G".to_string(),
     );
-    info!("Waiting for payment");
-    thread::sleep(Duration::from_secs(15));
+    info!("Waiting 60 sec for payment");
+    thread::sleep(Duration::from_secs(60));
 
     info!("Querying debts");
     let res = query_debts(
