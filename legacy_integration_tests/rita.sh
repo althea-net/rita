@@ -53,8 +53,6 @@ build_rev() {
   popd
 }
 
-pip3 install --user -r requirements.txt
-
 if [ ! -f "${NETLAB_PATH-}" ] ; then
   git clone "https://github.com/kingoflolz/network-lab" "deps/network-lab" # TODO: Change this back when PR is upstreamed
 fi
