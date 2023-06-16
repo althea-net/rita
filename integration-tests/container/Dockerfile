@@ -1,6 +1,7 @@
 FROM postgres
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y sudo iputils-ping iproute2 jq vim default-libmysqlclient-dev libsqlite3-dev postgresql-client-11 postgresql-server-dev-11 libpq-dev python3-pip bridge-utils wireguard linux-source curl git libssl-dev pkg-config build-essential ipset python3-setuptools python3-wheel dh-autoreconf procps iperf3 netcat-traditional
+RUN apt-get update && apt-get install -y sudo iputils-ping iproute2 jq vim netcat-traditional default-libmysqlclient-dev libsqlite3-dev postgresql-client-11 postgresql-server-dev-11 libpq-dev python3-pip bridge-utils wireguard linux-source curl git libssl-dev pkg-config build-essential ipset python3-setuptools python3-wheel dh-autoreconf procps iperf3
+RUN apt-get install -y python3-termcolor python3-toml python3-networkx python3-matplotlib python3-joblib
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 RUN PATH=$PATH:$HOME/.cargo/bin cargo install diesel_cli --force
 ENV POSTGRES_USER=postgres
