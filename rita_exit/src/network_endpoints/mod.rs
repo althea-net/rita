@@ -210,9 +210,8 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
         Ok(state) => state,
         Err(e) => match *e {
             RitaExitError::NoClientError => {
-                return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
-                    "{their_wg_pubkey} is not yet registered"
-                ));
+                return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+                    .json(format!("{their_wg_pubkey} is not yet registered"));
             }
             e => {
                 error!(

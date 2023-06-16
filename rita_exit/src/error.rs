@@ -28,7 +28,7 @@ pub enum RitaExitError {
     DeepSpaceError(deep_space::error::AddressError),
     AltheaTypesError(AltheaTypesError),
     KernelInterfaceError(KernelInterfaceError),
-    NoClientError
+    NoClientError,
 }
 
 impl From<diesel::result::Error> for RitaExitError {
@@ -121,7 +121,7 @@ impl Display for RitaExitError {
             RitaExitError::ClarityError(a) => write!(f, "{a}",),
             RitaExitError::AltheaTypesError(a) => write!(f, "{a}",),
             RitaExitError::KernelInterfaceError(a) => write!(f, "{a}",),
-            RitaExitError::NoClientError => write!(f, "This client has not registered yet!")
+            RitaExitError::NoClientError => write!(f, "This client has not registered yet!"),
         }
     }
 }
