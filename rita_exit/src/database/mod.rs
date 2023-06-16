@@ -201,10 +201,7 @@ pub fn client_status(
             message: "Registration OK".to_string(),
         })
     } else {
-        error!("De-registering client! {:?}", client);
-        Err(Box::new(RitaExitError::MiscStringError(
-            "Status request for a client that isnt present, please register first!".to_string(),
-        )))
+        Err(Box::new(RitaExitError::NoClientError))
     }
 }
 

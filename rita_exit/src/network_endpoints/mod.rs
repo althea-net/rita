@@ -208,15 +208,22 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
     };
     let state = match client_status(*decrypted_id, &conn) {
         Ok(state) => state,
-        Err(e) => {
-            error!(
-                "Internal error in client status for {} with {:?}",
-                their_wg_pubkey, e
-            );
-            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
-                "Internal error in client status for {their_wg_pubkey} with {e:?}"
-            ));
-        }
+        Err(e) => match *e {
+            RitaExitError::NoClientError => {
+                return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
+                    "{their_wg_pubkey} is not yet registered"
+                ));
+            }
+            e => {
+                error!(
+                    "Internal error in client status for {} with {:?}",
+                    their_wg_pubkey, e
+                );
+                return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
+                    "Internal error in client status for {their_wg_pubkey} with {e:?}"
+                ));
+            }
+        },
     };
     HttpResponse::Ok().json(secure_setup_return(
         state,

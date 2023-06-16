@@ -225,7 +225,7 @@ pub async fn get_exit_info(to: &SocketAddr) -> Result<ExitState, RitaClientError
     let mut response = match client.get(&endpoint).send().await {
         Ok(a) => a,
         Err(e) => {
-            error!("Unable to get exit info with {}", e);
+            warn!("Unable to get exit info with {}", e);
             return Err(RitaClientError::SendRequestError(e.to_string()));
         }
     };

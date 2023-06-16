@@ -248,7 +248,7 @@ async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: Str
             set_oracle_last_updated(Instant::now());
         }
         Err(e) => {
-            error!("Failed to get latest block number with {:?}", e);
+            warn!("Failed to get latest block number with {:?}", e);
             return;
         }
     }
