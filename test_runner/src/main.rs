@@ -30,12 +30,12 @@ async fn main() {
     if let Ok(test_type) = test_type {
         if test_type == "FIVE_NODES" {
             run_five_node_test_scenario().await;
-        } else if test_type == "PAYMENTS_ETH" {
-            run_eth_payments_test_scenario()
-        } else if test_type == "PAYMENTS_ALTHEA" {
-            run_althea_payments_test_scenario().await;
         } else if test_type == "DEBTS_TEST" {
             run_debts_test().await;
+        } else if test_type == "PAYMENTS_ETH" || test_type == "ETH_PAYMENTS" {
+            run_eth_payments_test_scenario().await;
+        } else if test_type == "PAYMENTS_ALTHEA" || test_type == "ALTHEA_PAYMENTS" {
+            run_althea_payments_test_scenario().await
         } else {
             panic!("Error unknown test type {}!", test_type);
         }
