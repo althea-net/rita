@@ -3204,12 +3204,14 @@ dependencies = [
  "althea_types",
  "awc",
  "babel_monitor",
+ "clarity",
  "clu",
  "ctrlc",
  "diesel",
  "diesel_migrations",
  "docopt",
  "env_logger",
+ "futures 0.3.28",
  "ipnetwork",
  "log",
  "nix 0.26.2",
@@ -3218,6 +3220,7 @@ dependencies = [
  "rita_common",
  "rita_exit",
  "settings",
+ "web30",
 ]
 
 [[package]]

@@ -1,10 +1,16 @@
-use crate::setup_utils::namespaces::{get_nsfd, Namespace, NamespaceInfo, RouteHop};
+use crate::{
+    payments_eth::{eth_chain_id, get_miner_address, get_miner_key},
+    setup_utils::namespaces::{get_nsfd, Namespace, NamespaceInfo, RouteHop},
+};
 use actix_rt::time::sleep;
 use actix_rt::System;
 use althea_kernel_interface::KI;
 use althea_types::ContactType;
 use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
+use clarity::Address as EthAddress;
+use clarity::{Transaction, Uint256};
+use futures::future::join_all;
 use ipnetwork::{IpNetwork, Ipv6Network};
 use log::{info, trace, warn};
 use nix::{
@@ -22,6 +28,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use web30::{client::Web3, jsonrpc::error::Web3Error};
 
 /// Wait this long for network convergence
 const REACHABILITY_TEST_TIMEOUT: Duration = Duration::from_secs(600);
@@ -260,4 +267,54 @@ pub fn set_sigterm() {
         std::process::exit(0);
     })
     .expect("Error setting Ctrl-C handler");
+}
+
+pub const HIGH_GAS_PRICE: u64 = 1_000_000_000u64;
+
+/// This function efficiently distributes ETH to a large number of provided Ethereum addresses
+/// the real problem here is that you can't do more than one send operation at a time from a
+/// single address without your sequence getting out of whack. By manually setting the nonce
+/// here we can quickly send thousands of transactions in only a few blocks
+pub async fn send_eth_bulk(amount: Uint256, destinations: &[EthAddress], web3: &Web3) {
+    let net_version = web3.net_version().await.unwrap();
+    let mut nonce = web3
+        .eth_get_transaction_count(get_miner_address())
+        .await
+        .unwrap();
+    let mut transactions = Vec::new();
+    for address in destinations {
+        let t = Transaction::Eip1559 {
+            chain_id: eth_chain_id(),
+            to: *address,
+            nonce,
+            max_fee_per_gas: HIGH_GAS_PRICE.into(),
+            max_priority_fee_per_gas: 0u8.into(),
+            gas_limit: 24000u64.into(),
+            value: amount,
+            data: Vec::new(),
+            signature: None,
+            access_list: Vec::new(),
+        };
+        let t = t.sign(&get_miner_key(), Some(net_version));
+        transactions.push(t);
+        nonce += 1u64.into();
+    }
+    let mut sends = Vec::new();
+    for tx in transactions {
+        sends.push(web3.eth_send_raw_transaction(tx.to_bytes()));
+    }
+    let txids = join_all(sends).await;
+    wait_for_txids(txids, web3).await;
+}
+
+pub const TX_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// utility function that waits for a large number of txids to enter a block
+async fn wait_for_txids(txids: Vec<Result<Uint256, Web3Error>>, web3: &Web3) {
+    let mut wait_for_txid = Vec::new();
+    for txid in txids {
+        let wait = web3.wait_for_transaction(txid.unwrap(), TX_TIMEOUT, None);
+        wait_for_txid.push(wait);
+    }
+    join_all(wait_for_txid).await;
 }
