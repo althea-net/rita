@@ -1,19 +1,34 @@
-use crate::setup_utils::namespaces::{get_nsfd, Namespace, NamespaceInfo, RouteHop};
+use crate::{
+    payments_althea::get_althea_evm_priv,
+    setup_utils::namespaces::{get_nsfd, Namespace, NamespaceInfo, NodeType, RouteHop},
+};
 use actix_rt::time::sleep;
 use actix_rt::System;
 use althea_kernel_interface::KI;
-use althea_types::ContactType;
+use althea_proto::cosmos_sdk_proto::cosmos::gov::v1beta1::VoteOption;
+use althea_proto::{
+    canto::erc20::v1::RegisterCoinProposal,
+    cosmos_sdk_proto::cosmos::bank::v1beta1::{
+        query_client::QueryClient, Metadata, QueryDenomMetadataRequest,
+    },
+};
+use althea_types::{ContactType, Denom, SystemChain};
 use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
+use deep_space::{Address as AltheaAddress, Coin, Contact, CosmosPrivateKey, PrivateKey};
+use futures::future::join_all;
 use ipnetwork::{IpNetwork, Ipv6Network};
-use log::{info, trace, warn};
+use log::{error, info, trace, warn};
 use nix::{
     fcntl::{open, OFlag},
     sched::{setns, CloneFlags},
     sys::stat::Mode,
 };
+use rita_common::{
+    debt_keeper::GetDebtsResult,
+    payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT},
+};
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
-use std::net::{IpAddr, Ipv4Addr};
 use std::{
     collections::HashMap,
     net::Ipv6Addr,
@@ -22,11 +37,34 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    net::{IpAddr, Ipv4Addr},
+};
 
 /// Wait this long for network convergence
 const REACHABILITY_TEST_TIMEOUT: Duration = Duration::from_secs(600);
 /// How long the reacability test should wait in between tests
 const REACHABILITY_TEST_CHECK_SPEED: Duration = Duration::from_secs(5);
+/// Pay thresh used in payment tests
+pub const TEST_PAY_THRESH: u64 = 1_000_000_000u64;
+
+pub const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
+
+pub const NODE_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(7, 7, 7, 2));
+
+pub const STAKING_TOKEN: &str = "aalthea";
+pub const MIN_GLOBAL_FEE_AMOUNT: u128 = 10;
+pub const TOTAL_TIMEOUT: Duration = Duration::from_secs(300);
+
+pub fn get_althea_grpc() -> String {
+    format!("http://{}:9091", NODE_IP)
+}
+
+pub fn get_eth_node() -> String {
+    format!("http://{}:8545", NODE_IP)
+}
 
 /// Test pingability waiting and failing if it is not successful
 pub fn test_reach_all(nsinfo: NamespaceInfo) {
@@ -206,13 +244,46 @@ pub fn get_default_settings() -> (RitaClientSettings, RitaExitSettingsStruct) {
 
     // first node is passed through to the host machine for testing second node is used
     // for testnet queries
-    const NODE_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(7, 7, 7, 2));
-    exit.payment.althea_grpc_list = vec![format!("http://{}:9091", NODE_IP)];
-    exit.payment.eth_node_list = vec![format!("http://{}:8545", NODE_IP)];
-    client.payment.althea_grpc_list = vec![format!("http://{}:9091", NODE_IP)];
-    client.payment.eth_node_list = vec![format!("http://{}:8545", NODE_IP)];
+    exit.payment.althea_grpc_list = vec![get_althea_grpc()];
+    exit.payment.eth_node_list = vec![get_eth_node()];
+    client.payment.althea_grpc_list = vec![get_althea_grpc()];
+    client.payment.eth_node_list = vec![get_eth_node()];
 
     (client, exit)
+}
+
+pub fn althea_system_chain_client(settings: RitaClientSettings) -> RitaClientSettings {
+    let mut settings = settings;
+    settings.payment.system_chain = SystemChain::Althea;
+    settings.payment.payment_threshold = TEST_PAY_THRESH.into();
+    let mut accept_de = HashMap::new();
+    accept_de.insert(
+        "usdc".to_string(),
+        Denom {
+            denom: "uUSDC".to_string(),
+            decimal: 1_000_000u64,
+        },
+    );
+    settings.payment.accepted_denoms = Some(accept_de);
+    settings
+}
+
+pub fn althea_system_chain_exit(settings: RitaExitSettingsStruct) -> RitaExitSettingsStruct {
+    let mut settings = settings;
+    settings.payment.system_chain = SystemChain::Althea;
+
+    // set pay thres to a smaller value
+    settings.payment.payment_threshold = TEST_PAY_THRESH.into();
+    let mut accept_de = HashMap::new();
+    accept_de.insert(
+        "usdc".to_string(),
+        Denom {
+            denom: "uUSDC".to_string(),
+            decimal: 1_000_000u64,
+        },
+    );
+    settings.payment.accepted_denoms = Some(accept_de);
+    settings
 }
 
 // Calls the register to exit rpc function within the provided namespace
@@ -260,4 +331,380 @@ pub fn set_sigterm() {
         std::process::exit(0);
     })
     .expect("Error setting Ctrl-C handler");
+}
+
+/// Run an iperf to generate from between two namespaces
+pub fn generate_traffic(from: Namespace, to: Namespace) {
+    let ip = format!("fd00::{}", to.id);
+    // setup server
+    info!("Going to setup server, spawning new thread");
+    thread::spawn(move || {
+        let _output = KI
+            .run_command("ip", &["netns", "exec", &to.get_name(), "iperf3", "-s"])
+            .expect("Could not setup iperf server");
+    });
+
+    // iperf client
+    info!("Going to setup client");
+    let output = KI
+        .run_command(
+            "ip",
+            &["netns", "exec", &from.get_name(), "iperf3", "-c", &ip],
+        )
+        .expect("Could not setup iperf client");
+    let output = from_utf8(&output.stdout).expect("could not get output for client setup!");
+    info!("Client out: {}", format!("{}", output));
+}
+
+pub async fn query_debts(node: Namespace, for_node: Namespace) -> GetDebtsResult {
+    let for_node_ip = match for_node.node_type {
+        NodeType::Exit => EXIT_ROOT_IP.to_string(),
+        _ => format!("fd00::{}", for_node.id),
+    };
+
+    let response: Arc<RwLock<Option<Vec<GetDebtsResult>>>> = Arc::new(RwLock::new(None));
+    let response_local = response.clone();
+    let node_name = node.get_name();
+
+    let _ = thread::spawn(move || {
+        info!("Starting inner thraed");
+        // set the host of this thread to the ns
+        let nsfd = get_nsfd(node.get_name());
+        setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
+        let runner = System::new();
+        runner.block_on(async move {
+            let client = awc::Client::default();
+            let mut req = client
+                .get("http://localhost:4877/debts".to_string())
+                .send()
+                .await
+                .expect("Failed to make request to rita RPC");
+            let res = match req.json().await {
+                Err(e) => panic!("Why is get debts failing: {}", e),
+                Ok(a) => a,
+            };
+            *response.write().unwrap() = Some(res);
+        })
+    });
+
+    // wait for the child thread to finish performing it's query
+    while response_local.read().unwrap().is_none() {
+        info!("Waiting for a rpc response from {}", node_name);
+        sleep(Duration::from_millis(100)).await;
+    }
+    sleep(Duration::from_millis(100)).await;
+    let list = response_local.read().unwrap().clone().unwrap();
+
+    let mut ret = None;
+    for e in list {
+        if e.identity.mesh_ip.to_string() == for_node_ip {
+            ret = Some(e.clone());
+            info!("Relevant node debt is {:?}", e);
+        }
+    }
+    ret.unwrap()
+}
+
+#[derive(Debug, Clone)]
+pub struct ValidatorKeys {
+    /// The validator key used by this validator to actually sign and produce blocks
+    pub validator_key: CosmosPrivateKey,
+    // The mnemonic phrase used to generate validator_key
+    pub validator_phrase: String,
+}
+// Simple arguments to create a proposal with
+pub struct RegisterCoinProposalParams {
+    pub coin_metadata: Metadata,
+
+    pub proposal_title: String,
+    pub proposal_desc: String,
+}
+
+pub fn get_deposit() -> Coin {
+    Coin {
+        denom: STAKING_TOKEN.to_string(),
+        amount: 1_000_000_000u64.into(),
+    }
+}
+
+pub fn get_fee(denom: Option<String>) -> Coin {
+    match denom {
+        None => Coin {
+            denom: STAKING_TOKEN.to_string(),
+            amount: MIN_GLOBAL_FEE_AMOUNT.into(),
+        },
+        Some(denom) => Coin {
+            denom,
+            amount: MIN_GLOBAL_FEE_AMOUNT.into(),
+        },
+    }
+}
+
+pub async fn vote_yes_with_retry(
+    contact: &Contact,
+    proposal_id: u64,
+    key: impl PrivateKey,
+    timeout: Duration,
+) {
+    const MAX_VOTES: u64 = 5;
+    let mut counter = 0;
+    let mut res = contact
+        .vote_on_gov_proposal(
+            proposal_id,
+            VoteOption::Yes,
+            get_fee(None),
+            key.clone(),
+            Some(timeout),
+        )
+        .await;
+    while let Err(e) = res {
+        info!("Vote failed with {:?}", e);
+        contact.wait_for_next_block(TOTAL_TIMEOUT).await.unwrap();
+        res = contact
+            .vote_on_gov_proposal(
+                proposal_id,
+                VoteOption::Yes,
+                get_fee(None),
+                key.clone(),
+                Some(timeout),
+            )
+            .await;
+        counter += 1;
+        if counter > MAX_VOTES {
+            error!(
+                "Vote for proposal has failed more than {} times, error {:?}",
+                MAX_VOTES, e
+            );
+            panic!("failed to vote{}", e);
+        }
+    }
+    let res = res.unwrap();
+    info!(
+        "Voting yes on governance proposal costing {} gas",
+        res.gas_used
+    );
+}
+
+pub async fn vote_yes_on_proposals(
+    contact: &Contact,
+    keys: &[ValidatorKeys],
+    timeout: Option<Duration>,
+) {
+    let duration = match timeout {
+        Some(dur) => dur,
+        None => OPERATION_TIMEOUT,
+    };
+    // Vote yes on all proposals with all validators
+    let proposals = contact
+        .get_governance_proposals_in_voting_period()
+        .await
+        .unwrap();
+    trace!("Found proposals: {:?}", proposals.proposals);
+    let mut futs = Vec::new();
+    for proposal in proposals.proposals {
+        for key in keys.iter() {
+            let res =
+                vote_yes_with_retry(contact, proposal.proposal_id, key.validator_key, duration);
+            futs.push(res);
+        }
+    }
+    // vote on the proposal in parallel, reducing the number of blocks we wait for all
+    // the tx's to get in.
+    join_all(futs).await;
+}
+
+pub async fn wait_for_proposals_to_execute(contact: &Contact) {
+    let start = Instant::now();
+    loop {
+        let proposals = contact
+            .get_governance_proposals_in_voting_period()
+            .await
+            .unwrap();
+        if Instant::now() - start > TOTAL_TIMEOUT {
+            panic!("Gov proposal did not execute")
+        } else if proposals.proposals.is_empty() {
+            return;
+        }
+        sleep(Duration::from_secs(5)).await;
+    }
+}
+
+pub async fn execute_register_coin_proposal(
+    contact: &Contact,
+    keys: &[ValidatorKeys],
+    timeout: Option<Duration>,
+    coin_params: RegisterCoinProposalParams,
+) {
+    let duration = match timeout {
+        Some(dur) => dur,
+        None => OPERATION_TIMEOUT,
+    };
+
+    let proposal = RegisterCoinProposal {
+        title: coin_params.proposal_title,
+        description: coin_params.proposal_desc,
+        metadata: Some(coin_params.coin_metadata),
+    };
+    let res = contact
+        .submit_register_coin_proposal(
+            proposal,
+            get_deposit(),
+            get_fee(None),
+            keys[0].validator_key,
+            Some(duration),
+        )
+        .await
+        .unwrap();
+    info!("Gov proposal executed with {:?}", res.raw_log);
+
+    vote_yes_on_proposals(contact, keys, None).await;
+    wait_for_proposals_to_execute(contact).await;
+}
+
+fn parse_phrases(filename: &str) -> (Vec<CosmosPrivateKey>, Vec<String>) {
+    let file = File::open(filename).expect("Failed to find phrases");
+    let reader = BufReader::new(file);
+    let mut ret_keys = Vec::new();
+    let mut ret_phrases = Vec::new();
+
+    for line in reader.lines() {
+        let phrase = line.expect("Error reading phrase file!");
+        if phrase.is_empty()
+            || phrase.contains("write this mnemonic phrase")
+            || phrase.contains("recover your account if")
+        {
+            continue;
+        }
+        let key = CosmosPrivateKey::from_phrase(&phrase, "").expect("Bad phrase!");
+        ret_keys.push(key);
+        ret_phrases.push(phrase);
+    }
+    (ret_keys, ret_phrases)
+}
+
+pub fn parse_validator_keys() -> (Vec<CosmosPrivateKey>, Vec<String>) {
+    let filename = "/validator-phrases";
+    info!("Reading mnemonics from {}", filename);
+    parse_phrases(filename)
+}
+
+pub fn get_keys() -> Vec<ValidatorKeys> {
+    let (cosmos_keys, cosmos_phrases) = parse_validator_keys();
+    let mut ret = Vec::new();
+    for (c_key, c_phrase) in cosmos_keys.into_iter().zip(cosmos_phrases) {
+        ret.push(ValidatorKeys {
+            validator_key: c_key,
+            validator_phrase: c_phrase,
+        })
+    }
+    ret
+}
+
+pub async fn register_erc20_usdc_token() {
+    let althea_contact = Contact::new(
+        &get_althea_grpc(),
+        ALTHEA_CONTACT_TIMEOUT,
+        ALTHEA_CHAIN_PREFIX,
+    )
+    .unwrap();
+    //register uUSDC as a ERC20
+    let mut bank_qc = QueryClient::connect(althea_contact.get_url())
+        .await
+        .expect("Unable to connect to bank query client");
+    let metadata = bank_qc
+        .denom_metadata(QueryDenomMetadataRequest {
+            denom: "uUSDC".to_string(),
+        })
+        .await
+        .expect("Unable to query denom metadata")
+        .into_inner()
+        .metadata
+        .expect("No metadata for erc20 coin");
+
+    let coin_params = RegisterCoinProposalParams {
+        coin_metadata: metadata.clone(),
+        proposal_desc: "Register Coin Proposal Description".to_string(),
+        proposal_title: "Register Coin Proposal Title".to_string(),
+    };
+    execute_register_coin_proposal(
+        &althea_contact,
+        &get_keys(),
+        Some(TOTAL_TIMEOUT),
+        coin_params,
+    )
+    .await;
+}
+
+pub async fn send_althea_tokens(addresses: Vec<AltheaAddress>) {
+    // Create a contact object and get our balance
+    let althea_contact = Contact::new(
+        &get_althea_grpc(),
+        ALTHEA_CONTACT_TIMEOUT,
+        ALTHEA_CHAIN_PREFIX,
+    )
+    .unwrap();
+
+    for router_address in addresses {
+        let althea_coin = Coin {
+            amount: 50000000000u64.into(),
+            denom: "aalthea".to_string(),
+        };
+
+        let tx2 = althea_contact
+            .send_microtx(
+                althea_coin,
+                None,
+                router_address,
+                Some(Duration::from_secs(30)),
+                get_althea_evm_priv(),
+            )
+            .await;
+        if tx2.is_err() {
+            panic!("{:?}", tx2)
+        }
+        //Send each router 50 usdc
+        let coin = Coin {
+            amount: 50000000u64.into(),
+            denom: "uUSDC".to_string(),
+        };
+        let tx = althea_contact
+            .send_microtx(
+                coin.clone(),
+                None,
+                router_address,
+                Some(Duration::from_secs(30)),
+                get_althea_evm_priv(),
+            )
+            .await;
+        if tx.is_err() {
+            panic!("{:?}", tx)
+        }
+    }
+}
+
+pub async fn print_althea_balances(addresses: Vec<AltheaAddress>, denom: String) -> Vec<Coin> {
+    let althea_contact = Contact::new(
+        &get_althea_grpc(),
+        ALTHEA_CONTACT_TIMEOUT,
+        ALTHEA_CHAIN_PREFIX,
+    )
+    .unwrap();
+
+    let mut ret = vec![];
+    for router_address in addresses {
+        // Whats our usdc balance?
+        match althea_contact
+            .get_balance(router_address, denom.clone())
+            .await
+        {
+            Ok(a) => ret.push(a.unwrap()),
+            Err(e) => {
+                panic!(
+                    "Unable to get balance for wallet {:?} with {:?}",
+                    router_address, e
+                );
+            }
+        };
+    }
+    ret
 }

@@ -17,7 +17,7 @@ async fn main() {
     // note this will print logs for all rita instances since they are all in one thread
     env_logger::Builder::default()
         .filter(None, log::LevelFilter::Error)
-        .filter(Some("tester"), log::LevelFilter::Info)
+        .filter(Some("integration_tests"), log::LevelFilter::Info)
         .init();
     set_sigterm();
 
@@ -32,7 +32,7 @@ async fn main() {
         } else if test_type == "PAYMENTS_ETH" {
             run_eth_payments_test_scenario()
         } else if test_type == "PAYMENTS_ALTHEA" {
-            run_althea_payments_test_scenario()
+            run_althea_payments_test_scenario().await;
         } else {
             panic!("Error unknown test type {}!", test_type);
         }

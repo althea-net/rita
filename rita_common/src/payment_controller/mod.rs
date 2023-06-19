@@ -16,9 +16,10 @@ use althea_types::interop::UnpublishedPaymentTx;
 use althea_types::SystemChain;
 use althea_types::{Denom, PaymentTx};
 use awc;
-use deep_space::{Coin, Contact, EthermintPrivateKey, PrivateKey};
+use deep_space::{Coin, Contact, EthermintPrivateKey};
 use futures::future::{join, join_all};
 use num256::Uint256;
+use num_traits::Num;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
 use settings::{DEBT_KEEPER_DENOM, DEBT_KEEPER_DENOM_DECIMAL};
@@ -221,8 +222,8 @@ async fn make_althea_payment(
     let our_address = pmt.from.get_althea_address();
 
     // our althea private key is generated from our eth private key
-    let our_private_key = match payment_settings.eth_private_key {
-        Some(a) => EthermintPrivateKey::from_secret(&a.to_bytes()),
+    let our_private_key: EthermintPrivateKey = match payment_settings.eth_private_key {
+        Some(a) => a.into(),
         None => {
             error!("How are we making an althea payment with no private key??");
             return Err(PaymentControllerError::FailedToSendPayment);
@@ -287,7 +288,13 @@ async fn make_althea_payment(
     };
     // Make microtx transaction.
     let transaction = match althea_contact
-        .send_microtx(coin, None, to_address, None, our_private_key)
+        .send_microtx(
+            coin,
+            None,
+            to_address,
+            Some(Duration::from_secs(30)),
+            our_private_key,
+        )
         .await
     {
         Ok(a) => a,
@@ -302,7 +309,7 @@ async fn make_althea_payment(
     };
 
     // setup tx hash
-    let pmt = pmt.publish(transaction.txhash.parse().unwrap());
+    let pmt = pmt.publish(Uint256::from_str_radix(&transaction.txhash, 16).unwrap());
 
     send_make_payment_endpoints(pmt.clone(), network_settings, None, Some(cosmos_node_grpc)).await;
 
@@ -644,4 +651,12 @@ async fn resend_txid(input: ResendInfo) -> Result<(), PaymentControllerError> {
     }
 
     Ok(())
+}
+
+#[test]
+fn parse_althea_txhash() {
+    let hash = "2B8884553F72CB4C313B2169B29F2279CCD6968A5512EFABAB1C6FE78ED86B57";
+    let parsed: Uint256 = Uint256::from_str_radix(hash, 16).unwrap();
+    println!("Parsed: {:?}", parsed);
+    println!("{:?}", parsed.to_str_radix(16));
 }

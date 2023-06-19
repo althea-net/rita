@@ -785,7 +785,7 @@ pub fn save_debt_on_shutdown() {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GetDebtsResult {
     pub identity: Identity,
     pub payment_details: NodeDebtData,

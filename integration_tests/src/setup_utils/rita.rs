@@ -35,8 +35,8 @@ use std::{
 /// if you need any data about an instance that can be had at startup use this to pass it
 #[derive(Clone, Debug, Default)]
 pub struct InstanceData {
-    client_identities: Vec<Identity>,
-    exit_identities: Vec<Identity>,
+    pub client_identities: Vec<Identity>,
+    pub exit_identities: Vec<Identity>,
 }
 
 /// Spawn a rita and babel thread for each namespace, then assign those threads to said namespace
