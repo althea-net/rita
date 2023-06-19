@@ -123,3 +123,12 @@ jobs:
         run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
       - name: Run integration test
         run: bash scripts/integration_tests/all-up-test.sh FIVE_NODES
+  integration-test-althea-payment:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Wireguard
+        run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
+      - name: Run integration test
+        run: bash scripts/integration_tests/all-up-test.sh PAYMENTS_ALTHEA

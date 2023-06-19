@@ -1204,7 +1204,7 @@ mod tests {
     fn test_playground() {
         let a = generate_index_from_subnet(
             "2000:fbad:10::/45".parse().unwrap(),
-            "2000:fbad:10:1450::/60".parse().unwrap(),
+            "2000:fbad:10:52f0::/60".parse().unwrap(),
         );
 
         println!("{a:?}");

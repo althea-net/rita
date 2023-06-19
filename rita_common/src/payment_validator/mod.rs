@@ -29,6 +29,8 @@ use futures::future::join_all;
 use num256::Uint256;
 use num_traits::Num;
 use settings::get_rita_common;
+use settings::DEBT_KEEPER_DENOM;
+use settings::DEBT_KEEPER_DENOM_DECIMAL;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
@@ -95,11 +97,10 @@ pub fn get_payment_validator_write_ref(
 /// These are made options in case althea chain parsing fails
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct TransactionDetails {
-    pub to: Option<PaymentAddress>,
-    pub from: Option<PaymentAddress>,
-    pub amount: Option<Uint256>,
+    pub to: AltheaAddress,
+    pub from: AltheaAddress,
+    pub amount: Uint256,
     pub denom: String,
-    pub block_num: Option<Uint256>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -243,8 +244,8 @@ pub fn calculate_unverified_payments(router: Identity) -> Uint256 {
 
 /// Checks if we already have a given txid in our to_validate list
 /// true if we have it false if we do not
-fn check_for_unvalidated_tx(ts: &ToValidate) -> bool {
-    for tx in get_unvalidated_transactions() {
+fn check_for_unvalidated_tx(ts: &ToValidate, payment_validator: &mut PaymentValidator) -> bool {
+    for tx in &payment_validator.unvalidated_transactions {
         if tx.payment.txid == ts.payment.txid {
             return true;
         }
@@ -259,15 +260,20 @@ fn check_for_unvalidated_tx(ts: &ToValidate) -> bool {
 /// This endpoint specifically (and only this one) is fully idempotent so that we can retry
 /// txid transmissions
 pub fn validate_later(ts: ToValidate) -> Result<(), RitaCommonError> {
-    if !get_all_successful_tx().contains(&ts.payment) && !check_for_unvalidated_tx(&ts) {
+    // We hold the lock to prevent race condition between make_payment_v1 and make_payment_v2
+    let successful_txs = get_all_successful_tx();
+    let lock = &mut *HISTORY.write().unwrap();
+    let payment_validator = get_payment_validator_write_ref(lock);
+    if !successful_txs.contains(&ts.payment) && !check_for_unvalidated_tx(&ts, payment_validator) {
         // insert is safe to run multiple times just so long as we check successful tx's for duplicates
-        add_unvalidated_transaction(ts);
+        payment_validator.unvalidated_transactions.insert(ts);
         Ok(())
     } else {
         Err(RitaCommonError::DuplicatePayment)
     }
 }
 
+#[derive(Clone)]
 struct Remove {
     tx: ToValidate,
     success: bool,
@@ -276,16 +282,20 @@ struct Remove {
 /// Removes a transaction from the pending validation queue, it may either
 /// have been discovered to be invalid or have been successfully accepted
 fn remove(msg: Remove) {
-    let was_present = remove_unvalidated_transaction(msg.tx.clone());
+    // Try removing both check and uncheked versions of txs
+    let mut msg_checked = msg.clone();
+    msg_checked.tx.checked = true;
+    let was_present = remove_unvalidated_transaction(msg.tx.clone())
+        | remove_unvalidated_transaction(msg_checked.tx);
     // store successful transactions so that they can't be played back to us, at least
     // during this session
-    if msg.success && was_present {
+    if msg.success {
         add_successful_tx(msg.tx.payment.clone());
     }
     if was_present {
         info!("Transaction {} was removed", msg.tx);
     } else {
-        error!("Transaction {} was double removed", msg.tx);
+        warn!("Transaction {} was double removed", msg.tx);
         // in a development env we want to draw attention to this case
         #[cfg(feature = "development")]
         panic!("Transaction double removed!");
@@ -299,10 +309,10 @@ fn checked(msg: ToValidate) {
     if remove_unvalidated_transaction(msg.clone()) {
         let mut checked_tx = msg;
         checked_tx.checked = true;
-        error!(
-            "Tried to mark a tx {:?} we don't have as checked!",
-            checked_tx
-        );
+        info!("We successfully checked tx {:?}", checked_tx);
+        add_unvalidated_transaction(checked_tx);
+    } else {
+        error!("Tried to mark a tx {:?} we don't have as checked!", msg);
         #[cfg(feature = "development")]
         panic!("Tried to mark a tx {:?} we don't have as checked!", msg);
     }
@@ -413,9 +423,7 @@ async fn handle_xdai_tx_checking(ts: ToValidate) {
             if !ts.checked {
                 checked(ts.clone());
             }
-            let transaction = get_xdai_transaction_details(transaction);
-
-            handle_tx_messaging(transaction, ts.clone(), block_num);
+            handle_tx_messaging_xdai(ts.payment.txid, transaction, ts.clone(), block_num);
         }
         (Ok(None), _) => {
             // we have a response back from the full node that this tx is not in the mempool this
@@ -436,7 +444,9 @@ async fn handle_xdai_tx_checking(ts: ToValidate) {
     }
 }
 
-fn get_xdai_transaction_details(transaction: TransactionResponse) -> TransactionDetails {
+fn get_xdai_transaction_details(
+    transaction: TransactionResponse,
+) -> (Option<Address>, Address, Uint256, Option<Uint256>) {
     match transaction {
         TransactionResponse::Eip1559 {
             to,
@@ -444,39 +454,21 @@ fn get_xdai_transaction_details(transaction: TransactionResponse) -> Transaction
             value,
             block_number,
             ..
-        } => TransactionDetails {
-            to: to.map(PaymentAddress::Xdai),
-            from: Some(PaymentAddress::Xdai(from)),
-            amount: Some(value),
-            denom: "wei".to_string(),
-            block_num: block_number,
-        },
+        } => (to, from, value, block_number),
         TransactionResponse::Eip2930 {
             to,
             from,
             value,
             block_number,
             ..
-        } => TransactionDetails {
-            to: to.map(PaymentAddress::Xdai),
-            from: Some(PaymentAddress::Xdai(from)),
-            amount: Some(value),
-            denom: "wei".to_string(),
-            block_num: block_number,
-        },
+        } => (to, from, value, block_number),
         TransactionResponse::Legacy {
             to,
             from,
             value,
             block_number,
             ..
-        } => TransactionDetails {
-            to: to.map(PaymentAddress::Xdai),
-            from: Some(PaymentAddress::Xdai(from)),
-            amount: Some(value),
-            denom: "wei".to_string(),
-            block_num: block_number,
-        },
+        } => (to, from, value, block_number),
     }
 }
 
@@ -491,8 +483,8 @@ async fn handle_althea_tx_checking(ts: ToValidate) {
     // convert to hex string
     let txhash = ts.payment.txid.to_str_radix(16);
 
-    let althea_chain_status = althea_contact.get_chain_status().await;
     let althea_transaction = althea_contact.get_tx_by_hash(txhash.clone()).await;
+    let althea_chain_status = althea_contact.get_chain_status().await;
 
     match (althea_transaction, althea_chain_status) {
         (Ok(transaction), Ok(chain_status)) => {
@@ -509,7 +501,7 @@ async fn handle_althea_tx_checking(ts: ToValidate) {
                     }
                 };
 
-                if let ChainStatus::Moving { block_height } = chain_status {
+                if let ChainStatus::Moving { block_height: _ } = chain_status {
                     // Decode TxRaw
                     let raw_tx_any = prost_types::Any {
                         type_url: "/cosmos.tx.v1beta1.Tx".to_string(),
@@ -546,57 +538,45 @@ async fn handle_althea_tx_checking(ts: ToValidate) {
                         if let Ok(msg) = msg_send {
                             for coin_tx in msg.amount {
                                 let transaction_details = TransactionDetails {
-                                    to: Some(PaymentAddress::Althea(
-                                        match msg.to_address.parse() {
-                                            Ok(a) => a,
-                                            Err(e) => {
-                                                error!(
+                                    to: match msg.to_address.parse() {
+                                        Ok(a) => a,
+                                        Err(e) => {
+                                            error!(
                                                     "Unable to parse send address {}f for tx {} with {}",
                                                     msg.to_address,
                                                     ts.clone(),
                                                     e
                                                 );
-                                                continue;
-                                            }
-                                        },
-                                    )),
-                                    from: Some(PaymentAddress::Althea(
-                                        match msg.from_address.parse() {
-                                            Ok(a) => a,
-                                            Err(e) => {
-                                                error!(
-                                                    "Unable to parse send address {} for tx {} with {}",
-                                                    msg.to_address,
-                                                    ts.clone(),
-                                                    e
-                                                );
-                                                continue;
-                                            }
-                                        },
-                                    )),
-                                    amount: Some(
-                                        match Uint256::from_str_radix(&coin_tx.amount, 10) {
-                                            Ok(a) => a,
-                                            Err(e) => {
-                                                error!(
-                                                    "Unable to parse amount : {:?} for tx {:?} with {}",
-                                                    coin_tx.amount,
-                                                    ts.clone(),
-                                                    e
-                                                );
-                                                continue;
-                                            }
-                                        },
-                                    ),
+                                            continue;
+                                        }
+                                    },
+                                    from: match msg.from_address.parse() {
+                                        Ok(a) => a,
+                                        Err(e) => {
+                                            error!(
+                                                "Unable to parse send address {} for tx {} with {}",
+                                                msg.to_address,
+                                                ts.clone(),
+                                                e
+                                            );
+                                            continue;
+                                        }
+                                    },
+                                    amount: match Uint256::from_str_radix(&coin_tx.amount, 10) {
+                                        Ok(a) => a,
+                                        Err(e) => {
+                                            error!(
+                                                "Unable to parse amount : {:?} for tx {:?} with {}",
+                                                coin_tx.amount,
+                                                ts.clone(),
+                                                e
+                                            );
+                                            continue;
+                                        }
+                                    },
                                     denom: coin_tx.denom,
-                                    // this should never be negative
-                                    block_num: Some((tx_resp.height as u32).into()),
                                 };
-                                handle_tx_messaging(
-                                    transaction_details,
-                                    ts.clone(),
-                                    block_height.into(),
-                                );
+                                handle_tx_messaging_althea(transaction_details, ts.clone());
                             }
                         }
                     }
@@ -627,48 +607,24 @@ async fn handle_althea_tx_checking(ts: ToValidate) {
     }
 }
 
-/// Handles the tx response from the full node and it's various cases
-/// pulled out of validate_transaction purely for cosmetic reasons
-fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_block: Uint256) {
-    let pmt = ts.payment.clone();
-
-    // txid is for eth chain and txhash is for althea chain, only one of these should be
-    // Some(..). This was verified before
-    let txid = ts.payment.txid;
-
-    // Verify that denom is valid
-    let mut denom: Option<Denom> = None;
-    for d in get_rita_common()
-        .payment
-        .accepted_denoms
-        .unwrap_or(HashMap::new())
-    {
-        if transaction.denom == d.1.denom {
-            denom = Some(d.1);
-        }
-    }
-    if denom.is_none() {
-        error!(
-            "Invalid Denom! We do not currently support {}!",
-            transaction.denom
-        );
-        remove(Remove {
-            tx: ts,
-            success: false,
-        });
-        return;
-    }
-
-    let from_address_eth = ts.payment.from.eth_address;
-
+fn handle_tx_messaging_xdai(
+    txid: Uint256,
+    transaction: TransactionResponse,
+    ts: ToValidate,
+    current_block: Uint256,
+) {
+    let from_address = ts.payment.from.eth_address;
     let amount = ts.payment.amount;
+    let pmt = ts.payment.clone();
+    let our_address = settings::get_rita_common()
+        .payment
+        .eth_address
+        .expect("No Address!");
 
-    let our_id = settings::get_rita_common().get_identity().unwrap();
-    let our_address_eth = our_id.eth_address;
-    let our_address_althea = our_id.get_althea_address();
+    let (tx_to, tx_from, tx_value, tx_block_number) = get_xdai_transaction_details(transaction);
 
-    let to = match transaction.to {
-        Some(a) => a,
+    let to = match tx_to {
+        Some(val) => val,
         None => {
             error!("Invalid TX! No destination!");
             remove(Remove {
@@ -679,53 +635,14 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
         }
     };
 
-    let from = match transaction.from {
-        Some(a) => a,
-        None => {
-            error!("Invalid TX! No Source!");
-            remove(Remove {
-                tx: ts,
-                success: false,
-            });
-            return;
-        }
-    };
-
-    // Sanity check that to and from address are on the same chain
-    // We check enum types are the same here, ie Althea == Althea or Xdai == Xdai
-    if std::mem::discriminant(&to) != std::mem::discriminant(&from) {
-        error!("Source and Destination on TX need to be on the same chain!");
-        remove(Remove {
-            tx: ts,
-            success: false,
-        });
-        return;
-    }
-
     // notice we get these values from the blockchain using 'transaction' not ts which may be a lie since we don't
     // actually cryptographically validate the txhash locally. Instead we just compare the value we get from the full
     // node
-    let to_us = match to {
-        PaymentAddress::Althea(a) => a == our_address_althea,
-        PaymentAddress::Xdai(a) => a == our_address_eth,
-    };
-    let from_us = match from {
-        PaymentAddress::Althea(a) => a == our_address_althea,
-        PaymentAddress::Xdai(a) => a == our_address_eth,
-    };
-    let value_correct = match transaction.amount {
-        Some(a) => a == amount,
-        None => {
-            error!("No amount specified in TX!");
-            remove(Remove {
-                tx: ts,
-                success: false,
-            });
-            return;
-        }
-    };
-    let is_in_chain = payment_in_chain(current_block, transaction.block_num);
-    let is_old = payment_is_old(current_block, transaction.block_num);
+    let to_us = to == our_address;
+    let from_us = tx_from == our_address;
+    let value_correct = tx_value == amount;
+    let is_in_chain = payment_in_chain(current_block, tx_block_number);
+    let is_old = payment_is_old(current_block, tx_block_number);
 
     if !value_correct {
         error!("Transaction with invalid amount!");
@@ -755,15 +672,18 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
             });
             info!(
                 "payment {:#066x} from {} for {} wei successfully validated!",
-                txid, from_address_eth, amount
+                txid, from_address, amount
             );
-
             // update debt keeper with the details of this payment
             let _ = payment_received(
                 pmt.from,
                 pmt.amount,
-                denom.expect("How did this happen when we already verified existence"),
+                Denom {
+                    denom: DEBT_KEEPER_DENOM.to_string(),
+                    decimal: DEBT_KEEPER_DENOM_DECIMAL,
+                },
             );
+
             // update the usage tracker with the details of this payment
             update_payments(pmt);
         }
@@ -771,21 +691,23 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
         (false, true, true) => {
             info!(
                 "payment {:#066x} from {} for {} wei successfully sent!",
-                txid, from_address_eth, amount
+                txid, from_address, amount
             );
-
             // remove this transaction from our storage
             remove(Remove {
                 tx: ts,
                 success: true,
             });
-
             // update debt keeper with the details of this payment
             let _ = payment_succeeded(
                 pmt.to,
                 pmt.amount,
-                denom.expect("How did this happen when we already verified existence"),
+                Denom {
+                    denom: DEBT_KEEPER_DENOM.to_string(),
+                    decimal: DEBT_KEEPER_DENOM_DECIMAL,
+                },
             );
+
             // update the usage tracker with the details of this payment
             update_payments(pmt.clone());
 
@@ -808,6 +730,132 @@ fn handle_tx_messaging(transaction: TransactionDetails, ts: ToValidate, current_
         }
         (_, _, false) => {
             //transaction waiting for validation, do nothing
+        }
+    }
+}
+
+/// Handles the tx response from the full node and it's various cases
+/// pulled out of validate_transaction purely for cosmetic reasons
+fn handle_tx_messaging_althea(transaction: TransactionDetails, ts: ToValidate) {
+    let pmt = ts.payment.clone();
+
+    // txid is for eth chain and txhash is for althea chain, only one of these should be
+    // Some(..). This was verified before
+    let txid = ts.payment.txid;
+
+    // Verify that denom is valid
+    let mut denom: Option<Denom> = None;
+    for d in get_rita_common()
+        .payment
+        .accepted_denoms
+        .unwrap_or(HashMap::new())
+    {
+        if transaction.denom == d.1.denom {
+            denom = Some(d.1);
+        }
+    }
+    if denom.is_none() {
+        error!(
+            "Invalid Denom! We do not currently support {}!",
+            transaction.denom
+        );
+        remove(Remove {
+            tx: ts,
+            success: false,
+        });
+        return;
+    }
+
+    let amount = ts.payment.amount;
+
+    let our_id = settings::get_rita_common().get_identity().unwrap();
+    let our_address_althea = our_id.get_althea_address();
+
+    let to = transaction.to;
+    let from = transaction.from;
+
+    // notice we get these values from the blockchain using 'transaction' not ts which may be a lie since we don't
+    // actually cryptographically validate the txhash locally. Instead we just compare the value we get from the full
+    // node
+    let to_us = to == our_address_althea;
+    let from_us = from == our_address_althea;
+    let value_correct = transaction.amount == amount;
+
+    if !value_correct {
+        error!("Transaction with invalid amount!");
+        remove(Remove {
+            tx: ts,
+            success: false,
+        });
+        return;
+    }
+
+    match (to_us, from_us) {
+        // we were successfully paid
+        (true, false) => {
+            // remove this transaction from our storage
+            remove(Remove {
+                tx: ts,
+                success: true,
+            });
+            info!(
+                "payment {:#066x} from {} for {} {} successfully validated!",
+                txid,
+                from,
+                amount,
+                denom.clone().expect("Already verified existance").denom
+            );
+
+            // update debt keeper with the details of this payment
+            let _ = payment_received(
+                pmt.from,
+                pmt.amount,
+                denom.expect("How did this happen when we already verified existence"),
+            );
+            // update the usage tracker with the details of this payment
+            update_payments(pmt);
+        }
+        // we successfully paid someone
+        (false, true) => {
+            info!(
+                "payment {:#066x} from {} for {} {} successfully sent!",
+                txid,
+                from,
+                amount,
+                denom.clone().expect("Already verified existance").denom
+            );
+
+            // remove this transaction from our storage
+            remove(Remove {
+                tx: ts,
+                success: true,
+            });
+
+            // update debt keeper with the details of this payment
+            let _ = payment_succeeded(
+                pmt.to,
+                pmt.amount,
+                denom.expect("How did this happen when we already verified existence"),
+            );
+            // update the usage tracker with the details of this payment
+            update_payments(pmt.clone());
+
+            // Store this payment as a receipt to send in the future if this receiver doesnt see the payment
+            store_payment(pmt);
+        }
+        (true, true) => {
+            error!("Transaction to ourselves!");
+            remove(Remove {
+                tx: ts,
+                success: false,
+            });
+        }
+        (false, false) => {
+            error!("Transaction has nothing to do with us?");
+            remove(Remove {
+                tx: ts,
+                success: false,
+            });
         }
     }
 }

@@ -8,16 +8,16 @@ CHAIN_ID="althea_417834-1"
 NODES=$1
 
 STAKING_TOKEN="aalthea"
-ALLOCATION="1000000000000000000000000${STAKING_TOKEN},1000000000000ufootoken"
+ALLOCATION="1000000000000000000000000${STAKING_TOKEN},1000000000000ufootoken,1000000000000uUSDC"
  DELEGATION="500000000000000000000000${STAKING_TOKEN}"
 
 # Static EVM addresses (Ethermint keys) which will receive enough althea token for EVM operations
 # These will be duplicated in the solidity directory and the integration_tests lib so that tests and CLI tools
-EVM_MINER_ALLOCATION="5000000000000000000000000${STAKING_TOKEN}"
+EVM_MINER_ALLOCATION="5000000000000000000000000${STAKING_TOKEN},1000000000000uUSDC"
 EVM_MINER_ETH_PRIVKEY="b1bab011e03a9862664706fc3bbaa1b16651528e5f0e7fbfcbfdd8be302a13e7"
 EVM_MINER_ADDRESS="althea1hanqss6jsq66tfyjz56wz44z0ejtyv0768q8r4"
 EVM_MINER_ETH_ADDRESS="bf660843528035a5a4921534e156a27e64b231fe"
-EVM_USER_ALLOCATION="500000000000000000000000${STAKING_TOKEN}"
+EVM_USER_ALLOCATION="500000000000000000000000${STAKING_TOKEN},1000000000000uUSDC"
 EVM_USER_MNEMONICS=( \
     "dial point debris employ position cheap inmate nominee crisp grow hello body meadow clever cloth strike agree include dirt tenant hello pattern tattoo option" \
     "poverty inside weasel way rabbit staff initial fire near machine icon favorite simple address skill couple embark acquire asthma deny census flush ensure shiver" \
@@ -45,7 +45,8 @@ $BIN init $STARTING_VALIDATOR_HOME --chain-id=$CHAIN_ID validator$STARTING_VALID
 
 # add in denom metadata for both native tokens
 jq '.app_state.bank.denom_metadata += [{"name": "althea", "symbol": "althea", "base": "aalthea", display: "althea", "description": "The native staking token of Althea-Chain (18 decimals)", "denom_units": [{"denom": "aalthea", "exponent": 0, "aliases": ["attoalthea", "althea-wei"]}, {"denom": "nalthea", "exponent": 9, "aliases": ["nanoalthea", "althea-gwei"]}, {"denom": "althea", "exponent": 18}]}]' /validator$STARTING_VALIDATOR/config/genesis.json > /staking-token-genesis.json
-jq '.app_state.bank.denom_metadata += [{"name": "FOO", "symbol": "FOO", "base": "ufootoken", display: "footoken", "description": "A non-staking native test token (6 decimals)", "denom_units": [{"denom": "ufootoken", "exponent": 0}, {"denom": "footoken", "exponent": 6}]}]' /staking-token-genesis.json > /foo-token-genesis.json
+jq '.app_state.bank.denom_metadata += [{"name": "USDC", "symbol": "USDC", "base": "uUSDC", display: "USDC", "description": "USDC stablecoin", "denom_units": [{"denom": "uUSDC", "exponent": 0}, {"denom": "USDC", "exponent": 6}]}]' /staking-token-genesis.json > /usdc-token-genesis.json
+jq '.app_state.bank.denom_metadata += [{"name": "FOO", "symbol": "FOO", "base": "ufootoken", display: "footoken", "description": "A non-staking native test token (6 decimals)", "denom_units": [{"denom": "ufootoken", "exponent": 0}, {"denom": "footoken", "exponent": 6}]}]' /usdc-token-genesis.json > /foo-token-genesis.json
 # Link the native coin to the EVM
 jq ".app_state.evm.params.evm_denom=\"${STAKING_TOKEN}\"" /foo-token-genesis.json > /evm-denom-genesis.json
 # Unset the base fee in feemarket
