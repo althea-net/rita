@@ -1,0 +1,26 @@
+[package]
+name = "integration_tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ipnetwork = "0.20"
+env_logger = "0.10"
+log = "0.4"
+docopt = "1.1"
+actix-async = {package="actix", version = "0.13"}
+nix = "0.26.1"
+petgraph = "0.6.2"
+babel_monitor = { path = "../babel_monitor" }
+althea_kernel_interface = { path = "../althea_kernel_interface", features = ["integration_test"] }
+althea_types = { path = "../althea_types" }
+clu = { path = "../clu" }
+settings = { path = "../settings" }
+rita_client = { path = "../rita_client"}
+rita_common = { path = "../rita_common", features = ["integration_test"]}
+rita_exit = { path = "../rita_exit"}
+ctrlc = {version = "3.2.1", features = ["termination"]}
+diesel = { version = "1.4", features = ["postgres", "r2d2"] }
+diesel_migrations = { version = "1.4", features = ["postgres"] }
+awc = "3.1"
+actix-rt = "2.8"
