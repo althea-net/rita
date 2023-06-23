@@ -1,21 +1,13 @@
-use five_nodes::run_five_node_test_scenario;
-use log::info;
-use std::{env, time::Duration};
-
-use crate::{
+/// Binary crate for actually running the integration tests
+use integration_tests::five_nodes::run_five_node_test_scenario;
+use integration_tests::{
     payments_althea::run_althea_payments_test_scenario,
     payments_eth::run_eth_payments_test_scenario, utils::set_sigterm,
 };
+use log::info;
+use std::env;
 
-pub mod five_nodes;
-pub mod payments_althea;
-pub mod payments_eth;
-pub mod setup_utils;
-pub mod utils;
 extern crate log;
-
-/// The amount of time we wait for a network to stabalize before testing
-pub const SETUP_WAIT: Duration = Duration::from_secs(60);
 
 #[actix_rt::main]
 async fn main() {

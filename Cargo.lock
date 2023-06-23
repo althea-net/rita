@@ -1566,6 +1566,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "integration_tests"
+version = "0.1.0"
+dependencies = [
+ "actix",
+ "actix-rt",
+ "althea_kernel_interface",
+ "althea_types",
+ "awc",
+ "babel_monitor",
+ "clu",
+ "ctrlc",
+ "diesel",
+ "diesel_migrations",
+ "docopt",
+ "env_logger",
+ "ipnetwork",
+ "log",
+ "nix 0.26.2",
+ "petgraph",
+ "rita_client",
+ "rita_common",
+ "rita_exit",
+ "settings",
+]
+
+[[package]]
 name = "io-lifetimes"
 version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3198,26 +3224,13 @@ dependencies = [
 name = "test_runner"
 version = "0.1.0"
 dependencies = [
- "actix",
  "actix-rt",
- "althea_kernel_interface",
- "althea_types",
  "awc",
- "babel_monitor",
- "clu",
  "ctrlc",
- "diesel",
- "diesel_migrations",
  "docopt",
  "env_logger",
- "ipnetwork",
+ "integration_tests",
  "log",
- "nix 0.26.2",
- "petgraph",
- "rita_client",
- "rita_common",
- "rita_exit",
- "settings",
 ]
 
 [[package]]
