@@ -17,7 +17,8 @@ test.db-journal
 /scripts/cross_building/staging_dir/
 /scripts/cross_building/staging/
 legacy-integration-tests/private-key*
-legacy-integration-tests/deps*
+legacy-integration-tests/deps/*
+legacy-integration-tests/*
 legacy-integration-tests/rita-settings*
 legacy-integration-tests/staging*
 legacy-integration-tests/althea_rs_*
