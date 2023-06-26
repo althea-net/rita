@@ -2,12 +2,12 @@
 
 use crate::blockchain_oracle::get_oracle_latest_gas_price;
 use crate::blockchain_oracle::get_oracle_nonce;
-use crate::blockchain_oracle::get_pay_thresh;
 use crate::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
 use althea_types::Identity;
 use althea_types::PaymentTx;
+use num256::Int256;
 use num256::Uint256;
 use num_traits::{Signed, Zero};
 use std::sync::Arc;
@@ -18,6 +18,9 @@ use web30::types::SendTxOption;
 lazy_static! {
     static ref AMOUNT_OWED: Arc<RwLock<Uint256>> = Arc::new(RwLock::new(Uint256::zero()));
 }
+
+/// One cent in DAI Wei
+const ONE_CENT: u128 = 10_000_000_000_000_000;
 
 // this is sent when a transaction is successful in another module and it registers
 // some amount to be paid as part of the fee
@@ -44,7 +47,7 @@ pub async fn tick_simulated_tx() {
     };
     let gas_price = get_oracle_latest_gas_price();
     let nonce = get_oracle_nonce();
-    let pay_threshold = get_pay_thresh();
+    let pay_threshold: Int256 = ONE_CENT.into();
     let simulated_transaction_fee_address = payment_settings.simulated_transaction_fee_address;
     let simulated_transaction_fee = payment_settings.simulated_transaction_fee;
     let amount_to_pay = AMOUNT_OWED.read().unwrap().clone();
