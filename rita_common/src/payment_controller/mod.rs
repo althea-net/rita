@@ -11,6 +11,7 @@ use crate::debt_keeper::payment_failed;
 use crate::payment_validator::{get_payment_txids, validate_later, ToValidate};
 use crate::payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT};
 use crate::rita_loop::get_web3_server;
+use crate::KI;
 use althea_types::interop::UnpublishedPaymentTx;
 use althea_types::SystemChain;
 use althea_types::{Denom, PaymentTx};
@@ -35,11 +36,36 @@ pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
 pub const MAX_TXID_RETRIES: u8 = 15u8;
 
 lazy_static! {
-    static ref PAYMENT_DATA: Arc<RwLock<PaymentController>> =
-        Arc::new(RwLock::new(PaymentController::new()));
+    static ref PAYMENT_DATA: Arc<RwLock<HashMap<u32, PaymentController>>> =
+        Arc::new(RwLock::new(HashMap::new()));
 }
 
-#[derive(Default)]
+/// Gets Payment COntoller copy from the static ref, or default if no value has been set
+pub fn get_payment_contoller() -> PaymentController {
+    let netns = KI.check_integration_test_netns();
+    PAYMENT_DATA
+        .read()
+        .unwrap()
+        .clone()
+        .get(&netns)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Gets a write ref for the payment controller lock, since this is a mutable reference
+/// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
+/// but still hold the lock in the local thread to prevent parallel modification
+pub fn get_payment_controller_write_ref(
+    input: &mut HashMap<u32, PaymentController>,
+) -> &mut PaymentController {
+    let netns = KI.check_integration_test_netns();
+    input
+        .entry(netns)
+        .or_insert_with(PaymentController::default);
+    input.get_mut(&netns).unwrap()
+}
+
+#[derive(Default, Clone)]
 pub struct PaymentController {
     /// this is a vec of outgoing transactions for the payment
     /// controller loop to pick up next time it runs
@@ -57,7 +83,8 @@ pub struct PaymentController {
 /// on the next payment controller loop run
 pub fn queue_payment(payment: UnpublishedPaymentTx) {
     info!("Payment of {:?} queued!", payment);
-    let mut data = PAYMENT_DATA.write().unwrap();
+    let data = &mut *PAYMENT_DATA.write().unwrap();
+    let data = get_payment_controller_write_ref(data);
     data.outgoing_queue.push(payment);
 }
 
@@ -65,7 +92,8 @@ pub fn queue_payment(payment: UnpublishedPaymentTx) {
 /// on the next payment controller loop run
 fn queue_resend(resend_info: ResendInfo) {
     info!("Resend of {:?} queued!", resend_info);
-    let mut data = PAYMENT_DATA.write().unwrap();
+    let data = &mut *PAYMENT_DATA.write().unwrap();
+    let data = get_payment_controller_write_ref(data);
     data.resend_queue.push(resend_info);
 }
 
@@ -113,7 +141,8 @@ pub async fn tick_payment_controller() {
     let resend_queue: Vec<ResendInfo>;
 
     {
-        let mut data = PAYMENT_DATA.write().unwrap();
+        let data = &mut *PAYMENT_DATA.write().unwrap();
+        let data = get_payment_controller_write_ref(data);
 
         // we fully empty both queues every run, and replace them with empty
         // vectors this helps deal with logic issues around outgoing payments
