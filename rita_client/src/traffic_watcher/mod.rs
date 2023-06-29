@@ -36,6 +36,7 @@ use rita_common::usage_tracker::update_usage_data;
 use rita_common::usage_tracker::UpdateUsage;
 use rita_common::usage_tracker::UsageType;
 use rita_common::KI;
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -43,11 +44,34 @@ use std::time::Duration;
 use std::time::Instant;
 
 lazy_static! {
-    pub static ref TRAFFIC_WATCHER: Arc<RwLock<TrafficWatcher>> =
-        Arc::new(RwLock::new(TrafficWatcher::default()));
+    pub static ref TRAFFIC_WATCHER: Arc<RwLock<HashMap<u32, TrafficWatcher>>> =
+        Arc::new(RwLock::new(HashMap::new()));
 }
 
-#[derive(Default)]
+/// Gets Traffic watcher copy from the static ref, or default if no value has been set
+pub fn get_traffic_watcher() -> TrafficWatcher {
+    let netns = KI.check_integration_test_netns();
+    TRAFFIC_WATCHER
+        .read()
+        .unwrap()
+        .clone()
+        .get(&netns)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Gets a write ref for the traffic watcher lock, since this is a mutable reference
+/// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
+/// but still hold the lock in the local thread to prevent parallel modification
+pub fn get_traffic_watcher_write_ref(
+    input: &mut HashMap<u32, TrafficWatcher>,
+) -> &mut TrafficWatcher {
+    let netns = KI.check_integration_test_netns();
+    input.entry(netns).or_insert_with(TrafficWatcher::default);
+    input.get_mut(&netns).unwrap()
+}
+
+#[derive(Default, Clone)]
 pub struct TrafficWatcher {
     // last read download
     last_read_input: u64,
@@ -88,11 +112,12 @@ pub async fn query_exit_debts(msg: QueryExitDebts) {
     let local_debt: Option<Int256>;
     {
         let writer = &mut *TRAFFIC_WATCHER.write().unwrap();
+        let traffic_watcher = get_traffic_watcher_write_ref(writer);
 
         // we could exit the function if this fails, but doing so would remove the chance
         // that we can get debts from the exit and continue anyways
         local_debt = match local_traffic_calculation(
-            writer,
+            traffic_watcher,
             &msg.exit_id,
             msg.exit_price,
             msg.routes,
@@ -316,5 +341,5 @@ pub fn local_traffic_calculation(
 /// this allows users to avoid the rather complicated procedure of computing it
 /// themselves
 pub fn get_exit_dest_price() -> u128 {
-    TRAFFIC_WATCHER.read().unwrap().last_exit_dest_price
+    get_traffic_watcher().last_exit_dest_price
 }
