@@ -20,6 +20,8 @@ Finally Rita also contains [user dashboard](https://github.com/althea-net/rita-d
 
 This is primarily an infrastructure repo, to get a working version of Althea for real world use you should look at [installer](https://github.com/althea-net/rita-installer) for desktop linux and [rita-firmware](https://github.com/althea-net/rita-firmware) for OpenWRT.
 
+Rita supports either [Althea L1](https://github.com/althea-net/althea-L1) or any EVM based blockchain as it's payment backend.
+
 ## Building
 
 Debian:
