@@ -13,6 +13,7 @@ use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
 use crate::RitaCommonError;
+use crate::KI;
 use althea_types::Denom;
 use althea_types::Identity;
 use althea_types::PaymentTx;
@@ -63,8 +64,31 @@ pub const ALTHEA_CHAIN_PREFIX: &str = "althea";
 pub const ALTHEA_CONTACT_TIMEOUT: Duration = Duration::from_secs(30);
 
 lazy_static! {
-    static ref HISTORY: Arc<RwLock<PaymentValidator>> =
-        Arc::new(RwLock::new(PaymentValidator::new()));
+    static ref HISTORY: Arc<RwLock<HashMap<u32, PaymentValidator>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+}
+
+/// Gets Payment validator copy from the static ref, or default if no value has been set
+pub fn get_payment_validator() -> PaymentValidator {
+    let netns = KI.check_integration_test_netns();
+    HISTORY
+        .read()
+        .unwrap()
+        .clone()
+        .get(&netns)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Gets a write ref for the payment validator lock, since this is a mutable reference
+/// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
+/// but still hold the lock in the local thread to prevent parallel modification
+pub fn get_payment_validator_write_ref(
+    input: &mut HashMap<u32, PaymentValidator>,
+) -> &mut PaymentValidator {
+    let netns = KI.check_integration_test_netns();
+    input.entry(netns).or_insert_with(PaymentValidator::default);
+    input.get_mut(&netns).unwrap()
 }
 
 /// Details we pass into handle_tx_handling while validating a transaction
@@ -113,6 +137,7 @@ impl fmt::Display for ToValidate {
     }
 }
 
+#[derive(Clone)]
 pub struct PaymentValidator {
     unvalidated_transactions: HashSet<ToValidate>,
     /// All successful transactions sent FROM this router, mapped To Address-> list of PaymentTx
@@ -123,39 +148,41 @@ pub struct PaymentValidator {
 
 // Setters and getters HISTORY lazy static
 pub fn add_unvalidated_transaction(tx: ToValidate) {
-    HISTORY.write().unwrap().unvalidated_transactions.insert(tx);
+    let writer = &mut *HISTORY.write().unwrap();
+    get_payment_validator_write_ref(writer)
+        .unvalidated_transactions
+        .insert(tx);
 }
 
 pub fn remove_unvalidated_transaction(tx: ToValidate) -> bool {
-    HISTORY
-        .write()
-        .unwrap()
+    let writer = &mut *HISTORY.write().unwrap();
+    get_payment_validator_write_ref(writer)
         .unvalidated_transactions
         .remove(&tx)
 }
 
 pub fn get_unvalidated_transactions() -> HashSet<ToValidate> {
-    HISTORY.read().unwrap().unvalidated_transactions.clone()
+    get_payment_validator().unvalidated_transactions
 }
 
 pub fn get_successful_tx_sent() -> HashMap<Identity, HashSet<PaymentTx>> {
-    HISTORY
-        .write()
-        .unwrap()
-        .successful_transactions_sent
-        .clone()
+    get_payment_validator().successful_transactions_sent
 }
 
 pub fn set_successful_tx_sent(v: HashMap<Identity, HashSet<PaymentTx>>) {
-    HISTORY.write().unwrap().successful_transactions_sent = v;
+    let writer = &mut *HISTORY.write().unwrap();
+    get_payment_validator_write_ref(writer).successful_transactions_sent = v;
 }
 
 pub fn get_all_successful_tx() -> HashSet<PaymentTx> {
-    HISTORY.read().unwrap().successful_transactions.clone()
+    get_payment_validator().successful_transactions
 }
 
 pub fn add_successful_tx(v: PaymentTx) {
-    HISTORY.write().unwrap().successful_transactions.insert(v);
+    let writer = &mut *HISTORY.write().unwrap();
+    get_payment_validator_write_ref(writer)
+        .successful_transactions
+        .insert(v);
 }
 
 impl PaymentValidator {
@@ -193,9 +220,7 @@ pub fn store_payment(pmt: PaymentTx) {
 /// Given an id, get all payments made to that id
 pub fn get_payment_txids(id: Identity) -> HashSet<PaymentTx> {
     let data: HashSet<PaymentTx> = HashSet::new();
-    HISTORY
-        .read()
-        .unwrap()
+    get_payment_validator()
         .successful_transactions_sent
         .get(&id)
         .unwrap_or(&data)
