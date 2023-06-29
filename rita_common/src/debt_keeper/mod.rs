@@ -19,6 +19,7 @@ use crate::tunnel_manager::TunnelAction;
 use crate::tunnel_manager::TunnelChange;
 use crate::tunnel_manager::TunnelStateChange;
 use crate::RitaCommonError;
+use crate::KI;
 
 use althea_types::Denom;
 use althea_types::Identity;
@@ -45,7 +46,28 @@ use std::time::Instant;
 lazy_static! {
     /// A locked global ref containing the state for this module. Note that the default implementation
     /// loads saved data from teh disk if it exists.
-    static ref DEBT_DATA: Arc<RwLock<DebtKeeper>> = Arc::new(RwLock::new(DebtKeeper::default()));
+    static ref DEBT_DATA: Arc<RwLock<HashMap<u32,DebtKeeper>>> = Arc::new(RwLock::new(HashMap::new()));
+}
+
+/// Gets DebtKeeper copy from the static ref, or default if no value has been set
+pub fn get_debt_keeper() -> DebtKeeper {
+    let netns = KI.check_integration_test_netns();
+    DEBT_DATA
+        .read()
+        .unwrap()
+        .clone()
+        .get(&netns)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Gets a write ref for the debt keeper lock, since this is a mutable reference
+/// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
+/// but still hold the lock in the local thread to prevent parallel modification
+pub fn get_debt_keeper_write_ref(input: &mut HashMap<u32, DebtKeeper>) -> &mut DebtKeeper {
+    let netns = KI.check_integration_test_netns();
+    input.entry(netns).or_insert_with(DebtKeeper::default);
+    input.get_mut(&netns).unwrap()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -174,7 +196,7 @@ pub struct DebtKeeper {
 
 #[allow(dead_code)]
 pub fn dump() -> DebtData {
-    let dk = DEBT_DATA.read().unwrap();
+    let dk = get_debt_keeper();
     dk.get_debts()
 }
 
@@ -183,7 +205,8 @@ pub fn payment_received(
     amount: Uint256,
     denom: Denom,
 ) -> Result<(), RitaCommonError> {
-    let mut dk = DEBT_DATA.write().unwrap();
+    let dk_pin = &mut *DEBT_DATA.write().unwrap();
+    let dk = get_debt_keeper_write_ref(dk_pin);
 
     // Debt keeper currently bookeeps in dai, we convert whatever amount we recive to the debt keeper using
     let amount = normalize_payment_amount(
@@ -215,7 +238,8 @@ pub fn normalize_payment_amount(amount: Uint256, from_denom: Denom, to_denom: De
 }
 
 pub fn payment_failed(to: Identity) {
-    let mut dk = DEBT_DATA.write().unwrap();
+    let dk_pin = &mut *DEBT_DATA.write().unwrap();
+    let dk = get_debt_keeper_write_ref(dk_pin);
     dk.payment_failed(&to)
 }
 
@@ -224,7 +248,8 @@ pub fn payment_succeeded(
     amount: Uint256,
     denom: Denom,
 ) -> Result<(), RitaCommonError> {
-    let mut dk = DEBT_DATA.write().unwrap();
+    let dk_pin = &mut *DEBT_DATA.write().unwrap();
+    let dk = get_debt_keeper_write_ref(dk_pin);
     // Debt keeper currently bookeeps in dai, we convert whatever amount we recive to the debt keeper using
     let amount = normalize_payment_amount(
         amount,
@@ -244,7 +269,8 @@ pub struct Traffic {
 }
 
 pub fn traffic_update(traffic: Vec<Traffic>) {
-    let mut dk = DEBT_DATA.write().unwrap();
+    let dk_pin = &mut *DEBT_DATA.write().unwrap();
+    let dk = get_debt_keeper_write_ref(dk_pin);
     for t in traffic.iter() {
         dk.traffic_update(&t.from, t.amount);
     }
@@ -254,7 +280,8 @@ pub fn traffic_update(traffic: Vec<Traffic>) {
 /// Special case traffic update for client gateway corner case, see rita client traffic watcher for more
 /// details. This updates a debt identity matching only ip address and eth address.
 pub fn wgkey_insensitive_traffic_update(traffic: Traffic) {
-    let mut dk = DEBT_DATA.write().unwrap();
+    let dk_pin = &mut *DEBT_DATA.write().unwrap();
+    let dk = get_debt_keeper_write_ref(dk_pin);
     let partial_id = traffic.from;
     for (id, _) in dk.debt_data.clone().iter() {
         if id.eth_address == partial_id.eth_address
@@ -271,7 +298,8 @@ pub fn wgkey_insensitive_traffic_update(traffic: Traffic) {
 /// A variant of traffic update that replaces one debts entry wholesale
 /// only used by the client to update it's own debt to the exit
 pub fn traffic_replace(traffic: Traffic) {
-    let mut dk = DEBT_DATA.write().unwrap();
+    let dk_pin = &mut *DEBT_DATA.write().unwrap();
+    let dk = get_debt_keeper_write_ref(dk_pin);
     dk.traffic_replace(&traffic.from, traffic.amount)
 }
 
@@ -285,7 +313,8 @@ pub enum DebtAction {
 }
 
 pub fn send_debt_update() -> Result<(), RitaCommonError> {
-    let mut dk = DEBT_DATA.write().unwrap();
+    let dk_pin = &mut *DEBT_DATA.write().unwrap();
+    let dk = get_debt_keeper_write_ref(dk_pin);
 
     // in order to keep from overloading actix when we have thousands of debts to process
     // (mainly on exits) we batch tunnel change operations before sending them over
@@ -736,7 +765,8 @@ impl DebtKeeper {
 
 /// Saves the debt keeper to disk
 pub fn save_debt_to_disk(save_frequency: Duration) {
-    let mut dk = DEBT_DATA.write().unwrap();
+    let dk_pin = &mut *DEBT_DATA.write().unwrap();
+    let dk = get_debt_keeper_write_ref(dk_pin);
     trace!("sending debt keeper update");
     dk.save_if_needed(save_frequency);
 }
@@ -745,7 +775,8 @@ pub fn save_debt_to_disk(save_frequency: Duration) {
 /// happen if a reboot command is sent or an update is sent. The most common
 /// form of reboot (pulling the power) will not call this
 pub fn save_debt_on_shutdown() {
-    let mut dk = DEBT_DATA.write().unwrap();
+    let dk_pin = &mut *DEBT_DATA.write().unwrap();
+    let dk = get_debt_keeper_write_ref(dk_pin);
 
     if let Err(e) = dk.save() {
         error!("Failed to save debts {:?}", e);
@@ -770,7 +801,7 @@ impl GetDebtsResult {
 }
 
 pub fn get_debts_list() -> Vec<GetDebtsResult> {
-    let dk = DEBT_DATA.read().unwrap();
+    let dk = get_debt_keeper();
     let debts: Vec<GetDebtsResult> = dk
         .debt_data
         .iter()
