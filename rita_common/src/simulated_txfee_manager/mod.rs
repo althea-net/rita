@@ -6,17 +6,41 @@ use crate::blockchain_oracle::get_pay_thresh;
 use crate::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
+use crate::KI;
 use althea_types::Identity;
 use althea_types::PaymentTx;
 use num256::Uint256;
 use num_traits::{Signed, Zero};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::RwLock;
 use web30::client::Web3;
 use web30::types::SendTxOption;
 
 lazy_static! {
-    static ref AMOUNT_OWED: Arc<RwLock<Uint256>> = Arc::new(RwLock::new(Uint256::zero()));
+    static ref AMOUNT_OWED: Arc<RwLock<HashMap<u32, Uint256>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+}
+
+/// Gets Amount owed copy from the static ref, or default if no value has been set
+pub fn get_amount_owed() -> Uint256 {
+    let netns = KI.check_integration_test_netns();
+    AMOUNT_OWED
+        .read()
+        .unwrap()
+        .clone()
+        .get(&netns)
+        .cloned()
+        .unwrap_or(Uint256::zero())
+}
+
+/// Gets a write ref for the amount owed lock, since this is a mutable reference
+/// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
+/// but still hold the lock in the local thread to prevent parallel modification
+pub fn get_amount_owed_write_ref(input: &mut HashMap<u32, Uint256>) -> &mut Uint256 {
+    let netns = KI.check_integration_test_netns();
+    input.entry(netns).or_insert_with(Uint256::zero);
+    input.get_mut(&netns).unwrap()
 }
 
 // this is sent when a transaction is successful in another module and it registers
@@ -26,7 +50,8 @@ pub fn add_tx_to_total(amount: Uint256) {
         .payment
         .simulated_transaction_fee;
     let to_add = amount / simulated_transaction_fee.into();
-    let mut amount_owed = AMOUNT_OWED.write().unwrap();
+    let amount_owed = &mut *AMOUNT_OWED.write().unwrap();
+    let amount_owed = get_amount_owed_write_ref(amount_owed);
     info!(
         "Simulated txfee total is {} with {} to add",
         amount_owed, to_add
@@ -46,7 +71,7 @@ pub async fn tick_simulated_tx() {
     let pay_threshold = get_pay_thresh();
     let simulated_transaction_fee_address = payment_settings.simulated_transaction_fee_address;
     let simulated_transaction_fee = payment_settings.simulated_transaction_fee;
-    let amount_to_pay = *AMOUNT_OWED.read().unwrap();
+    let amount_to_pay = get_amount_owed();
     let should_pay = amount_to_pay > pay_threshold.abs().to_uint256().unwrap();
     drop(payment_settings);
     trace!(
@@ -97,7 +122,8 @@ pub async fn tick_simulated_tx() {
             });
 
             // update the billing now that the payment has gone through
-            let mut amount_owed = AMOUNT_OWED.write().unwrap();
+            let amount_owed = &mut *AMOUNT_OWED.write().unwrap();
+            let amount_owed = get_amount_owed_write_ref(amount_owed);
             let payment_amount = amount_to_pay;
             if payment_amount <= *amount_owed {
                 *amount_owed -= payment_amount;
