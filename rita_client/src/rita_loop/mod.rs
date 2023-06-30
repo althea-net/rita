@@ -20,6 +20,7 @@ use rita_common::tunnel_manager::tm_get_neighbors;
 use rita_common::usage_tracker::get_current_hour;
 use rita_common::usage_tracker::get_last_saved_usage_hour;
 use settings::client::RitaClientSettings;
+use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -31,7 +32,8 @@ use std::io::Seek;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -43,15 +45,31 @@ lazy_static! {
     /// see the comment on check_for_gateway_client_billing_corner_case()
     /// to identify why this variable is needed. In short it identifies
     /// a specific billing corner case.
-    static ref IS_GATEWAY_CLIENT: AtomicBool = AtomicBool::new(false);
+    static ref IS_GATEWAY_CLIENT: Arc<RwLock<HashMap<u32, bool>>> = Arc::new(RwLock::new(HashMap::new()));
 }
 
 pub fn is_gateway_client() -> bool {
-    IS_GATEWAY_CLIENT.load(Ordering::Relaxed)
+    let netns = KI.check_integration_test_netns();
+    IS_GATEWAY_CLIENT
+        .read()
+        .unwrap()
+        .clone()
+        .get(&netns)
+        .cloned()
+        .unwrap_or(false)
 }
 
 pub fn set_gateway_client(input: bool) {
-    IS_GATEWAY_CLIENT.store(input, Ordering::Relaxed)
+    let netns = KI.check_integration_test_netns();
+    let gw_lock = &mut *IS_GATEWAY_CLIENT.write().unwrap();
+
+    // Clippy notation
+    if let std::collections::hash_map::Entry::Vacant(e) = gw_lock.entry(netns) {
+        e.insert(input);
+    } else {
+        let gw_bool = gw_lock.get_mut(&netns).unwrap();
+        *gw_bool = input;
+    }
 }
 
 /// This function determines if metrics are permitted for this device, if the user has
