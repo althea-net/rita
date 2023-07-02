@@ -39,9 +39,11 @@ use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use std::collections::{HashMap, HashSet};
+use std::net::Ipv4Addr;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::time::Duration;
 use std::time::Instant;
 
 /// The number of times ExitSwitcher will try to connect to an unresponsive exit before blacklisting its ip
@@ -773,14 +775,10 @@ pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
 
 /// Verifies ipv4 connectivity by pinging 1.1.1.1
 pub fn run_ping_test() -> bool {
-    match KI.run_command("ping", &["-c", "2", "1.1.1.1"]) {
-        Ok(out) => {
-            let out = String::from_utf8(out.stdout).expect("Why did this unwrap fail?");
-            if out.contains("time=") {
-                return true;
-            }
-            false
-        }
+    let cloudflare: IpAddr = Ipv4Addr::new(1, 1, 1, 1).into();
+    let timeout = Duration::from_secs(5);
+    match KI.ping_check(&cloudflare, timeout, None) {
+        Ok(out) => out,
         Err(e) => {
             error!("ipv4 ping error: {:?}", e);
             false

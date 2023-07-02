@@ -6,10 +6,21 @@ use std::time::Duration;
 
 impl dyn KernelInterface {
     //Pings a ipv6 address to determine if it's online
-    pub fn ping_check(&self, ip: &IpAddr, timeout: Duration) -> Result<bool, KernelInterfaceError> {
+    pub fn ping_check(
+        &self,
+        ip: &IpAddr,
+        timeout: Duration,
+        outgoing_device: Option<&str>,
+    ) -> Result<bool, KernelInterfaceError> {
         trace!("starting ping");
         let mut ping = Ping::new();
         ping.add_host(&ip.to_string())?;
+
+        // set outgoing device as needed
+        if let Some(device) = outgoing_device {
+            ping.set_device(device)?;
+        }
+
         ping.set_timeout(timeout.as_millis() as f64 / 1000f64)?;
         trace!("sending ping");
         let mut response = ping.send()?;

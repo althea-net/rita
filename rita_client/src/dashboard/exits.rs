@@ -44,7 +44,11 @@ fn is_tunnel_working(exit: &ExitServer, current_exit: Option<&ExitServer>) -> bo
     match (current_exit, is_selected(exit, current_exit)) {
         (Some(exit), true) => match exit.info.general_details() {
             Some(details) => KI
-                .ping_check(&details.server_internal_ip, EXIT_PING_TIMEOUT)
+                .ping_check(
+                    &details.server_internal_ip,
+                    EXIT_PING_TIMEOUT,
+                    Some("wg_exit"),
+                )
                 .unwrap_or(false),
             None => false,
         },
@@ -79,7 +83,7 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                         // failed pings block for one second, so we should be sure it's at least reasonable
                         // to expect the pings to work before issuing them.
                         let reachable = if have_route {
-                            KI.ping_check(&route_ip, EXIT_PING_TIMEOUT)?
+                            KI.ping_check(&route_ip, EXIT_PING_TIMEOUT, None)?
                         } else {
                             false
                         };
