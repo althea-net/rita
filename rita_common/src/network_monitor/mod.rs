@@ -131,7 +131,7 @@ pub struct NetworkInfo {
 
 /// updates babel neighbors, babel routes, and rita neighbors for a NetworkInfo
 pub fn update_network_info(msg: NetworkInfo) {
-    let mut network_monitor = &mut *(NETWORK_MONITOR.write().unwrap());
+    let network_monitor = &mut *(NETWORK_MONITOR.write().unwrap());
     let babel_neighbors = &msg.babel_neighbors;
     let babel_routes = &msg.babel_routes;
     let rita_neighbors = &msg.rita_neighbors;
