@@ -927,16 +927,12 @@ mod tests {
     fn test_althea_chain_response() {
         let runner = System::new();
         runner.block_on(async move {
-            let contact = Contact::new(
-                "http://chainripper-2.althea.net:3290",
-                ALTHEA_CONTACT_TIMEOUT,
-                "althea",
-            )
-            .unwrap();
+            let contact =
+                Contact::new("http://althea.zone:9090", ALTHEA_CONTACT_TIMEOUT, "althea").unwrap();
 
             let tx = contact
                 .get_tx_by_hash(
-                    "B855DE0BE8158EFBD0E97754DB4BCA7FFF9CFCAFE314B370845D959710D10CE1".to_string(),
+                    "B0943ECCC5565A39D021EE815A82006B01FC87A9BED4EBDD0A448AC161007FF0".to_string(),
                 )
                 .await
                 .expect("Unable to get tx by hash");
