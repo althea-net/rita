@@ -188,9 +188,9 @@ pub fn calculate_unverified_payments(router: Identity) -> Uint256 {
 
 /// Checks if we already have a given txid in our to_validate list
 /// true if we have it false if we do not
-fn check_for_unvalidated_tx(ts: &ToValidate) -> bool {
-    for tx in get_unvalidated_transactions() {
-        match (ts.payment.clone().txid, tx.payment.txid) {
+fn check_for_unvalidated_tx(ts: &ToValidate, payment_validator: &mut PaymentValidator) -> bool {
+    for tx in &payment_validator.unvalidated_transactions {
+        match (ts.payment.clone().txid, tx.payment.txid.clone()) {
             (None, None) | (None, Some(_)) | (Some(_), None) => {
                 panic!("Invalid tx in unvalidated transactions!")
             }
@@ -211,10 +211,14 @@ fn check_for_unvalidated_tx(ts: &ToValidate) -> bool {
 /// This endpoint specifically (and only this one) is fully idempotent so that we can retry
 /// txid transmissions
 pub fn validate_later(ts: ToValidate) -> Result<(), RitaCommonError> {
+    // We hold the lock to prevent race condition between make_payment_v1 and make_payment_v2
+    let successful_txs = get_all_successful_tx();
+    let payment_validator = &mut *HISTORY.write().unwrap();
+
     if let Some(txid) = ts.payment.txid.clone() {
-        if !get_all_successful_tx().contains(&txid) && !check_for_unvalidated_tx(&ts) {
+        if !successful_txs.contains(&txid) && !check_for_unvalidated_tx(&ts, payment_validator) {
             // insert is safe to run multiple times just so long as we check successful tx's for duplicates
-            add_unvalidated_transaction(ts);
+            payment_validator.unvalidated_transactions.insert(ts);
             Ok(())
         } else {
             Err(RitaCommonError::DuplicatePayment)
