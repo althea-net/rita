@@ -167,6 +167,10 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
             return 0;
         }
     };
+    // are we actually saving the entire usage hour? why does even saved history show up to ops as small values?
+    let mut data = get_usage_data(Relay);
+    let data2 = data.drain(0..data.len()-10);
+    info!("We have saved usage relay data: {:?}", data2);
     let last_seen_hour = ops_last_seen_usage_hour.unwrap_or(0);
     let mut hours_to_send: u64 = 0;
     // first check whats the last saved hr, send everything from that hr on
@@ -200,6 +204,8 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
             // pop front, add to front of new vecdeque if exists.
             while let Some(data) = usage_data_relay.pop_front() {
                 if data.index > last_seen_hour {
+                    // if these values come up as the same from the individual 5 second graylog ones that's a problem
+                    info!("pushing relay usagehour as {:?}", data);
                     new_relay_data.push_front(UsageHour {
                         up: data.up,
                         down: data.down,
