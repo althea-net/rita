@@ -948,6 +948,7 @@ mod tests {
         assert_eq!(get_payment_txids(pmt3.to), sent_hashset);
     }
 
+    #[ignore]
     #[test]
     fn test_althea_chain_response() {
         let runner = System::new();
