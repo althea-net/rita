@@ -337,36 +337,6 @@ fn tm_get_port() -> u16 {
     }
 }
 
-/// determines if the list contains a tunnel with the given target ip
-fn have_tunnel_by_ip(ip: IpAddr, tunnels: &[Tunnel]) -> bool {
-    for tunnel in tunnels.iter() {
-        if tunnel.ip == ip {
-            return true;
-        }
-    }
-    false
-}
-
-/// determines if the list contains a tunnel with the given target ifidx
-fn have_tunnel_by_ifidx(ifidx: u32, tunnels: &[Tunnel]) -> bool {
-    for tunnel in tunnels.iter() {
-        if tunnel.listen_ifidx == ifidx {
-            return true;
-        }
-    }
-    false
-}
-
-/// gets the tunnel from the list with the given index
-fn get_tunnel_by_ifidx(ifidx: u32, tunnels: &[Tunnel]) -> Option<&Tunnel> {
-    tunnels.iter().find(|&tunnel| tunnel.listen_ifidx == ifidx)
-}
-
-/// deletes all instances of a given tunnel from the list
-fn del_tunnel(to_del: &Tunnel, tunnels: &mut Vec<Tunnel>) {
-    tunnels.retain(|val| *val != *to_del)
-}
-
 impl TunnelManager {
     pub fn new() -> Self {
         let start = settings::get_rita_common().network.wg_start_port;
@@ -374,6 +344,30 @@ impl TunnelManager {
         TunnelManager {
             free_ports: ports,
             tunnels: HashMap::new(),
+        }
+    }
+
+    /// gets the tunnel from the list for a given wg key and ip
+    pub fn get_tunnel_mut(&mut self, ip: IpAddr, id: Identity) -> Option<&mut Tunnel> {
+        if let Some(tunnels) = self.tunnels.get_mut(&id) {
+            for tunnel in tunnels.iter_mut() {
+                if tunnel.ip == ip {
+                    return Some(tunnel);
+                }
+            }
+            None
+        } else {
+            None
+        }
+    }
+
+    /// Deletes a tunnel if it exists does nothing if no such tunnel exists
+    /// the uniqueness critera for tunnels is the wg_key, the ip, and the if index
+    /// so many member values are not checked
+    pub fn del_tunnel(&mut self, to_del: &Tunnel) {
+        if let Some(tunnels) = self.tunnels.get_mut(&to_del.neigh_id.global) {
+            // keep all the tunnels that are not the one we want to delete
+            tunnels.retain(|val| *val != *to_del)
         }
     }
 
@@ -386,67 +380,30 @@ impl TunnelManager {
         our_port: u16,
     ) -> Result<(Tunnel, bool), RitaCommonError> {
         trace!("getting existing tunnel or opening a new one");
-        // ifidx must be a part of the key so that we can open multiple tunnels
-        // if we have more than one physical connection to the same peer
         let key = their_localid.global;
 
-        let we_have_tunnel = match self.tunnels.get(&key) {
-            Some(tunnels) => {
-                have_tunnel_by_ifidx(peer.ifidx, tunnels)
-                    && have_tunnel_by_ip(peer.contact_socket.ip(), tunnels)
-            }
-            None => false,
-        };
+        let our_tunnel = self.get_tunnel_mut(peer.contact_socket.ip(), key);
 
         // when we don't know take the more conservative option and assume they do have a tunnel
         let they_have_tunnel = their_localid.have_tunnel.unwrap_or(true);
 
         let mut return_bool = false;
-        if we_have_tunnel {
-            // Scope the last_contact bump to let go of self.tunnels before next use
+        if let Some(our_tunnel) = our_tunnel {
+            // below is only last contact bump
             {
-                let tunnels = match self.tunnels.get_mut(&key) {
-                    Some(a) => a,
-                    None => {
-                        error!("Logic Error: Identity {:?} doesnt exist", key.clone());
-                        panic!("Identity not in hashmap");
-                    }
-                };
-                for tunnel in tunnels.iter_mut() {
-                    if tunnel.listen_ifidx == peer.ifidx && tunnel.ip == peer.contact_socket.ip() {
-                        info!("We already have a tunnel for {}", tunnel);
-                        trace!(
-                            "Bumping timestamp after {}s for tunnel: {}",
-                            tunnel.last_contact.elapsed().as_secs(),
-                            tunnel
-                        );
-                        tunnel.last_contact = Instant::now();
-                        // update the nickname in case they changed it live
-                        tunnel.neigh_id.global.nickname = their_localid.global.nickname;
-                    }
-                }
+                info!("We already have a tunnel for {}", our_tunnel);
+                trace!(
+                    "Bumping timestamp after {}s for tunnel: {}",
+                    our_tunnel.last_contact.elapsed().as_secs(),
+                    our_tunnel
+                );
+                our_tunnel.last_contact = Instant::now();
+                // update the nickname in case they changed it live
+                our_tunnel.neigh_id.global.nickname = their_localid.global.nickname;
             }
 
             if they_have_tunnel {
-                trace!("Looking up for a tunnels by {:?}", key);
-                // Unwrap is safe because we confirm membership
-                let tunnels = &self.tunnels[&key];
-                // Filter by Tunnel::ifidx
-                trace!(
-                    "Got tunnels by key {:?}: {:?}. Ifidx is {}",
-                    key,
-                    tunnels,
-                    peer.ifidx
-                );
-                let tunnel = match get_tunnel_by_ifidx(peer.ifidx, tunnels) {
-                    Some(a) => a,
-                    _ => {
-                        error!("Unable to find tunnel by ifidx how did this happen?");
-                        panic!("Unable to find tunnel by ifidx how did this happen?");
-                    }
-                };
-
-                return Ok((tunnel.clone(), true));
+                return Ok((our_tunnel.clone(), true));
             } else {
                 // In the case that we have a tunnel and they don't we drop our existing one
                 // and agree on the new parameters in this message
@@ -454,44 +411,18 @@ impl TunnelManager {
                     "We have a tunnel but our peer {:?} does not! Handling",
                     peer.contact_socket.ip()
                 );
-                // Unwrapping is safe because we confirm membership. This is done
-                // in a separate scope to limit surface of borrow checker.
-                let (tunnel, size) = {
-                    // Find tunnels by identity
-                    let tunnels = match self.tunnels.get_mut(&key) {
-                        Some(a) => a,
-                        None => {
-                            error!("LOGIC ERROR: Unable to find a tunnel that should exist, we already confirmed membership");
-                            panic!("Unable to find tunnel");
-                        }
-                    };
-                    // Find tunnel by interface index
-                    let value = match get_tunnel_by_ifidx(peer.ifidx, tunnels) {
-                        Some(a) => a.clone(),
-                        None => {
-                            error!("LOGIC ERROR: Unable to find a tunnel with ifidx when membership is already confirmed");
-                            panic!("Uanble to find tunnel");
-                        }
-                    };
-                    del_tunnel(&value, tunnels);
-                    // Outer HashMap (self.tunnels) can contain empty HashMaps,
-                    // so the resulting tuple will consist of the tunnel itself, and
-                    // how many tunnels are still associated with that ID.
-                    (value, tunnels.len())
-                };
-                if size == 0 {
-                    // Remove this identity if there are no tunnels associated with it.
-                    self.tunnels.remove(&key);
-                }
-
                 // tell Babel to flush the interface and then delete it
-                let res = tunnel.unmonitor();
+                let res = our_tunnel.unmonitor();
                 if res.is_err() {
                     error!(
                         "We failed to delete the interface {:?} with {:?} it's now orphaned",
-                        tunnel.iface_name, res
+                        our_tunnel.iface_name, res
                     );
                 }
+
+                // now delete
+                let our_tunnel = &our_tunnel.clone();
+                self.del_tunnel(our_tunnel);
 
                 return_bool = true;
             }
