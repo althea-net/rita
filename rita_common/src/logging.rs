@@ -65,9 +65,12 @@ fn prepare_logger() -> LoggerBuilder {
         let buffer_size = min(free_mem as usize / 20, MAX_BUFFER);
         if buffer_size == MAX_BUFFER {
             // if we're at the max size we can afford memory inefficient compression
+            // and we can also afford to buffer some logs in /tmp (which also uses memory
+            // since tmpfs is a memory filesystem)
             LoggerBuilder::default()
                 .set_compression_level(Compression::Slow)
                 .set_buffer_size(buffer_size)
+                .enable_tmp_log_storage()
         } else {
             LoggerBuilder::default().set_buffer_size(buffer_size)
         }
