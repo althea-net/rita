@@ -26,8 +26,10 @@ use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::time::SystemTime;
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::{RitaExitError, EXIT_WG_PRIVATE_KEY};
 
@@ -182,6 +184,40 @@ pub async fn secure_setup_request(
     }
 }
 
+const STATUS_REQUEST_CACHE_TIMEOUT: Duration = Duration::from_secs(600);
+
+lazy_static! {
+    static ref STATUS_REQUEST_CACHE: Arc<RwLock<HashMap<WgKey, (ExitState, Instant)>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+}
+
+fn get_from_status_request_cache(key: WgKey) -> Option<ExitState> {
+    let d = STATUS_REQUEST_CACHE.read().unwrap();
+    let res = d.get(&key);
+    if let Some((state, last_seen)) = res {
+        if Instant::now() > *last_seen {
+            // cross thread race, data is very new
+            Some(state.clone())
+        } else if (Instant::now() - *last_seen) < STATUS_REQUEST_CACHE_TIMEOUT {
+            // data has not yet timed out
+            Some(state.clone())
+        } else {
+            // data has timed out
+            None
+        }
+    } else {
+        // we don't have this data
+        None
+    }
+}
+
+fn update_status_request_cache(key: WgKey, state: ExitState) {
+    STATUS_REQUEST_CACHE
+        .write()
+        .unwrap()
+        .insert(key, (state, Instant::now()));
+}
+
 pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
     let our_secretkey: WgKey = *EXIT_WG_PRIVATE_KEY;
     let our_secretkey = our_secretkey.into();
@@ -196,6 +232,15 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
         },
     };
     trace!("got status request from {}", their_wg_pubkey);
+
+    // return early if we hit the cache
+    if let Some(status) = get_from_status_request_cache(their_wg_pubkey) {
+        return HttpResponse::Ok().json(secure_setup_return(
+            status,
+            &our_secretkey,
+            their_nacl_pubkey,
+        ));
+    }
 
     let conn = match get_database_connection() {
         Ok(conn) => conn,
@@ -216,6 +261,7 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
             ));
         }
     };
+    update_status_request_cache(their_wg_pubkey, state.clone());
     HttpResponse::Ok().json(secure_setup_return(
         state,
         &our_secretkey,
