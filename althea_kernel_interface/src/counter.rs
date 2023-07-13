@@ -133,7 +133,10 @@ add zxcv 1234:5678:9801:2345:6789:0123:4567:8902,wg0 packets 123456789 bytes 987
 
 impl dyn KernelInterface {
     pub fn init_counter(&self, target: &FilterTarget) -> Result<(), Error> {
-        if self.get_kernel_is_v4()? {
+        if self.does_nftables_exist() {
+            info!("Trying to init a counter!");
+            self.nft_init_counters(target.set_name(), target.chain(), target.nft_interface())?;
+        } else {
             self.run_command(
                 "ipset",
                 &[
@@ -165,9 +168,6 @@ impl dyn KernelInterface {
                     &format!("dst,{}", target.interface()),
                 ],
             )?;
-        } else {
-            info!("Trying to init a counter!");
-            self.nft_init_counters(target.set_name(), target.chain(), target.nft_interface())?;
         }
 
         Ok(())
@@ -235,7 +235,9 @@ impl dyn KernelInterface {
         &self,
         target: &FilterTarget,
     ) -> Result<HashMap<(IpAddr, String), u64>, Error> {
-        if self.get_kernel_is_v4()? {
+        if self.does_nftables_exist() {
+            self.parse_nft_set_counters(target.set_name())
+        } else {
             self.run_command(
                 "ipset",
                 &[
@@ -264,8 +266,6 @@ impl dyn KernelInterface {
 
             self.run_command("ipset", &["destroy", &format!("tmp_{}", target.set_name())])?;
             res
-        } else {
-            self.parse_nft_set_counters(target.set_name())
         }
     }
 }
@@ -282,7 +282,7 @@ fn test_init_counter() {
 
     KI.set_mock(Box::new(move |program, args| {
         counter += 1;
-        if KI.get_kernel_is_v4().unwrap() {
+        if KI.get_kernel_is_v4()? {
             match counter {
                 1 => {
                     assert_eq!(program, "ipset");
@@ -339,6 +339,15 @@ fn test_init_counter() {
             match counter {
                 1 => {
                     assert_eq!(program, "nft");
+                    assert_eq!(args, &["-v"]);
+                    Ok(Output {
+                        stdout: b"nftables v1.0.1 (Fearless Fosdick #3)".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                2 => {
+                    assert_eq!(program, "nft");
                     assert_eq!(args, &["list", "set", "inet", "fw4", "rita_input"]);
 
                     Ok(Output {
@@ -347,7 +356,7 @@ fn test_init_counter() {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                2 => {
+                3 => {
                     assert_eq!(program, "nft");
                     assert_eq!(
                         args,
@@ -377,7 +386,7 @@ fn test_init_counter() {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                3 => {
+                4 => {
                     assert_eq!(program, "nft");
                     assert_eq!(
                         args,
@@ -422,7 +431,7 @@ fn test_read_counters() {
 
     KI.set_mock(Box::new(move |program, args| {
         counter += 1;
-        if KI.get_kernel_is_v4().unwrap() {
+        if KI.get_kernel_is_v4()? {
             match counter {
                 1 => {
                     assert_eq!(program, "ipset");
@@ -479,6 +488,15 @@ fn test_read_counters() {
             match counter {
                 1 => {
                     assert_eq!(program, "nft");
+                    assert_eq!(args, &["-v"]);
+                    Ok(Output {
+                        stdout: b"nftables v1.0.1 (Fearless Fosdick #3)".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                2 => {
+                    assert_eq!(program, "nft");
                     assert_eq!(args, &["list", "set", "inet", "fw4", "rita_input"]);
                     Ok(Output {
                         stdout: b"
@@ -489,7 +507,7 @@ fn test_read_counters() {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                2 => {
+                3 => {
                     assert_eq!(program, "nft");
                     assert_eq!(args, &["flush", "set", "inet", "fw4", "rita_input"]);
                     Ok(Output {

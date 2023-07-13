@@ -4,6 +4,27 @@ use crate::KernelInterface;
 use crate::KernelInterfaceError;
 
 impl dyn KernelInterface {
+    pub fn does_nftables_exist(&self) -> bool {
+        let output = match self.run_command("nft", &["-v"]) {
+            Ok(out) => out,
+            Err(e) => {
+                error!("Run command is failing with {}", e);
+                // Assume there is no nftables
+                return false;
+            }
+        };
+
+        let stdout = match String::from_utf8(output.stdout) {
+            Ok(a) => a,
+            Err(e) => {
+                error!("Cannot parse stdout with {}", e);
+                return false;
+            }
+        };
+
+        stdout.contains("nftables")
+    }
+
     fn create_fwd_rule(&self) -> Result<(), KernelInterfaceError> {
         self.run_command(
             "nft",
