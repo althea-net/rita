@@ -228,7 +228,7 @@ impl dyn KernelInterface {
         external_v6: Option<(IpAddr, u8)>,
     ) -> Result<(), Error> {
         // nat masquerade on exit
-        if self.get_kernel_is_v4()? {
+        if !self.does_nftables_exist() {
             self.add_iptables_rule(
                 "iptables",
                 &[
@@ -248,7 +248,7 @@ impl dyn KernelInterface {
         }
 
         // Add v4 and v6 forward rules wg_exit <-> ex_nic
-        if self.get_kernel_is_v4()? {
+        if !self.does_nftables_exist() {
             // v4 wg_exit -> ex_nic
             self.add_iptables_rule(
                 "iptables",
