@@ -90,6 +90,8 @@ pub struct ExitManager {
     pub last_exit: Option<IpAddr>,
     /// Store exit connection status. If no update in > 10, perform a power cycle
     pub last_connection_time: Instant,
+    /// Store the last exit status request for all registered exits
+    pub last_status_request: Option<Instant>,
 }
 
 impl Default for ExitManager {
@@ -99,6 +101,7 @@ impl Default for ExitManager {
             exit_list: ExitList::default(),
             last_exit: None,
             last_connection_time: Instant::now(),
+            last_status_request: None,
         }
     }
 }
