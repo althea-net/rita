@@ -22,6 +22,9 @@ use std::time::{Duration, Instant};
 const EXIT_LOOP_SPEED: Duration = Duration::from_secs(5);
 const PING_TEST_SPEED: Duration = Duration::from_secs(100);
 const REBOOT_TIMEOUT: Duration = Duration::from_secs(600);
+/// How often we make a exit status request for registered exits. Prevents us from bogging up exit processing
+/// power
+const STATUS_REQUEST_QUERY: Duration = Duration::from_secs(600);
 
 /// This asnyc loop runs functions related to Exit management.
 pub fn start_exit_manager_loop() {
@@ -239,6 +242,7 @@ pub fn start_exit_manager_loop() {
                         // code that manages requesting details to exits, run in parallel becuse they respond slowly
                         let mut general_requests = Vec::new();
                         let mut status_requests = Vec::new();
+                        let mut exit_status_requested = false;
                         let servers = { settings::get_rita_client().exit_client.exits };
                         for (k, s) in servers {
                             match s.info {
@@ -250,7 +254,16 @@ pub fn start_exit_manager_loop() {
                                 // Ops has registered us. This will move our GotInfo -> Registered state for an exit
                                 ExitState::GotInfo { .. } => {
                                     trace!("Exit {} is in state GotInfo, calling status request", k);
-                                    status_requests.push(exit_status_request(k.clone()))
+                                    // This is only for clients registered via ops
+                                    if let Some(last_query) = em_state.last_status_request {
+                                        if Instant::now() - last_query > STATUS_REQUEST_QUERY {
+                                            exit_status_requested = true;
+                                            status_requests.push(exit_status_request(k.clone()));
+                                        }
+                                    } else {
+                                        exit_status_requested = true;
+                                        status_requests.push(exit_status_request(k.clone()));
+                                    }
                                 },
                                 // For routers that register normally, (not through ops), GotInfo -> Pending. In this state, we 
                                 // continue to query until we reach Registered
@@ -260,12 +273,24 @@ pub fn start_exit_manager_loop() {
                                 },
                                 ExitState::Registered { .. } => {
                                     trace!("Exit {} is in state Registered, calling status request", k);
-                                    status_requests.push(exit_status_request(k.clone()));
+                                    // Make a status request every STATUS_REQUEST_QUERY seconds 
+                                    if let Some(last_query) = em_state.last_status_request {
+                                        if Instant::now() - last_query > STATUS_REQUEST_QUERY {
+                                            exit_status_requested = true;
+                                            status_requests.push(exit_status_request(k.clone()));
+                                        }
+                                    } else {
+                                        exit_status_requested = true;
+                                        status_requests.push(exit_status_request(k.clone()));
+                                    }
                                 },
                                 _ => {
                                     trace!("Exit {} is in state {:?} calling status request", k, s.info);
                                 }
                             }
+                        }
+                        if exit_status_requested {
+                            em_state.last_status_request = Some(Instant::now());
                         }
                         join!(join_all(general_requests), join_all(status_requests));
 
