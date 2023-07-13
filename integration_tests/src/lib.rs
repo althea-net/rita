@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+pub mod debts;
 pub mod five_nodes;
 pub mod payments_althea;
 pub mod payments_eth;

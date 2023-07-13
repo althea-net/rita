@@ -98,12 +98,22 @@ pub async fn run_althea_payments_test_scenario() {
     info!("Althea Balances are {:?}", balances);
 
     info!("Trying to generate traffic");
-    generate_traffic(from_node.clone().unwrap(), end_node.clone().unwrap());
+    generate_traffic(
+        from_node.clone().unwrap(),
+        Some(end_node.clone().unwrap()),
+        "1.2G".to_string(),
+    );
     info!("Waiting for payment");
     thread::sleep(Duration::from_secs(15));
 
     info!("Querying debts");
-    let res = query_debts(from_node.unwrap(), forward_node.unwrap()).await;
-    assert!(res.payment_details.total_payment_sent > USDC_TO_WEI_DECIMAL.into());
-    assert!(res.payment_details.total_payment_sent < (2 * USDC_TO_WEI_DECIMAL).into());
+    let res = query_debts(
+        vec![from_node.clone().unwrap()],
+        Some(vec![forward_node.unwrap()]),
+    )
+    .await;
+    info!("Recieved Debt values {:?}", res);
+    let debts = res.get(&from_node.unwrap()).unwrap()[0].clone();
+    assert!(debts.payment_details.total_payment_sent > USDC_TO_WEI_DECIMAL.into());
+    assert!(debts.payment_details.total_payment_sent < (2 * USDC_TO_WEI_DECIMAL).into());
 }

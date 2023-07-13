@@ -30,7 +30,7 @@ use rita_common::{
 };
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     net::Ipv6Addr,
     str::from_utf8,
     sync::{Arc, RwLock},
@@ -57,6 +57,7 @@ pub const NODE_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(7, 7, 7, 2));
 pub const STAKING_TOKEN: &str = "aalthea";
 pub const MIN_GLOBAL_FEE_AMOUNT: u128 = 10;
 pub const TOTAL_TIMEOUT: Duration = Duration::from_secs(300);
+pub const DEBT_ACCURACY_THRES: u8 = 15;
 
 pub fn get_althea_grpc() -> String {
     format!("http://{}:9091", NODE_IP)
@@ -170,6 +171,31 @@ pub fn test_routes_async(nsinfo: NamespaceInfo, expected: HashMap<Namespace, Rou
         }
     }
     true
+}
+
+pub fn test_all_internet_connectivity(namespaces: NamespaceInfo) {
+    for ns in namespaces.names {
+        let out = KI
+            .run_command(
+                "ip",
+                &[
+                    "netns",
+                    "exec",
+                    &ns.get_name(),
+                    "ping",
+                    &NODE_IP.to_string(),
+                    "-c",
+                    "1",
+                ],
+            )
+            .unwrap();
+        if !String::from_utf8(out.stdout)
+            .unwrap()
+            .contains("1 received")
+        {
+            panic!("{} does not have internet connectivity", ns.get_name());
+        }
+    }
 }
 
 /// Look for an installed route given our expected list between ns1 and ns2
@@ -333,76 +359,150 @@ pub fn set_sigterm() {
     .expect("Error setting Ctrl-C handler");
 }
 
-/// Run an iperf to generate from between two namespaces
-pub fn generate_traffic(from: Namespace, to: Namespace) {
-    let ip = format!("fd00::{}", to.id);
+/// Run an iperf to generate from between two namespaces. data represents the string
+/// representation to pass into iperf. For example '10G' or '15M'
+/// When to is None, traffic is generated to the internet
+pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
+    let ip = match &to {
+        Some(a) => format!("fd00::{}", a.id),
+        None => NODE_IP.to_string(),
+    };
+
     // setup server
     info!("Going to setup server, spawning new thread");
     thread::spawn(move || {
-        let _output = KI
-            .run_command("ip", &["netns", "exec", &to.get_name(), "iperf3", "-s"])
-            .expect("Could not setup iperf server");
+        if let Some(ns) = to {
+            let _output = KI
+                .run_command(
+                    "ip",
+                    &["netns", "exec", &ns.get_name(), "iperf3", "-s", "-1"],
+                )
+                .expect("Could not setup iperf server");
+        } else {
+            let _output = KI
+                .run_command("iperf3", &["-s", "-1"])
+                .expect("Could not setup iperf server");
+        }
     });
 
     // iperf client
     info!("Going to setup client");
-    let output = KI
-        .run_command(
-            "ip",
-            &["netns", "exec", &from.get_name(), "iperf3", "-c", &ip],
-        )
-        .expect("Could not setup iperf client");
-    let output = from_utf8(&output.stdout).expect("could not get output for client setup!");
-    info!("Client out: {}", format!("{}", output));
-}
+    let ticker = Instant::now();
+    loop {
+        let output = KI
+            .run_command(
+                "ip",
+                &[
+                    "netns",
+                    "exec",
+                    &from.get_name(),
+                    "iperf3",
+                    "-c",
+                    &ip,
+                    "-n",
+                    &data,
+                ],
+            )
+            .expect("Could not setup iperf client");
 
-pub async fn query_debts(node: Namespace, for_node: Namespace) -> GetDebtsResult {
-    let for_node_ip = match for_node.node_type {
-        NodeType::Exit => EXIT_ROOT_IP.to_string(),
-        _ => format!("fd00::{}", for_node.id),
-    };
-
-    let response: Arc<RwLock<Option<Vec<GetDebtsResult>>>> = Arc::new(RwLock::new(None));
-    let response_local = response.clone();
-    let node_name = node.get_name();
-
-    let _ = thread::spawn(move || {
-        info!("Starting inner thraed");
-        // set the host of this thread to the ns
-        let nsfd = get_nsfd(node.get_name());
-        setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
-        let runner = System::new();
-        runner.block_on(async move {
-            let client = awc::Client::default();
-            let mut req = client
-                .get("http://localhost:4877/debts".to_string())
-                .send()
-                .await
-                .expect("Failed to make request to rita RPC");
-            let res = match req.json().await {
-                Err(e) => panic!("Why is get debts failing: {}", e),
-                Ok(a) => a,
-            };
-            *response.write().unwrap() = Some(res);
-        })
-    });
-
-    // wait for the child thread to finish performing it's query
-    while response_local.read().unwrap().is_none() {
-        info!("Waiting for a rpc response from {}", node_name);
-        sleep(Duration::from_millis(100)).await;
-    }
-    sleep(Duration::from_millis(100)).await;
-    let list = response_local.read().unwrap().clone().unwrap();
-
-    let mut ret = None;
-    for e in list {
-        if e.identity.mesh_ip.to_string() == for_node_ip {
-            ret = Some(e.clone());
-            info!("Relevant node debt is {:?}", e);
+        let stderr = from_utf8(&output.stderr).expect("Why is this failing");
+        let std_output = from_utf8(&output.stdout).expect("could not get output for client setup!");
+        if !std_output.is_empty() {
+            info!("Client out: {}", format!("{}", std_output));
+            break;
+        } else if stderr.contains("Connection refused") {
+            info!("server not set up yet");
+            thread::sleep(Duration::from_millis(100));
+        } else {
+            panic!(
+                "Iperf failed to generate traffic with status {} and stderr {}",
+                output.status, stderr
+            );
+        }
+        if Instant::now() - ticker > Duration::from_secs(20) {
+            panic!("Traffic loop has been running for too long");
         }
     }
-    ret.unwrap()
+}
+
+pub fn get_ip_from_namespace(node: Namespace) -> String {
+    match node.node_type {
+        NodeType::Exit => EXIT_ROOT_IP.to_string(),
+        _ => format!("fd00::{}", node.id),
+    }
+}
+
+/// Given a vec of nodes, query their endpoint for node debts. for_node is optional in case of none, we simply
+/// return the debts for all nodes for a given node.
+pub async fn query_debts(
+    nodes: Vec<Namespace>,
+    for_nodes: Option<Vec<Namespace>>,
+) -> HashMap<Namespace, Vec<GetDebtsResult>> {
+    // When for node is none, get all debts for a node
+    let for_node_ips = match for_nodes {
+        Some(a) => {
+            let mut map = HashSet::new();
+            for node in a {
+                map.insert(get_ip_from_namespace(node));
+            }
+            map
+        }
+        None => HashSet::new(),
+    };
+
+    let mut ret_map = HashMap::new();
+
+    for node in nodes {
+        let response: Arc<RwLock<Option<Vec<GetDebtsResult>>>> = Arc::new(RwLock::new(None));
+        let response_local = response.clone();
+        let node_name = node.get_name();
+
+        let _ = thread::spawn(move || {
+            info!("Starting inner thraed");
+            // set the host of this thread to the ns
+            let nsfd = get_nsfd(node_name);
+            setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
+            let runner = System::new();
+            runner.block_on(async move {
+                let client = awc::Client::default();
+                let mut req = client
+                    .get("http://localhost:4877/debts".to_string())
+                    .send()
+                    .await
+                    .expect("Failed to make request to rita RPC");
+                let res = match req.json().await {
+                    Err(e) => panic!("Why is get debts failing: {}", e),
+                    Ok(a) => a,
+                };
+                *response.write().unwrap() = Some(res);
+            })
+        });
+
+        // wait for the child thread to finish performing it's query
+        while response_local.read().unwrap().is_none() {
+            info!(
+                "Waiting for a rpc response from {}",
+                node.clone().get_name()
+            );
+            sleep(Duration::from_millis(100)).await;
+        }
+        sleep(Duration::from_millis(100)).await;
+        let list = response_local.read().unwrap().clone().unwrap();
+
+        let mut ret = vec![];
+        if !for_node_ips.is_empty() {
+            for e in list.clone() {
+                if for_node_ips.contains(&e.identity.mesh_ip.to_string()) {
+                    ret.push(e.clone())
+                }
+            }
+        } else {
+            ret = list;
+        }
+
+        ret_map.insert(node, ret);
+    }
+    ret_map
 }
 
 #[derive(Debug, Clone)]
@@ -707,4 +807,15 @@ pub async fn print_althea_balances(addresses: Vec<AltheaAddress>, denom: String)
         };
     }
     ret
+}
+
+// Relies on nodes to be named using fd00::5, fd00::25 etc
+pub fn get_node_id_from_ip(ip: IpAddr) -> u16 {
+    match ip {
+        EXIT_ROOT_IP => 4,
+        _ => {
+            let addr = ip.to_string();
+            addr.split("::").last().unwrap().parse().unwrap()
+        }
+    }
 }

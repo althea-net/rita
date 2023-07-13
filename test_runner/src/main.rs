@@ -1,3 +1,4 @@
+use integration_tests::debts::run_debts_test;
 /// Binary crate for actually running the integration tests
 use integration_tests::five_nodes::run_five_node_test_scenario;
 use integration_tests::{
@@ -33,6 +34,8 @@ async fn main() {
             run_eth_payments_test_scenario()
         } else if test_type == "PAYMENTS_ALTHEA" {
             run_althea_payments_test_scenario().await;
+        } else if test_type == "DEBTS_TEST" {
+            run_debts_test().await;
         } else {
             panic!("Error unknown test type {}!", test_type);
         }

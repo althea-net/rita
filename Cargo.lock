@@ -1625,6 +1625,8 @@ dependencies = [
  "ipnetwork",
  "log",
  "nix 0.26.2",
+ "num-traits",
+ "num256",
  "petgraph",
  "rita_client",
  "rita_common",
