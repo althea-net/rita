@@ -205,19 +205,11 @@ fn get_struct_stat(station: Vec<&str>) -> WifiStationData {
             }
             "authorized:" => {
                 let next_str = iter.next().unwrap();
-                if *next_str == "yes" {
-                    ret.authorized = true;
-                } else {
-                    ret.authorized = false;
-                }
+                ret.authorized = *next_str == "yes";
             }
             "authenticated:" => {
                 let next_str = iter.next().unwrap();
-                if *next_str == "yes" {
-                    ret.authenticated = true;
-                } else {
-                    ret.authenticated = false;
-                }
+                ret.authenticated = *next_str == "yes";
             }
             "[boottime]:" => {
                 ret.associated_at_boottime_sec = Some(iter.next().unwrap().to_string())
@@ -227,36 +219,20 @@ fn get_struct_stat(station: Vec<&str>) -> WifiStationData {
             }
             "associated:" => {
                 let next_str = iter.next().unwrap();
-                if *next_str == "yes" {
-                    ret.associated = true;
-                } else {
-                    ret.associated = false;
-                }
+                ret.associated = *next_str == "yes";
             }
             "preamble:" => ret.preamble = iter.next().unwrap().to_string(),
             "WMM/WME:" => {
                 let next_str = iter.next().unwrap();
-                if *next_str == "yes" {
-                    ret.wmm_wme = true;
-                } else {
-                    ret.wmm_wme = false;
-                }
+                ret.wmm_wme = *next_str == "yes";
             }
             "MFP:" => {
                 let next_str = iter.next().unwrap();
-                if *next_str == "yes" {
-                    ret.mfp = true;
-                } else {
-                    ret.mfp = false;
-                }
+                ret.mfp = *next_str == "yes";
             }
             "peer:" => {
                 let next_str = iter.next().unwrap();
-                if *next_str == "yes" {
-                    ret.tdls_peer = true;
-                } else {
-                    ret.tdls_peer = false;
-                }
+                ret.tdls_peer = *next_str == "yes";
             }
             "period:" => ret.dtim_period = iter.next().unwrap().parse::<u16>().unwrap_or(0u16),
             "beacon" => {
@@ -266,11 +242,7 @@ fn get_struct_stat(station: Vec<&str>) -> WifiStationData {
             }
             "slot" => {
                 let next_str = *iter.next().unwrap();
-                if next_str.contains("yes") {
-                    ret.short_slot_time = true;
-                } else {
-                    ret.short_slot_time = false;
-                }
+                ret.short_slot_time = next_str.contains("yes");
             }
             "connected" => {
                 iter.next();
