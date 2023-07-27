@@ -554,7 +554,7 @@ fn print_txids(list: &HashSet<ToValidate>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::usage_tracker::tests::random_identity;
+    use crate::usage_tracker::tests::test::random_identity;
 
     fn generate_fake_payment() -> ToValidate {
         let amount: u128 = rand::random();

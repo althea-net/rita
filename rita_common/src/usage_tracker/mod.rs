@@ -566,20 +566,109 @@ pub fn get_payments_data() -> VecDeque<PaymentHour> {
 pub fn save_usage_on_shutdown() {
     save_usage_to_disk()
 }
+#[cfg(test)]
+// generates a nontrivial usage tracker struct for testing
+pub fn generate_dummy_usage_tracker() -> UsageTracker {
+    let current_hour = get_current_hour().unwrap();
+    UsageTracker {
+        last_save_hour: current_hour,
+        client_bandwidth: generate_bandwidth(current_hour),
+        relay_bandwidth: generate_bandwidth(current_hour),
+        exit_bandwidth: generate_bandwidth(current_hour),
+        payments: generate_payments(current_hour),
+    }
+}
+#[cfg(test)]
+// generates dummy usage hour data randomly
+fn generate_bandwidth(starting_hour: u64) -> VecDeque<UsageHour> {
+    let num_to_generate: u16 = rand::random();
+    let mut output = VecDeque::new();
+    for i in 0..num_to_generate {
+        output.push_front(UsageHour {
+            index: starting_hour - i as u64,
+            up: rand::random(),
+            down: rand::random(),
+            price: rand::random(),
+        });
+    }
+    output
+}
+#[cfg(test)]
+// generates dummy payment data randomly
+fn generate_payments(starting_hour: u64) -> VecDeque<PaymentHour> {
+    let mut num_to_generate: u8 = rand::random();
+    while (num_to_generate as usize) < MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE {
+        num_to_generate = rand::random();
+    }
+    let our_id = random_identity();
+    let neighbor_ids = get_neighbor_ids();
+    let mut output = VecDeque::new();
+    for i in 0..num_to_generate {
+        let num_payments_generate: u8 = rand::random();
+        let mut payments = Vec::new();
+        for _ in 0..num_payments_generate {
+            let neighbor_idx: u8 = rand::random();
+            let amount: u128 = rand::random();
+            let to_us: bool = rand::random();
+            let (to, from) = if to_us {
+                (our_id, neighbor_ids[neighbor_idx as usize])
+            } else {
+                (neighbor_ids[neighbor_idx as usize], our_id)
+            };
+            let txid: u128 = rand::random();
+            payments.push(FormattedPaymentTx {
+                to,
+                from,
+                amount: amount.into(),
+                txid: txid.to_string(),
+            })
+        }
+        output.push_front(PaymentHour {
+            index: starting_hour - i as u64,
+            payments,
+        });
+    }
+    output
+}
+#[cfg(test)]
+// gets a list of pregenerated neighbor id
+fn get_neighbor_ids() -> Vec<Identity> {
+    let mut id = Vec::new();
+    for _ in 0..256 {
+        id.push(random_identity());
+    }
+    id
+}
+#[cfg(test)]
+/// generates a random identity, never use in production, your money will be stolen
+pub fn random_identity() -> Identity {
+    use clarity::PrivateKey;
+
+    let secret: [u8; 32] = rand::random();
+    let mut ip: [u8; 16] = [0; 16];
+    ip.copy_from_slice(&secret[0..16]);
+
+    // the starting location of the funds
+    let eth_key = PrivateKey::from_bytes(secret).unwrap();
+    let eth_address = eth_key.to_address();
+
+    Identity {
+        mesh_ip: ip.into(),
+        eth_address,
+        wg_public_key: secret.into(),
+        nickname: None,
+    }
+}
 
 #[cfg(test)]
 pub mod tests {
 
-    use super::MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE;
-    use super::{get_current_hour, FormattedPaymentTx, PaymentHour, UsageHour, UsageTracker};
-    use crate::usage_tracker::{self, IOError};
-    use althea_types::Identity;
-    use clarity::PrivateKey;
+    use super::UsageTracker;
+    use crate::usage_tracker::{self, generate_dummy_usage_tracker, IOError};
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
     use settings::client::RitaClientSettings;
     use settings::{get_rita_common, set_rita_client, set_rita_common};
-    use std::collections::VecDeque;
     use std::fs::File;
     use std::io::Write;
     impl UsageTracker {
