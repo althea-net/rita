@@ -103,6 +103,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: jpribyl/action-docker-layer-caching@v0.1.1
       - name: Prune cache to keep the size down
         run: docker builder prune -af && docker system prune -af
       - name: Install Wireguard
@@ -114,28 +115,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: jpribyl/action-docker-layer-caching@v0.1.1
       - name: Install Wireguard
         run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
       - name: Run integration test
         run: bash scripts/integration_tests/all-up-test.sh PAYMENTS_ALTHEA
+        env:
+          NO_IMAGE_BUILD: True
   integration-test-debts:
     needs: integration-test-five-nodes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: jpribyl/action-docker-layer-caching@v0.1.1
       - name: Install Wireguard
         run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
       - name: Run integration test
         run: bash scripts/integration_tests/all-up-test.sh DEBTS_TEST
+        env:
+          NO_IMAGE_BUILD: True
   integration-test-eth-payments:
     needs: integration-test-five-nodes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: jpribyl/action-docker-layer-caching@v0.1.1
       - name: Install Wireguard
         run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
       - name: Run integration test
         run: bash scripts/integration_tests/all-up-test.sh ETH_PAYMENTS
+        env:
+          NO_IMAGE_BUILD: True
   integration-test-multi-exit:
     needs: integration-test-five-nodes
     runs-on: ubuntu-latest
@@ -145,3 +155,5 @@ jobs:
         run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
       - name: Run integration test
         run: bash scripts/integration_tests/all-up-test.sh MULTI_EXIT
+        env:
+          NO_IMAGE_BUILD: True
