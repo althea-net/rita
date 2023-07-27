@@ -904,8 +904,9 @@ mod tests {
     use cosmos_sdk_proto_althea::cosmos::bank::v1beta1::MsgSend;
     use deep_space::utils::decode_any;
 
+    use crate::usage_tracker::random_identity;
+
     use super::*;
-    use crate::usage_tracker::tests::random_identity;
 
     fn generate_fake_payment() -> ToValidate {
         let amount: u128 = rand::random();

@@ -2724,6 +2724,7 @@ dependencies = [
  "num256",
  "openssh-keys",
  "phonenumber",
+ "rand",
  "rita_common",
  "serde",
  "serde_derive",
