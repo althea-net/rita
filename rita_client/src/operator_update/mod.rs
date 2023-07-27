@@ -19,6 +19,7 @@ use num256::Uint256;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
+use rita_common::usage_tracker::UsageHour as RCUsageHour;
 use rita_common::usage_tracker::UsageType::{Client, Relay};
 use rita_common::usage_tracker::{get_current_hour, get_usage_data};
 use rita_common::utils::option_convert;
@@ -168,48 +169,69 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
         }
     };
     let last_seen_hour = ops_last_seen_usage_hour.unwrap_or(0);
-    let mut hours_to_send: u64 = 0;
-    // first check whats the last saved hr, send everything from that hr on
-    // but, we need to save a var of the last x hrs not seen, and load that up with the next checkin cycle if >0.
-    if current_hour - last_seen_hour > 0 {
-        hours_to_send = current_hour - last_seen_hour;
-    }
+    // We check that the difference is >1 because we leave a 1 hour buffer to prevent from sending over an incomplete current hour
+    let send_hours = current_hour - last_seen_hour > 1;
     let mut usage_tracker_data: Option<UsageTracker> = None;
-    // only deal with this if we actually do need to send some hours
     // if ops_last_seen_usage_hour is a None the thread has restarted and we are waiting for ops to tell us how much
-    // data we need to send, which will be populated with the next checkin cycle
-    if hours_to_send != 0 && ops_last_seen_usage_hour.is_some() {
+    // data we need to send, which will be populated with the next checkin cycle. 730 is the average numbers of hours
+    // in a month, and we only send 1 month at a time if ops is requesting the full usage history.
+    if send_hours && ops_last_seen_usage_hour.is_some() {
         let mut usage_data_client = get_usage_data(Client);
         let mut usage_data_relay = get_usage_data(Relay);
         let mut new_client_data: VecDeque<UsageHour> = VecDeque::new();
         let mut new_relay_data: VecDeque<UsageHour> = VecDeque::new();
-        for _hour in 0..hours_to_send {
-            // pop front, add to front of new vecdeque if exists.
-            while let Some(data) = usage_data_client.pop_front() {
-                if data.index > last_seen_hour {
+
+        // ops is expecting data as [oldest..newest] but now we sent newest .. oldest
+        let client_oldest = match usage_data_client.back() {
+            Some(x) => x.index,
+            None => 0,
+        };
+        let relay_oldest = match usage_data_relay.back() {
+            Some(x) => x.index,
+            None => 0,
+        };
+        // if the last seen hour is earlier (lower) than our earliest saved index, we are uploading entire history so don't worry about position since last seen
+        if last_seen_hour < client_oldest {
+            new_client_data = iterate_month_usage_data(usage_data_client);
+        } else if client_oldest == last_seen_hour + 2 {
+            // we are simply updating the second most recent (because the most recent may be incomplete until it rolls over)
+            if let Some(data) = usage_data_client.get(1) {
+                if data.index == last_seen_hour + 1 {
                     new_client_data.push_front(UsageHour {
                         up: data.up,
                         down: data.down,
                         price: data.price,
                         index: data.index,
                     });
-                    break;
                 }
             }
-
-            // pop front, add to front of new vecdeque if exists.
-            while let Some(data) = usage_data_relay.pop_front() {
-                if data.index > last_seen_hour {
+        } else {
+            // binary search until we find the last seen hour or hour in the vecdeque with index before that (as in cases of gaps in data)
+            let pos = find_position_since_last_seen(&usage_data_client, last_seen_hour);
+            // drain all older data as it has been uploaded to ops already
+            usage_data_client.drain(pos..);
+            new_client_data = iterate_month_usage_data(usage_data_client);
+        }
+        // then repeat for relay data
+        if last_seen_hour < relay_oldest {
+            new_relay_data = iterate_month_usage_data(usage_data_relay);
+        } else if relay_oldest == last_seen_hour + 2 {
+            if let Some(data) = usage_data_relay.get(1) {
+                if data.index == last_seen_hour + 1 {
                     new_relay_data.push_front(UsageHour {
                         up: data.up,
                         down: data.down,
                         price: data.price,
                         index: data.index,
                     });
-                    break;
                 }
             }
+        } else {
+            let pos = find_position_since_last_seen(&usage_data_relay, last_seen_hour);
+            usage_data_relay.drain(pos..);
+            new_relay_data = iterate_month_usage_data(usage_data_relay);
         }
+
         usage_tracker_data = Some(UsageTracker {
             last_save_hour: current_hour,
             client_bandwidth: new_client_data,
@@ -679,6 +701,45 @@ fn contains_forbidden_key(map: Map<String, Value>, forbidden_values: &[&str]) ->
         }
     }
     false
+}
+
+/// Binary search the usage data until we get close enough to the last seen(either exact match or the next oldest
+/// data). usage data is saved newest at the front, oldest at the back, meaning largest indexes at the front. Returns
+/// the index of the position from which to iterate.
+fn find_position_since_last_seen(usage: &VecDeque<RCUsageHour>, last_seen: u64) -> usize {
+    let mut left = 0;
+    let mut right = usage.len();
+
+    while left < right {
+        let mid = left + (right - left) / 2;
+        if usage[mid].index > last_seen {
+            left = mid + 1;
+        } else {
+            right = mid;
+        }
+    }
+    left
+}
+
+fn iterate_month_usage_data(mut data: VecDeque<RCUsageHour>) -> VecDeque<UsageHour> {
+    // one month in hours
+    let max_hour_iterations: u32 = 730;
+    let mut client_iter = 0;
+    let mut res = VecDeque::new();
+    while let Some(hour) = data.pop_back() {
+        // either we hit max iterations or we are on the second to last entry
+        if client_iter >= max_hour_iterations || data.len() == 1 {
+            res.push_front(UsageHour {
+                up: hour.up,
+                down: hour.down,
+                price: hour.price,
+                index: hour.index,
+            });
+            break;
+        }
+        client_iter += 1;
+    }
+    res
 }
 
 #[cfg(test)]
