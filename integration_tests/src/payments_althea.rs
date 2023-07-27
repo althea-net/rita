@@ -7,13 +7,14 @@ use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
     althea_system_chain_client, althea_system_chain_exit, generate_traffic, get_default_settings,
-    print_althea_balances, query_debts, register_erc20_usdc_token, register_to_exit,
-    send_althea_tokens, test_reach_all, test_routes,
+    print_althea_balances, register_erc20_usdc_token, register_to_exit, send_althea_tokens,
+    test_reach_all, test_routes, validate_debt_entry,
 };
 use althea_types::ALTHEA_PREFIX;
 use deep_space::Address as AltheaAddress;
 use deep_space::{EthermintPrivateKey, PrivateKey};
 use log::info;
+use rita_common::debt_keeper::GetDebtsResult;
 
 const USDC_TO_WEI_DECIMAL: u64 = 1_000_000_000_000u64;
 
@@ -103,17 +104,22 @@ pub async fn run_althea_payments_test_scenario() {
         Some(end_node.clone().unwrap()),
         "1.2G".to_string(),
     );
-    info!("Waiting 60 sec for payment");
-    thread::sleep(Duration::from_secs(60));
 
-    info!("Querying debts");
-    let res = query_debts(
-        vec![from_node.clone().unwrap()],
-        Some(vec![forward_node.unwrap()]),
+    validate_debt_entry(
+        from_node.unwrap(),
+        forward_node.unwrap(),
+        &althea_payment_conditions,
     )
     .await;
-    info!("Recieved Debt values {:?}", res);
-    let debts = res.get(&from_node.unwrap()).unwrap()[0].clone();
-    assert!(debts.payment_details.total_payment_sent > USDC_TO_WEI_DECIMAL.into());
-    assert!(debts.payment_details.total_payment_sent < (2 * USDC_TO_WEI_DECIMAL).into());
+}
+
+fn althea_payment_conditions(debts: GetDebtsResult) -> bool {
+    let pay_sent = debts.payment_details.total_payment_sent;
+    matches!(
+        (
+            pay_sent > USDC_TO_WEI_DECIMAL.into(),
+            pay_sent < (2 * USDC_TO_WEI_DECIMAL).into(),
+        ),
+        (true, true)
+    )
 }

@@ -124,7 +124,7 @@ pub async fn run_debts_test() {
         generate_traffic(from_node.clone(), to_node.clone(), "1G".to_string());
 
         // Give time for rita to update debtkeeper
-        thread::sleep(Duration::from_secs(10));
+        thread::sleep(Duration::from_secs(20));
 
         // Special case for when forwarding to internet, remove exit from query nodes as it debt is reflected
         // directly in the from_node's debt instaed of its neighbors debt

@@ -3,14 +3,15 @@ use crate::setup_utils::database::start_postgres;
 use crate::setup_utils::namespaces::Namespace;
 use crate::setup_utils::namespaces::{setup_ns, NodeType};
 use crate::setup_utils::rita::thread_spawner;
-use crate::utils::generate_traffic;
+use crate::utils::{generate_traffic, validate_debt_entry};
 use crate::utils::{
-    get_default_settings, query_debts, register_to_exit, send_eth_bulk, test_reach_all,
-    test_routes, TEST_PAY_THRESH,
+    get_default_settings, register_to_exit, send_eth_bulk, test_reach_all, test_routes,
+    TEST_PAY_THRESH,
 };
 use clarity::Address as EthAddress;
 use clarity::{PrivateKey as EthPrivateKey, Uint256};
 use log::info;
+use rita_common::debt_keeper::GetDebtsResult;
 use std::thread;
 use std::time::Duration;
 use web30::client::Web3;
@@ -99,17 +100,20 @@ pub async fn run_eth_payments_test_scenario() {
         "1G".to_string(),
     );
 
-    info!("Waiting 60 sec for payment and debt keeper update");
-    thread::sleep(Duration::from_secs(60));
-
-    info!("Querying debts");
-    let res = query_debts(
-        vec![from_node.clone().unwrap()],
-        Some(vec![forward_node.unwrap()]),
+    validate_debt_entry(
+        from_node.unwrap(),
+        forward_node.unwrap(),
+        &eth_payment_conditions,
     )
     .await;
-    let res = res.get(&from_node.unwrap()).unwrap().last().unwrap();
-    info!("Received debt entry : {:?}", res);
-    assert!(res.payment_details.total_payment_sent > TEST_PAY_THRESH.into());
-    assert!(res.payment_details.debt < TEST_PAY_THRESH.into());
+}
+
+fn eth_payment_conditions(debts: GetDebtsResult) -> bool {
+    matches!(
+        (
+            debts.payment_details.total_payment_sent > TEST_PAY_THRESH.into(),
+            debts.payment_details.debt < TEST_PAY_THRESH.into(),
+        ),
+        (true, true)
+    )
 }

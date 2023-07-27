@@ -872,3 +872,39 @@ async fn wait_for_txids(txids: Vec<Result<Uint256, Web3Error>>, web3: &Web3) {
     }
     join_all(wait_for_txid).await;
 }
+
+/// Given a from_node and query_node, verify the from_nodes debt entry for a set of given conditions
+pub async fn validate_debt_entry(
+    from_node: Namespace,
+    forward_node: Namespace,
+    f: &dyn Fn(GetDebtsResult) -> bool,
+) {
+    let loop_init = Instant::now();
+    loop {
+        info!("Querying debts");
+        let res = query_debts(vec![from_node.clone()], Some(vec![forward_node.clone()])).await;
+        info!("Recieved Debt values {:?}", res);
+        let debts = res.get(&from_node).unwrap()[0].clone();
+
+        // validate received debt
+        if f(debts.clone()) {
+            break;
+        } else {
+            // If we continue to fail conditions after 90 secs, we failed test
+            if Instant::now() - loop_init > Duration::from_secs(90) {
+                assert!(f(debts));
+            }
+            warn!("Debts not ready, waiting for 5 secs");
+            thread::sleep(Duration::from_secs(5));
+        }
+    }
+
+    // we passed the condition, sleep for 10 sec and verify that the condition still holds
+    // This is useful in the case where extra payments are being made when they shouldnt be
+    info!("Condition passed, waiting for 10 seconds and checking again");
+    thread::sleep(Duration::from_secs(10));
+    let res = query_debts(vec![from_node.clone()], Some(vec![forward_node.clone()])).await;
+    info!("Recieved Debt values {:?}", res);
+    let debts = res.get(&from_node).unwrap()[0].clone();
+    assert!(f(debts));
+}
