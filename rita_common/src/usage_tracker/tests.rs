@@ -1,19 +1,22 @@
-#[cfg(test)]
 #[warn(clippy::module_inception)]
+#[allow(unused)]
 pub mod test {
 
     use crate::usage_tracker::{
-        self, get_current_hour, FormattedPaymentTx, IOError, PaymentHour, UsageHour, UsageTracker,
-        MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE,
+        get_current_hour, FormattedPaymentTx, IOError, PaymentHour, UsageHour, UsageTracker,
+        MAX_USAGE_ENTRIES, MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE,
     };
     use althea_types::Identity;
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
+    use rand::{thread_rng, Rng};
     use settings::client::RitaClientSettings;
     use settings::{get_rita_common, set_rita_client, set_rita_common};
     use std::collections::VecDeque;
+    use std::convert::TryInto;
     use std::fs::File;
     use std::io::Write;
+    #[cfg(test)]
     impl UsageTracker {
         // previous implementation of save which uses serde_json to serialize
         fn save2(&self) -> Result<(), IOError> {
@@ -39,7 +42,7 @@ pub mod test {
         let res = dummy_usage_tracker.save(); // saving to bincode with the new method
         info!("Saving test  data: {:?}", res);
 
-        let res2 = usage_tracker::UsageTracker::load_from_disk();
+        let res2 = UsageTracker::load_from_disk();
         info!("Loading test  data: {:?}", res2);
 
         assert_eq!(dummy_usage_tracker, res2);
@@ -68,7 +71,7 @@ pub mod test {
         // serialized data to a .json extended file, but because load_from_disk() deletes
         // the .json file, this test ends with no file left.
         info!("Loading test data from json");
-        let mut res2 = usage_tracker::UsageTracker::load_from_disk();
+        let mut res2 = UsageTracker::load_from_disk();
 
         // setting the usage_tracker_file to .bincode, which is what this upgrade expects
         let mut newrc2 = get_rita_common();
@@ -79,7 +82,7 @@ pub mod test {
         // a .bincode file from the loaded json data saved to res2.
         res2.save().unwrap();
         info!("Saving test data as bincode");
-        let res4 = usage_tracker::UsageTracker::load_from_disk();
+        let res4 = UsageTracker::load_from_disk();
         info!("Loading test data from bincode");
 
         // use == to avoid printing out the compared data
@@ -100,7 +103,10 @@ pub mod test {
     }
     // generates dummy usage hour data randomly
     fn generate_bandwidth(starting_hour: u64) -> VecDeque<UsageHour> {
-        let num_to_generate: u16 = rand::random();
+        let num_to_generate: u16 = thread_rng()
+            .gen_range(50..MAX_USAGE_ENTRIES)
+            .try_into()
+            .unwrap();
         let mut output = VecDeque::new();
         for i in 0..num_to_generate {
             output.push_front(UsageHour {
