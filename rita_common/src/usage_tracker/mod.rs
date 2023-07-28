@@ -35,7 +35,7 @@ use std::usize;
 pub mod tests;
 
 /// one year worth of usage storage
-const MAX_USAGE_ENTRIES: usize = 8_760;
+pub const MAX_USAGE_ENTRIES: usize = 8_760;
 /// The number of tx's we store in our history to show
 /// prices, this data is larger than usage by a large margin
 /// so we can store less, it's also less predictable for what values

@@ -1,14 +1,10 @@
 #[cfg(test)]
 mod test {
     use rand::seq::SliceRandom;
-    // TODO: Why is this import broken?
-    //use rita_common::usage_tracker::generate_dummy_usage_tracker;
     use rita_common::usage_tracker::get_current_hour;
-    use rita_common::usage_tracker::UsageHour as RCUsageHour;
-    use rita_common::usage_tracker::UsageTracker as RCUsageTracker;
+    use rita_common::usage_tracker::tests::test::generate_dummy_usage_tracker;
     use serde_json::json;
     use serde_json::Value;
-    use std::collections::VecDeque;
     use std::fs::File;
     use std::io::{BufRead, BufReader, Write};
     use std::{fs, io::Error, path::Path};
@@ -142,7 +138,7 @@ mod test {
     #[test]
     fn test_usage_data_processing() {
         // this tests the flow used in rita client's operator update loop used to process usage data sent up to ops
-        let dummy_usage_tracker = generate_dummy_usage_tracker_temp();
+        let dummy_usage_tracker = generate_dummy_usage_tracker();
         let mut usage_data_client = dummy_usage_tracker.client_bandwidth.clone();
         let mut usage_data_relay = dummy_usage_tracker.relay_bandwidth;
         let mut unshuffled_client = usage_data_client.clone();
@@ -225,36 +221,5 @@ mod test {
         // check that our iteration function does indeed stop at a month of data:
         assert!(res_usage_client.len() <= 730);
         assert!(res_usage_relay.len() <= 730);
-    }
-
-    // generates a usage tracker struct for testing without payments since these do not get sent up in ops updates.
-    // using this while I can't get the import working... as a note the original function needs to be updated to push to back
-    // instead of front, as this generates data in the wrong order
-    fn generate_dummy_usage_tracker_temp() -> RCUsageTracker {
-        let current_hour = get_current_hour().unwrap();
-        RCUsageTracker {
-            last_save_hour: current_hour,
-            client_bandwidth: generate_bandwidth(current_hour),
-            relay_bandwidth: generate_bandwidth(current_hour),
-            exit_bandwidth: VecDeque::new(),
-            payments: VecDeque::new(),
-        }
-    }
-    #[cfg(test)]
-    // generates dummy usage hour data randomly
-    fn generate_bandwidth(starting_hour: u64) -> VecDeque<RCUsageHour> {
-        use rand::{thread_rng, Rng};
-        // 8760 is the max number of saved usage entries(1 year)
-        let num_to_generate: u16 = thread_rng().gen_range(50..8760);
-        let mut output = VecDeque::new();
-        for i in 0..num_to_generate {
-            output.push_front(RCUsageHour {
-                index: starting_hour - i as u64,
-                up: rand::random(),
-                down: rand::random(),
-                price: rand::random(),
-            });
-        }
-        output
     }
 }
