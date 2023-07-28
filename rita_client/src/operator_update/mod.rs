@@ -1,6 +1,7 @@
 //! This module is responsible for checking in with the operator server and getting updated local settings
 pub mod update_loop;
 pub mod updater;
+pub mod tests;
 extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
 use crate::exit_manager::{get_client_pub_ipv6, get_selected_exit_ip};
@@ -172,42 +173,17 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
     // We check that the difference is >1 because we leave a 1 hour buffer to prevent from sending over an incomplete current hour
     let send_hours = current_hour - last_seen_hour > 1;
     let mut usage_tracker_data: Option<UsageTracker> = None;
-    // if ops_last_seen_usage_hour is a None the thread has restarted and we are waiting for ops to tell us how much data we need to send, 
+    // if ops_last_seen_usage_hour is a None the thread has restarted and we are waiting for ops to tell us how much data we need to send,
     // which will be populated with the next checkin cycle. we only send 1 month at a time if ops is requesting the full usage history.
     if send_hours && ops_last_seen_usage_hour.is_some() {
-        let mut usage_data_client = get_usage_data(Client);
-        let mut usage_data_relay = get_usage_data(Relay);
-
-        // sort client and relay data in case they have come out of order somehow. This sorts by index increasing so newest data at back
-        usage_data_relay
-            .make_contiguous()
-            .sort_by(|a, b| a.index.cmp(&b.index));
-        usage_data_client
-            .make_contiguous()
-            .sort_by(|a, b| a.index.cmp(&b.index));
-
-        // so this spits out the index for where last seen is, or the index of the next highest hour(returned in an error).
-        // we take the result -1 just in case, limit 0, since it's possible we might get back an index out of bounds at the back.
-        let client_last_seen_index =
-            match usage_data_client.binary_search_by(|x| x.index.cmp(&last_seen_hour)) {
-                Ok(p) => p,
-                Err(p) => p.saturating_sub(1),
-            };
-        let relay_last_seen_index =
-            match usage_data_relay.binary_search_by(|x| x.index.cmp(&last_seen_hour)) {
-                Ok(p) => p,
-                Err(p) => p.saturating_sub(1),
-            };
-        usage_data_client.drain(0..client_last_seen_index);
-        usage_data_relay.drain(0..relay_last_seen_index);
-        let new_client_data = iterate_month_usage_data(usage_data_client);
-        let new_relay_data = iterate_month_usage_data(usage_data_relay);
-
-        usage_tracker_data = Some(UsageTracker {
-            last_save_hour: current_hour,
-            client_bandwidth: new_client_data,
-            relay_bandwidth: new_relay_data,
-        });
+        let usage_data_client = get_usage_data(Client);
+        let usage_data_relay = get_usage_data(Relay);
+        usage_tracker_data = process_usage_data(
+            usage_data_client,
+            usage_data_relay,
+            last_seen_hour,
+            current_hour,
+        )
     }
 
     let exit_con = Some(ExitConnection {
@@ -696,244 +672,44 @@ pub fn iterate_month_usage_data(mut data: VecDeque<RCUsageHour>) -> VecDeque<Usa
     res
 }
 
-#[cfg(test)]
-mod tests {
-    use rand::seq::SliceRandom;
-    // TODO: Why is this import broken?
-    //use rita_common::usage_tracker::generate_dummy_usage_tracker;
-    use rita_common::usage_tracker::UsageHour as RCUsageHour;
-    use rita_common::usage_tracker::UsageTracker as RCUsageTracker;
-    use serde_json::json;
-    use std::{fs, io::Error, path::Path};
+/// Given our saved usage data and our last seen value, process the vecdeques so that we only
+/// send to ops new data since last seen.
+pub fn process_usage_data(
+    mut usage_data_client: VecDeque<RCUsageHour>,
+    mut usage_data_relay: VecDeque<RCUsageHour>,
+    last_seen_hour: u64,
+    current_hour: u64,
+) -> Option<UsageTracker> {
+    // sort client and relay data in case they have come out of order somehow. This sorts by index increasing so newest data at back
+    usage_data_relay
+        .make_contiguous()
+        .sort_by(|a, b| a.index.cmp(&b.index));
+    usage_data_client
+        .make_contiguous()
+        .sort_by(|a, b| a.index.cmp(&b.index));
 
-    use super::*;
-
-    const FORBIDDEN_MERGE_VALUES: [&str; 2] = ["test_key", "other_test_key"];
-
-    #[test]
-    fn test_contains_key() {
-        // exact key match should fail
-        let object = json!({"localization": { "wyre_enabled": true, "wyre_account_id": "test_key", "test_key": false}});
-        if let Value::Object(map) = object {
-            assert!(contains_forbidden_key(map, &FORBIDDEN_MERGE_VALUES));
-        } else {
-            panic!("Not a json map!");
-        }
-
-        // slightly modified key should not match
-        let object = json!({"localization": { "wyre_enabled": true, "wyre_account_id": "test_key", "test_key1": false}});
-        if let Value::Object(map) = object {
-            assert!(!contains_forbidden_key(map, &FORBIDDEN_MERGE_VALUES));
-        } else {
-            panic!("Not a json map!");
-        }
-    }
-    fn touch_temp_file(file_name: &str) -> &str {
-        let test_file = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(file_name);
-        let operator_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL+UBakquB9rJ7tA2H+U43H/xNmpJiHpOkHGpVfFUXgP OPERATOR";
-        writeln!(test_file.unwrap(), "{operator_key}").expect("setup failed to create temp file");
-        operator_key
-    }
-    fn remove_temp_file(file_name: &str) -> Result<(), Error> {
-        fs::remove_file(file_name)
-    }
-    fn parse_keys(file_name: &str) -> Vec<String> {
-        let mut temp = Vec::new();
-        let expected = File::open(file_name).unwrap();
-        let reader = BufReader::new(expected);
-        for key in reader.lines() {
-            temp.push(key.unwrap());
-        }
-        temp
-    }
-
-    #[test]
-    fn test_update_auth_keys() {
-        let added_keys = vec![String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net")];
-        let removed_keys = vec![];
-        let key_file: &str = "authorized_keys";
-        let operator_key = touch_temp_file(key_file);
-
-        let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
-        let result = parse_keys(key_file);
-        assert_eq!(result.len(), 2);
-        assert!(result.contains(&added_keys[0]));
-        assert!(result.contains(&operator_key.to_string()));
-        remove_temp_file(key_file).unwrap();
-    }
-
-    #[test]
-    fn test_update_auth_multiple_keys() {
-        let added_keys = vec![String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net"),
-               String::from("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDVF1POOko4/fTE/SowsURSmd+kAUFDX6VPNqICJjn8eQk8FZ15WsZKfBdrGXLhl2+pxM66VWMUVRQOq84iSRVSVPA3abz0H7JYIGzO8psTweSZfK1jwHfKDGQA1h1aPuspnPrX7dyS1qLZf3YeVUUi+BFsW2gSiMadbS4zal2c2F1AG5Ezr3zcRVA8y3D0bZxScPAEX74AeTFcimHpHFyzDtUsRpf0uSEXZcMFqX5j4ETKlIs28k1v8LlhHo91IQYHEtbyi/I1M0axbF4VCz5JlcbAs9LUEJg8Kx8LxzJSeSJbxVwyk5WiEDwVsCL2MAtaOcJ+/FhxLb0ZEELAHnXFNSqmY8QoHeSdHrGP7FmVCBjRb/AhVUHYvsG94rO3Ij4H5XsbsQbP3AHVKbvf387WB53Wga7VrBXvRC9aDisetdP9+4/seVIBbOIePotaiHoTyS1cJ+Jg0PkKy96enqwMt9T1Wt8jURB+s/A/bDGHkjB3dxomuGxux8dD6UNX54M= test-rsa@hawk-net"),
-        ];
-        let removed_keys = vec![];
-        let key_file: &str = "add_keys";
-
-        let operator_key = touch_temp_file(key_file);
-
-        let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
-        let result = parse_keys(key_file);
-        assert!(result.contains(&added_keys[0]));
-        assert!(result.contains(&added_keys[1]));
-        assert!(result.contains(&operator_key.to_string()));
-        assert_eq!(result.len(), 3);
-        remove_temp_file(key_file).unwrap();
-    }
-
-    #[test]
-    fn test_update_auth_remove_keys() {
-        let added_keys = vec![];
-        let removed_keys = vec![
-            String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net"),
-            String::from("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDVF1POOko4/fTE/SowsURSmd+kAUFDX6VPNqICJjn8eQk8FZ15WsZKfBdrGXLhl2+pxM66VWMUVRQOq84iSRVSVPA3abz0H7JYIGzO8psTweSZfK1jwHfKDGQA1h1aPuspnPrX7dyS1qLZf3YeVUUi+BFsW2gSiMadbS4zal2c2F1AG5Ezr3zcRVA8y3D0bZxScPAEX74AeTFcimHpHFyzDtUsRpf0uSEXZcMFqX5j4ETKlIs28k1v8LlhHo91IQYHEtbyi/I1M0axbF4VCz5JlcbAs9LUEJg8Kx8LxzJSeSJbxVwyk5WiEDwVsCL2MAtaOcJ+/FhxLb0ZEELAHnXFNSqmY8QoHeSdHrGP7FmVCBjRb/AhVUHYvsG94rO3Ij4H5XsbsQbP3AHVKbvf387WB53Wga7VrBXvRC9aDisetdP9+4/seVIBbOIePotaiHoTyS1cJ+Jg0PkKy96enqwMt9T1Wt8jURB+s/A/bDGHkjB3dxomuGxux8dD6UNX54M= test-rsa@hawk-net"),
-        ];
-        let key_file: &str = "auth_remove_keys";
-
-        let operator_key = touch_temp_file(key_file);
-
-        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
-        let result = parse_keys(key_file);
-        assert!(result.contains(&operator_key.to_string()));
-
-        assert_eq!(result.len(), 1);
-
-        remove_temp_file(key_file).unwrap();
-    }
-    #[test]
-    fn test_removing_existing_key() {
-        let added_keys = vec![];
-        let key_file: &str = "remove_keys";
-
-        let operator_key = touch_temp_file(key_file);
-        let removed_keys = vec![String::from(operator_key)];
-        let _update = update_authorized_keys(added_keys, removed_keys.clone(), key_file);
-
-        let result = parse_keys(key_file);
-        for item in result {
-            assert_eq!(item, removed_keys[0].to_string());
-        }
-
-        remove_temp_file(key_file).unwrap();
-    }
-    #[test]
-    fn test_authorized_keys_create_if_missing() {
-        let added_keys = vec![
-            String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDVF1POOko4/fTE/SowsURSmd+kAUFDX6VPNqICJjn8eQk8FZ15WsZKfBdrGXLhl2+pxM66VWMUVRQOq84iSRVSVPA3abz0H7JYIGzO8psTweSZfK1jwHfKDGQA1h1aPuspnPrX7dyS1qLZf3YeVUUi+BFsW2gSiMadbS4zal2c2F1AG5Ezr3zcRVA8y3D0bZxScPAEX74AeTFcimHpHFyzDtUsRpf0uSEXZcMFqX5j4ETKlIs28k1v8LlhHo91IQYHEtbyi/I1M0axbF4VCz5JlcbAs9LUEJg8Kx8LxzJSeSJbxVwyk5WiEDwVsCL2MAtaOcJ+/FhxLb0ZEELAHnXFNSqmY8QoHeSdHrGP7FmVCBjRb/AhVUHYvsG94rO3Ij4H5XsbsQbP3AHVKbvf387WB53Wga7VrBXvRC9aDisetdP9+4/seVIBbOIePotaiHoTyS1cJ+Jg0PkKy96enqwMt9T1Wt8jURB+s/A/bDGHkjB3dxomuGxux8dD6UNX54M= test-rsa@hawk-net"),
-        ];
-        let removed_keys: Vec<String> = vec![];
-        let key_file: &str = "create_keys_file";
-        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
-        assert!(Path::new(key_file).exists());
-    }
-    #[test]
-    fn test_usage_data_processing() {
-        // this tests the flow used in rita client's operator update loop used to process usage data sent up to ops
-        let dummy_usage_tracker = generate_dummy_usage_tracker_temp();
-        let mut usage_data_client = dummy_usage_tracker.client_bandwidth.clone();
-        // Test the sort function first:
-        // shuffle the data because it's currently ordered
-        usage_data_client
-            .make_contiguous()
-            .shuffle(&mut rand::thread_rng());
-        println!(
-            "Sample of current shuffle is {} {} {}",
-            usage_data_client.get(0).unwrap().index,
-            usage_data_client.get(1).unwrap().index,
-            usage_data_client.get(2).unwrap().index
-        );
-        // Sort by index increasing so newest data at back. Note that usage hours are stored to disk as
-        // the opposite order where newest are added to the front, so this is inefficient.
-        // Options here to optimize are either a/write my own binary sort again which will compare for the existing structure
-        // where the saved vecdeque is highest index to lowest index, b/rework usage tracker so that we save data lowest index
-        // to highest index, or c/the current solution(inefficient, as we will be fully reversing the whole vecdeque of each
-        // client and relay every checkin): sort the entire list in reverse order to use with the builtin bin search from vecdeque
-
-        // this here sorts from lowest index to highest index, so we end with a vecdeque that we can use binary search on
-        usage_data_client
-            .make_contiguous()
-            .sort_by(|a, b| a.index.cmp(&b.index));
-        println!(
-            "Sample of sorted list is {} {} {}",
-            usage_data_client.get(0).unwrap().index,
-            usage_data_client.get(1).unwrap().index,
-            usage_data_client.get(2).unwrap().index
-        );
-        assert!(
-            usage_data_client.get(0).unwrap().index < usage_data_client.get(1).unwrap().index
-                && usage_data_client.get(1).unwrap().index
-                    < usage_data_client.get(2).unwrap().index
-        );
-        // Next test the binary search
-        // Case A: no gaps in data when searching through for the last seen hour
-        // for the purposes of this test we will look at the 10th entry in the list
-        let client_oldest = match dummy_usage_tracker.client_bandwidth.front() {
-            Some(x) => x.index,
-            None => 0,
+    // so this spits out the index for where last seen is, or the index of the next highest hour(returned in an error).
+    // we take the result -1 just in case, limit 0, since it's possible we might get back an index out of bounds at the back.
+    let client_last_seen_index =
+        match usage_data_client.binary_search_by(|x| x.index.cmp(&last_seen_hour)) {
+            Ok(p) => p,
+            Err(p) => p.saturating_sub(1),
         };
-        let last_seen_hour = client_oldest - 10;
-        // so this spits out the index for where last seen is, or the index of the next highest hour(returned in an error).
-        // we take the result -1 just in case, limit 0, since it's possible we might get back an index out of bounds at the back.
-        let last_seen_position =
-            match usage_data_client.binary_search_by(|x| x.index.cmp(&last_seen_hour)) {
-                Ok(p) => p,
-                Err(p) => p.saturating_sub(1),
-            };
-        assert!(usage_data_client.get(last_seen_position).unwrap().index == last_seen_hour);
-        // now for Case B: we have a gap in the data
-        usage_data_client.remove(last_seen_position);
-        let last_seen_position =
-            match usage_data_client.binary_search_by(|x| x.index.cmp(&last_seen_hour)) {
-                Ok(p) => p,
-                Err(p) => p.saturating_sub(1),
-            };
-        // so we must retrieve the next earliest entry from where the last seen would be:
-        assert!(usage_data_client.get(last_seen_position).unwrap().index == last_seen_hour - 1);
+    let relay_last_seen_index =
+        match usage_data_relay.binary_search_by(|x| x.index.cmp(&last_seen_hour)) {
+            Ok(p) => p,
+            Err(p) => p.saturating_sub(1),
+        };
+    // remove all data before the last seen index
+    usage_data_client.drain(0..client_last_seen_index);
+    usage_data_relay.drain(0..relay_last_seen_index);
+    let new_client_data = iterate_month_usage_data(usage_data_client);
+    let new_relay_data = iterate_month_usage_data(usage_data_relay);
 
-        // now that we have the position of where to start (keep in mind these are sorted vecdeques, and we only need larger
-        // (later) indexes than the last seen.) we can drain any earlier entries up to the last seen, and send off the result
-        // to the iterate function
-        usage_data_client.drain(0..last_seen_position);
-        let new_client_data = iterate_month_usage_data(usage_data_client);
-        // finally, check that the returned list to be sent back to ops is sorted as intended:
-        assert!(
-            new_client_data.get(0).unwrap().index < new_client_data.get(1).unwrap().index
-                && new_client_data.get(1).unwrap().index < new_client_data.get(2).unwrap().index
-        );
-    }
-
-    // generates a usage tracker struct for testing without payments since these do not get send up in ops updates.
-    // using this while I can't get the import working... as a note the original function needs to be updated to push to back
-    // instead of front, as this generates data in the wrong order
-    fn generate_dummy_usage_tracker_temp() -> RCUsageTracker {
-        let current_hour = get_current_hour().unwrap();
-        RCUsageTracker {
-            last_save_hour: current_hour,
-            client_bandwidth: generate_bandwidth(current_hour),
-            relay_bandwidth: generate_bandwidth(current_hour),
-            exit_bandwidth: generate_bandwidth(current_hour),
-            payments: VecDeque::new(),
-        }
-    }
-    #[cfg(test)]
-    // generates dummy usage hour data randomly
-    fn generate_bandwidth(starting_hour: u64) -> VecDeque<RCUsageHour> {
-        use rand::{thread_rng, Rng};
-        // 8760 is the max number of saved usage entries(1 year)
-        let num_to_generate: u16 = thread_rng().gen_range(50..8760);
-        let mut output = VecDeque::new();
-        for i in 0..num_to_generate {
-            output.push_back(RCUsageHour {
-                index: starting_hour - i as u64,
-                up: rand::random(),
-                down: rand::random(),
-                price: rand::random(),
-            });
-        }
-        output
-    }
+    Some(UsageTracker {
+        last_save_hour: current_hour,
+        client_bandwidth: new_client_data,
+        relay_bandwidth: new_relay_data,
+    })
 }
+
