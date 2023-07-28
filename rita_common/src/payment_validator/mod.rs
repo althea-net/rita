@@ -904,7 +904,7 @@ mod tests {
     use cosmos_sdk_proto_althea::cosmos::bank::v1beta1::MsgSend;
     use deep_space::utils::decode_any;
 
-    use crate::usage_tracker::random_identity;
+    use crate::usage_tracker::tests::test::random_identity;
 
     use super::*;
 
