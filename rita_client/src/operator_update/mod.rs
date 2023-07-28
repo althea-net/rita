@@ -1,7 +1,7 @@
 //! This module is responsible for checking in with the operator server and getting updated local settings
+pub mod tests;
 pub mod update_loop;
 pub mod updater;
-pub mod tests;
 extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
 use crate::exit_manager::{get_client_pub_ipv6, get_selected_exit_ip};
@@ -711,4 +711,3 @@ pub fn process_usage_data(
         relay_bandwidth: new_relay_data,
     })
 }
-
