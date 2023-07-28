@@ -36,6 +36,7 @@ use rita_common::usage_tracker::save_usage_on_shutdown;
 use rita_common::utils::env_vars_contains;
 use rita_exit::database::database_tools::initialize_exisitng_clients_ipv6;
 use rita_exit::database::sms::send_admin_notification_sms;
+use rita_exit::initialize_db_pool;
 use rita_exit::operator_update::update_loop::start_operator_update_loop;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 use rita_exit::rita_loop::start_rita_exit_loop;
@@ -149,6 +150,9 @@ fn main() {
     trace!("Starting with Identity: {:?}", settings.get_identity());
 
     send_admin_notification_sms("Exit restarted");
+
+    // Initialize db pool
+    initialize_db_pool();
 
     // Setup database for ipv6
     if let Err(e) = initialize_exisitng_clients_ipv6() {
