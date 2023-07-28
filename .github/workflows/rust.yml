@@ -152,3 +152,12 @@ jobs:
         run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
       - name: Run integration test
         run: bash scripts/integration_tests/all-up-test.sh ETH_PAYMENTS
+  integration-test-multi-exit:
+    needs: integration-test-five-nodes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Wireguard
+        run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
+      - name: Run integration test
+        run: bash scripts/integration_tests/all-up-test.sh MULTI_EXIT

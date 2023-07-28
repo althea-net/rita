@@ -31,3 +31,4 @@ futures = { version = "0.3", features = ["compat"] }
 num256 = "0.5"
 num-traits="0.2"
 web30 = "1.0"
+lazy_static = "1.4"
