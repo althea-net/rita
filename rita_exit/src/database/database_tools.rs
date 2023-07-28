@@ -5,7 +5,7 @@ use exit_db::models::AssignedIps;
 use ipnetwork::{IpNetwork, Ipv6Network, NetworkSize};
 use rita_common::utils::ip_increment::increment;
 
-use crate::{RitaExitError, DB_POOL};
+use crate::{get_db_pool, RitaExitError};
 use althea_kernel_interface::ExitClient;
 use althea_types::ExitClientIdentity;
 use diesel::dsl::{delete, exists};
@@ -492,7 +492,7 @@ pub fn update_mail_sent_time(
 /// connections for each threadpool member error if non is available right away
 pub fn get_database_connection(
 ) -> Result<PooledConnection<ConnectionManager<PgConnection>>, Box<RitaExitError>> {
-    match DB_POOL.read().unwrap().try_get() {
+    match get_db_pool() {
         Some(connection) => Ok(connection),
         None => {
             error!("No available db connection!");
