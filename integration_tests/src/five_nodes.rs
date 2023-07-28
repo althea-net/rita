@@ -1,8 +1,10 @@
 use crate::setup_utils::database::start_postgres;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
-use crate::utils::{get_default_settings, register_to_exit, test_reach_all, test_routes};
-use log::{error, info};
+use crate::utils::{
+    get_default_settings, register_all_namespaces_to_exit, test_reach_all, test_routes,
+};
+use log::info;
 use std::collections::HashMap;
 
 /// Runs a five node fixed network map test scenario, this does basic network setup and tests reachability to
@@ -13,7 +15,8 @@ pub async fn run_five_node_test_scenario() {
     let namespaces = node_config.0;
     let expected_routes = node_config.1;
 
-    let (rita_settings, rita_exit_settings) = get_default_settings();
+    let (client_settings, exit_settings) =
+        get_default_settings("test".to_string(), namespaces.clone());
 
     namespaces.validate();
 
@@ -21,7 +24,7 @@ pub async fn run_five_node_test_scenario() {
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let _ = thread_spawner(namespaces.clone(), rita_settings, rita_exit_settings)
+    let _ = thread_spawner(namespaces.clone(), client_settings, exit_settings)
         .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
@@ -33,14 +36,7 @@ pub async fn run_five_node_test_scenario() {
     test_routes(namespaces.clone(), expected_routes);
 
     info!("Registering routers to the exit");
-    for r in namespaces.names {
-        if let NodeType::Client = r.node_type {
-            let res = register_to_exit(r.get_name()).await;
-            if !res.is_success() {
-                error!("Failed to register {} to exit with {:?}", r.get_name(), res);
-            }
-        }
-    }
+    register_all_namespaces_to_exit(namespaces.clone()).await;
 }
 
 /// This defines the network map for a five node scenario
@@ -64,37 +60,51 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     let testa = Namespace {
         id: 1,
         cost: 25,
-        node_type: NodeType::Client,
+        node_type: NodeType::Client {
+            cluster_name: "test".to_string(),
+        },
     };
     let testb = Namespace {
         id: 2,
         cost: 500,
-        node_type: NodeType::Client,
+        node_type: NodeType::Client {
+            cluster_name: "test".to_string(),
+        },
     };
     let testc = Namespace {
         id: 3,
         cost: 15,
-        node_type: NodeType::Client,
+        node_type: NodeType::Client {
+            cluster_name: "test".to_string(),
+        },
     };
     let testd = Namespace {
         id: 4,
         cost: 10,
-        node_type: NodeType::Exit,
+        node_type: NodeType::Exit {
+            instance_name: "test_4".to_string(),
+        },
     };
     let teste = Namespace {
         id: 5,
         cost: 40,
-        node_type: NodeType::Client,
+        node_type: NodeType::Client {
+            cluster_name: "test".to_string(),
+        },
     };
     let testf = Namespace {
         id: 6,
         cost: 20,
-        node_type: NodeType::Client,
+        node_type: NodeType::Client {
+            cluster_name: "test".to_string(),
+        },
     };
     let testg = Namespace {
         id: 7,
         cost: 15,
-        node_type: NodeType::Client,
+        node_type: NodeType::Client {
+            cluster_name: "test".to_string(),
+        },
     };
 
     let nsinfo = NamespaceInfo {

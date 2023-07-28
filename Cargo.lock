@@ -1629,6 +1629,7 @@ dependencies = [
  "env_logger",
  "futures 0.3.28",
  "ipnetwork",
+ "lazy_static",
  "log",
  "nix 0.26.2",
  "num-traits",

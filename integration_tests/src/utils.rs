@@ -14,13 +14,14 @@ use althea_proto::{
         query_client::QueryClient, Metadata, QueryDenomMetadataRequest,
     },
 };
-use althea_types::{ContactType, Denom, SystemChain};
+use althea_types::{ContactType, Denom, Identity, SystemChain, WgKey};
 use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use clarity::{Transaction, Uint256};
 use deep_space::{Address as AltheaAddress, Coin, Contact, CosmosPrivateKey, PrivateKey};
 use futures::future::join_all;
-use ipnetwork::{IpNetwork, Ipv6Network};
+use ipnetwork::IpNetwork;
+use lazy_static;
 use log::{error, info, trace, warn};
 use nix::{
     fcntl::{open, OFlag},
@@ -62,6 +63,65 @@ pub const STAKING_TOKEN: &str = "aalthea";
 pub const MIN_GLOBAL_FEE_AMOUNT: u128 = 10;
 pub const TOTAL_TIMEOUT: Duration = Duration::from_secs(300);
 pub const DEBT_ACCURACY_THRES: u8 = 15;
+
+lazy_static! {
+    pub static ref TEST_EXIT_DETAILS: HashMap<String, ExitInfo> = {
+        let mut details = HashMap::new();
+        let instance_4 = ExitInstances {
+            instance_name: "test_4".to_string(),
+            mesh_ip_v2: IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, 4)),
+            subnet: Ipv6Addr::new(0xfbad, 200, 0, 0, 0, 0, 0, 0),
+            wg_priv_key: "OGzbcm6czrjOEAViK7ZzlWM8mtjCxp7UPbuLS/dATV4="
+                .parse()
+                .unwrap(),
+            wg_pub_key: "bvM10HW73yePrxdtCQQ4U20W5ogogdiZtUihrPc/oGY="
+                .parse()
+                .unwrap(),
+        };
+
+        let instance_5 = ExitInstances {
+            instance_name: "test_5".to_string(),
+            mesh_ip_v2: IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, 5)),
+            subnet: Ipv6Addr::new(0xfbad, 400, 0, 0, 0, 0, 0, 0),
+            wg_priv_key: "SEBve3ERCYCriBEfNFnWbED5OwWo/Ylppg1KEt0HZnA="
+                .parse()
+                .unwrap(),
+            wg_pub_key: "R8F6IhDvy6PwcENEFQEBZXEY2fi6jEvmPTVvleR1IUw="
+                .parse()
+                .unwrap(),
+        };
+
+        let exit = ExitInfo {
+            exit_name: "test".to_string(),
+            root_ip: IpAddr::V6(Ipv6Addr::new(0xfd00, 200, 199, 198, 197, 196, 195, 194)),
+            instances: {
+                let mut ret = HashMap::new();
+                ret.insert(instance_4.instance_name.clone(), instance_4);
+                ret.insert(instance_5.instance_name.clone(), instance_5);
+                ret
+            },
+        };
+        details.insert(exit.exit_name.clone(), exit);
+        details
+    };
+}
+
+/// Struct used to store info of each exit instance in tests
+#[derive(Clone, Debug)]
+pub struct ExitInfo {
+    pub exit_name: String,
+    pub root_ip: IpAddr,
+    pub instances: HashMap<String, ExitInstances>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExitInstances {
+    pub instance_name: String,
+    pub mesh_ip_v2: IpAddr,
+    pub subnet: Ipv6Addr,
+    pub wg_pub_key: WgKey,
+    pub wg_priv_key: WgKey,
+}
 
 pub fn get_althea_grpc() -> String {
     format!("http://{}:9091", NODE_IP)
@@ -240,16 +300,58 @@ pub const EXIT_SUBNET: Ipv6Addr = Ipv6Addr::new(0xfbad, 200, 0, 0, 0, 0, 0, 0);
 
 /// Gets the default client and exit settings handling the pre-launch exchange of exit into and its insertion into
 /// the
-pub fn get_default_settings() -> (RitaClientSettings, RitaExitSettingsStruct) {
-    let mut exit = RitaExitSettingsStruct::new(EXIT_CONFIG_PATH).unwrap();
+pub fn get_default_settings(
+    cluster_name: String,
+    namespaces: NamespaceInfo,
+) -> (RitaClientSettings, RitaExitSettingsStruct) {
+    let exit = RitaExitSettingsStruct::new(EXIT_CONFIG_PATH).unwrap();
+    let client = RitaClientSettings::new(CONFIG_FILE_PATH).unwrap();
 
+    let cluster = TEST_EXIT_DETAILS
+        .get(&cluster_name)
+        .expect("Please provide a valid cluster name");
+
+    let mut cluster_exits = Vec::new();
+    let mut client_exit_servers = HashMap::new();
+
+    let mut exit_mesh_ips = HashSet::new();
+    for ns in namespaces.names {
+        if let NodeType::Exit { instance_name: _ } = ns.node_type.clone() {
+            exit_mesh_ips.insert(get_ip_from_namespace(ns));
+        }
+    }
+
+    for instance in cluster.instances.values() {
+        if exit_mesh_ips.contains(&instance.mesh_ip_v2.to_string()) {
+            cluster_exits.push(Identity {
+                mesh_ip: instance.mesh_ip_v2,
+                eth_address: exit.payment.eth_address.unwrap(),
+                wg_public_key: instance.wg_pub_key,
+                nickname: None,
+            });
+        }
+    }
+
+    client_exit_servers.insert(
+        cluster_name.clone(),
+        settings::client::ExitServer {
+            root_ip: cluster.root_ip,
+            subnet: None,
+            eth_address: exit.payment.eth_address.unwrap(),
+            // This is the wg key that is common among all instances
+            wg_public_key: exit.exit_network.wg_public_key,
+            registration_port: exit.exit_network.exit_hello_port,
+            description: exit.description.clone(),
+            info: althea_types::ExitState::New,
+        },
+    );
+
+    let mut exit = exit.clone();
+    let mut client = client.clone();
     // exit should allow instant registration by any requester
     exit.verif_settings = None;
-    exit.network.mesh_ip = Some(EXIT_ROOT_IP);
-    exit.exit_network.subnet = Some(IpNetwork::V6(Ipv6Network::new(EXIT_SUBNET, 40).unwrap()));
-
-    let mut client = RitaClientSettings::new(CONFIG_FILE_PATH).unwrap();
-
+    exit.network.mesh_ip = Some(cluster.root_ip);
+    exit.exit_network.cluster_exits = cluster_exits.clone();
     client.exit_client.contact_info = Some(
         ContactType::Both {
             number: "+11111111".parse().unwrap(),
@@ -258,27 +360,14 @@ pub fn get_default_settings() -> (RitaClientSettings, RitaExitSettingsStruct) {
         }
         .into(),
     );
-    client.exit_client.current_exit = Some(TEST_EXIT_NAME.to_string());
-    client.exit_client.exits.insert(
-        TEST_EXIT_NAME.to_string(),
-        settings::client::ExitServer {
-            root_ip: EXIT_ROOT_IP,
-            subnet: None,
-            eth_address: exit.payment.eth_address.unwrap(),
-            wg_public_key: exit.exit_network.wg_public_key,
-            registration_port: exit.exit_network.exit_hello_port,
-            description: exit.description.clone(),
-            info: althea_types::ExitState::New,
-        },
-    );
-
+    client.exit_client.current_exit = Some(cluster_name);
+    client.exit_client.exits = client_exit_servers.clone();
     // first node is passed through to the host machine for testing second node is used
     // for testnet queries
     exit.payment.althea_grpc_list = vec![get_althea_grpc()];
     exit.payment.eth_node_list = vec![get_eth_node()];
     client.payment.althea_grpc_list = vec![get_althea_grpc()];
     client.payment.eth_node_list = vec![get_eth_node()];
-
     (client, exit)
 }
 
@@ -317,9 +406,12 @@ pub fn althea_system_chain_exit(settings: RitaExitSettingsStruct) -> RitaExitSet
 }
 
 // Calls the register to exit rpc function within the provided namespace
-pub async fn register_to_exit(namespace_name: String) -> StatusCode {
+pub async fn register_to_exit(namespace_name: String, exit_name: String) -> StatusCode {
     // thread safe lock that allows us to pass data between the router thread and this thread
     // one copy of the reference is sent into the closure and the other is kept in this scope.
+    let exit_network = TEST_EXIT_DETAILS
+        .get(&exit_name)
+        .expect("Please provide a valid exit");
     let response: Arc<RwLock<Option<StatusCode>>> = Arc::new(RwLock::new(None));
     let response_local = response.clone();
     let namespace_local = namespace_name.clone();
@@ -334,7 +426,7 @@ pub async fn register_to_exit(namespace_name: String) -> StatusCode {
             let req = client
                 .post(format!(
                     "http://localhost:4877/exits/{}/register",
-                    TEST_EXIT_NAME
+                    exit_network.exit_name
                 ))
                 .send()
                 .await
@@ -431,7 +523,14 @@ pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
 
 pub fn get_ip_from_namespace(node: Namespace) -> String {
     match node.node_type {
-        NodeType::Exit => EXIT_ROOT_IP.to_string(),
+        NodeType::Exit { instance_name } => TEST_EXIT_DETAILS
+            .get("test")
+            .unwrap()
+            .instances
+            .get(&instance_name)
+            .unwrap()
+            .mesh_ip_v2
+            .to_string(),
         _ => format!("fd00::{}", node.id),
     }
 }
@@ -459,7 +558,7 @@ pub async fn query_debts(
     for node in nodes {
         let response: Arc<RwLock<Option<Vec<GetDebtsResult>>>> = Arc::new(RwLock::new(None));
         let response_local = response.clone();
-        let node_name = node.get_name();
+        let node_name: String = node.get_name();
 
         let _ = thread::spawn(move || {
             info!("Starting inner thraed");
@@ -815,13 +914,17 @@ pub async fn print_althea_balances(addresses: Vec<AltheaAddress>, denom: String)
 
 // Relies on nodes to be named using fd00::5, fd00::25 etc
 pub fn get_node_id_from_ip(ip: IpAddr) -> u16 {
-    match ip {
-        EXIT_ROOT_IP => 4,
-        _ => {
-            let addr = ip.to_string();
-            addr.split("::").last().unwrap().parse().unwrap()
-        }
+    let exit_4 = IpAddr::V6(Ipv6Addr::new(0xfd00, 200, 199, 198, 197, 196, 195, 194));
+    let exit_5 = IpAddr::V6(Ipv6Addr::new(0xfd00, 400, 399, 398, 397, 396, 395, 394));
+
+    if ip == exit_4 {
+        return 4;
     }
+    if ip == exit_5 {
+        return 5;
+    }
+    let addr = ip.to_string();
+    addr.split("::").last().unwrap().parse().unwrap()
 }
 
 pub const HIGH_GAS_PRICE: u64 = 1_000_000_000u64;
@@ -908,4 +1011,25 @@ pub async fn validate_debt_entry(
     info!("Recieved Debt values {:?}", res);
     let debts = res.get(&from_node).unwrap()[0].clone();
     assert!(f(debts));
+}
+
+pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
+    let register_timeout = Duration::from_secs(20);
+    for r in namespaces.names.clone() {
+        if let NodeType::Client { cluster_name } = r.node_type.clone() {
+            let start: Instant = Instant::now();
+            loop {
+                let res = register_to_exit(r.get_name(), cluster_name.clone()).await;
+                if res.is_success() {
+                    break;
+                }
+                if Instant::now() - start > register_timeout {
+                    panic!("Failed to register {} to exit", r.get_name());
+                }
+                warn!("Failed {} registration to exit, trying again", r.get_name());
+                thread::sleep(Duration::from_secs(1));
+            }
+            info!("{} registered to exit {}", r.get_name(), cluster_name);
+        }
+    }
 }

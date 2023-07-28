@@ -20,8 +20,13 @@ pub struct Namespace {
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum NodeType {
-    Client,
-    Exit,
+    Client {
+        // The exit this client should be connected to at network init
+        cluster_name: String,
+    },
+    Exit {
+        instance_name: String,
+    },
 }
 
 impl Namespace {
@@ -55,7 +60,7 @@ impl NamespaceInfo {
                 panic!("Duplicate id in namespace definition {}", space.id)
             }
 
-            if let NodeType::Exit = space.node_type {
+            if let NodeType::Exit { .. } = space.node_type {
                 if space.id == 1 {
                     // this would conflict with ip requirements for the internal
                     // bridge
@@ -234,7 +239,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
     // and the ability to reach the postgresql database in the native namespace
     let mut links_to_native_namespace = Vec::new();
     for name in spaces.names.iter() {
-        if let NodeType::Exit = name.node_type {
+        if let NodeType::Exit { .. } = name.node_type {
             let veth_native_to_exit = format!("vout-o-{}", name.get_name());
             let veth_exit_to_native = format!("vout-{}-o", name.get_name());
             let exit_ip = format!(

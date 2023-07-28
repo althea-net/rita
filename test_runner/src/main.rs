@@ -4,6 +4,7 @@ use integration_tests::config::{
 use integration_tests::debts::run_debts_test;
 /// Binary crate for actually running the integration tests
 use integration_tests::five_nodes::run_five_node_test_scenario;
+use integration_tests::mutli_exit::run_multi_exit_test;
 use integration_tests::{
     payments_althea::run_althea_payments_test_scenario,
     payments_eth::run_eth_payments_test_scenario, utils::set_sigterm,
@@ -44,6 +45,8 @@ async fn main() {
             run_eth_payments_test_scenario().await;
         } else if test_type == "PAYMENTS_ALTHEA" || test_type == "ALTHEA_PAYMENTS" {
             run_althea_payments_test_scenario().await
+        } else if test_type == "MULTI_EXIT" {
+            run_multi_exit_test().await
         } else {
             panic!("Error unknown test type {}!", test_type);
         }

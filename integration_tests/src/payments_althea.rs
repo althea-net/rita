@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
@@ -6,15 +7,17 @@ use crate::setup_utils::database::start_postgres;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    althea_system_chain_client, althea_system_chain_exit, generate_traffic, get_default_settings,
-    print_althea_balances, register_erc20_usdc_token, register_to_exit, send_althea_tokens,
-    test_reach_all, test_routes, validate_debt_entry,
+    generate_traffic, get_default_settings, print_althea_balances, register_all_namespaces_to_exit,
+    register_erc20_usdc_token, send_althea_tokens, test_reach_all, test_routes,
+    validate_debt_entry, TEST_PAY_THRESH,
 };
-use althea_types::ALTHEA_PREFIX;
+use althea_types::{Denom, SystemChain, ALTHEA_PREFIX};
 use deep_space::Address as AltheaAddress;
 use deep_space::{EthermintPrivateKey, PrivateKey};
 use log::info;
 use rita_common::debt_keeper::GetDebtsResult;
+use settings::client::RitaClientSettings;
+use settings::exit::RitaExitSettingsStruct;
 
 const USDC_TO_WEI_DECIMAL: u64 = 1_000_000_000_000u64;
 
@@ -40,7 +43,8 @@ pub async fn run_althea_payments_test_scenario() {
     let namespaces = node_config.0;
     let expected_routes = node_config.1;
 
-    let (rita_settings, rita_exit_settings) = get_default_settings();
+    let (mut client_settings, mut exit_settings) =
+        get_default_settings("test".to_string(), namespaces.clone());
 
     namespaces.validate();
     start_postgres();
@@ -49,10 +53,10 @@ pub async fn run_althea_payments_test_scenario() {
     info!("Namespaces setup: {res:?}");
 
     // Modify configs to use Althea chain
-    let rita_exit_settings = althea_system_chain_exit(rita_exit_settings);
-    let rita_settings = althea_system_chain_client(rita_settings);
+    let (client_settings, exit_settings) =
+        althea_payments_map(&mut client_settings, &mut exit_settings);
 
-    let rita_identities = thread_spawner(namespaces.clone(), rita_settings, rita_exit_settings)
+    let rita_identities = thread_spawner(namespaces.clone(), client_settings, exit_settings)
         .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
@@ -62,16 +66,7 @@ pub async fn run_althea_payments_test_scenario() {
     test_routes(namespaces.clone(), expected_routes);
 
     info!("Registering routers to the exit");
-    for r in namespaces.names.clone() {
-        if let NodeType::Client = r.node_type {
-            let res = register_to_exit(r.get_name()).await;
-            if !res.is_success() {
-                panic!("Failed to register {} to exit with {:?}", r.get_name(), res);
-            } else {
-                info!("{} registered to exit", r.get_name());
-            }
-        }
-    }
+    register_all_namespaces_to_exit(namespaces.clone()).await;
 
     thread::sleep(Duration::from_secs(10));
 
@@ -122,4 +117,28 @@ fn althea_payment_conditions(debts: GetDebtsResult) -> bool {
         ),
         (true, true)
     )
+}
+
+fn althea_payments_map(
+    c_set: &mut RitaClientSettings,
+    exit_set: &mut RitaExitSettingsStruct,
+) -> (RitaClientSettings, RitaExitSettingsStruct) {
+    let mut accept_de = HashMap::new();
+    accept_de.insert(
+        "usdc".to_string(),
+        Denom {
+            denom: "uUSDC".to_string(),
+            decimal: 1_000_000u64,
+        },
+    );
+
+    c_set.payment.system_chain = SystemChain::Althea;
+    exit_set.payment.system_chain = SystemChain::Althea;
+    // set pay thres to a smaller value
+    c_set.payment.payment_threshold = TEST_PAY_THRESH.into();
+    exit_set.payment.payment_threshold = TEST_PAY_THRESH.into();
+    c_set.payment.accepted_denoms = Some(accept_de.clone());
+    exit_set.payment.accepted_denoms = Some(accept_de.clone());
+
+    (c_set.clone(), exit_set.clone())
 }

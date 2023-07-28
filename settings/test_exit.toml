@@ -47,7 +47,6 @@ pass = "Some pass here"
 mesh_ip = "fd00::5"
 eth_address = "0xbe398dc24de37c73cec974d688018e58f94d6e0a"
 wg_public_key = "bvM10HW73yePrxdtCQQ4U20W5ogogdiZtUihrPc/oGY="
-althea_address = "althea11lrsu892mqx2mndyvjufrh2ux56tyfxl2e3eht3"
 
 [dao]
 dao_enforcement = false
