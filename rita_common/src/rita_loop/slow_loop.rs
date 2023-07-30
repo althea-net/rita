@@ -34,21 +34,10 @@ pub fn start_rita_slow_loop() {
         // with some fancy destructuring
         while let Err(e) = {
             thread::spawn(move || loop {
-                let model = get_rita_common().network.device;
-                let hw_info = get_hardware_info(model.clone());
-                match (model, hw_info) {
-                    (None, _) => error!("Model name not found?"),
-                    (Some(mdl), Ok(info)) => {
-                        if mdl.contains("mikrotik_hap-ac2") && info.load_avg_fifteen_minute > 4.0 {
-                            info!("15 minute load average > 4, rebooting!");
-                            let _res = KI.run_command("reboot", &[]);
-                        }
-                    },
-                    (Some(_), Err(_)) => error!("Could not get hardware info!"),
-                }
-
                 info!("Common Slow tick!");
                 let start = Instant::now();
+
+               check_for_hap_reboot();
 
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
@@ -129,6 +118,23 @@ pub fn start_rita_slow_loop() {
             last_restart = Instant::now();
         }
     });
+}
+
+/// This is a special handler for hAP routers which have a habit of getting locked up in
+/// runway cpu use cases, restarting them usually resolves it
+fn check_for_hap_reboot() {
+    let model = get_rita_common().network.device;
+    let hw_info = get_hardware_info(model.clone());
+    match (model, hw_info) {
+        (None, _) => error!("Model name not found?"),
+        (Some(mdl), Ok(info)) => {
+            if mdl.contains("mikrotik_hap-ac2") && info.load_avg_fifteen_minute > 4.0 {
+                info!("15 minute load average > 4, rebooting!");
+                let _res = KI.run_command("reboot", &[]);
+            }
+        }
+        (Some(_), Err(_)) => error!("Could not get hardware info!"),
+    }
 }
 
 fn set_babel_price(stream: &mut TcpStream) -> Result<(), BabelMonitorError> {
