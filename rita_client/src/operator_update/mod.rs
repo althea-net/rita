@@ -47,48 +47,24 @@ const FORBIDDEN_MERGE_VALUES: [&str; 5] = [
     "external_nic",
     "peer_interfaces",
 ];
-pub struct UptimeStruct {
-    pub prev_time: Duration,
-}
-impl Default for UptimeStruct {
-    fn default() -> Self {
-        UptimeStruct {
-            prev_time: Duration::new(0, 0),
-        }
-    }
-}
-impl UptimeStruct {
-    pub fn new() -> UptimeStruct {
-        UptimeStruct {
-            prev_time: Duration::new(0, 0),
-        }
-    }
-    pub fn time_elapsed(&mut self, rita_uptime: &Instant) -> Duration {
-        let cur_time = rita_uptime.elapsed();
-        if cur_time.as_secs() < self.prev_time.as_secs() {
-            Duration::new(0, 0)
-        } else {
-            self.prev_time = cur_time;
-            cur_time
-        }
-    }
-}
 
 lazy_static! {
     /// stores the startup time for Rita, used to compute uptime
     static ref RITA_UPTIME: Instant = Instant::now();
 }
 
-/// Perform operator updates every UPDATE_FREQUENCY seconds,
-const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
-
-/// How long we wait for a response from the server
-/// this value must be less than or equal to the UPDATE_FREQUENCY
-/// in the rita_client loop
-pub const OPERATOR_UPDATE_TIMEOUT: Duration = UPDATE_FREQUENCY;
+/// Operator update has a randomized exponential backoff, meaning if checkins fail
+/// we will back off and try again after a longer interval
+const TARGET_UPDATE_FREQUENCY: Duration = Duration::from_secs(5);
+/// This is the cap for the exponential backoff, no matter how many consecutive checkins fail
+/// we will not go above this amount of time
+const UPDATE_FREQUENCY_CAP: Duration = Duration::from_secs(3600);
 
 /// Checks in with the operator server
-pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
+pub async fn operator_update(
+    ops_last_seen_usage_hour: Option<u64>,
+    timeout: Duration,
+) -> Result<u64, ()> {
     let url: &str;
     if cfg!(feature = "dev_env") {
         url = "http://0.0.0.0:8080/checkin";
@@ -119,7 +95,8 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
     // want the operator to work properly and we will continue to checkin
     if operator_address.is_none() && !logging_enabled {
         info!("No Operator configured and logging disabled, not checking in!");
-        return 0;
+        // return ok as this is not an error case
+        return Ok(ops_last_seen_usage_hour.unwrap_or_default());
     }
 
     match operator_address {
@@ -166,7 +143,7 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
         Ok(hour) => hour,
         Err(e) => {
             error!("System time is set earlier than unix epoch {:?}", e);
-            return 0;
+            return Err(());
         }
     };
     let last_seen_hour = ops_last_seen_usage_hour.unwrap_or(0);
@@ -194,7 +171,7 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
     let client = awc::Client::default();
     let response = client
         .post(url)
-        .timeout(OPERATOR_UPDATE_TIMEOUT)
+        .timeout(timeout)
         .send_json(&OperatorCheckinMessage {
             id,
             operator_address,
@@ -219,7 +196,7 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
         }
         Err(e) => {
             error!("Failed to perform operator checkin with {:?}", e);
-            return 0;
+            return Err(());
         }
     };
 
@@ -227,7 +204,7 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
         Ok(a) => a,
         Err(e) => {
             error!("Failed to perform operator checkin with {:?}", e);
-            return 0;
+            return Err(());
         }
     };
 
@@ -286,9 +263,9 @@ pub async fn operator_update(ops_last_seen_usage_hour: Option<u64>) -> u64 {
     // update our count of ops last seen if we have confirmation ops is up to date on usage data
     if new_settings.ops_last_seen_usage_hour == current_hour {
         info!("Confirmed ops has taken usage update for hour {current_hour}");
-        current_hour
+        Ok(current_hour)
     } else {
-        new_settings.ops_last_seen_usage_hour
+        Ok(new_settings.ops_last_seen_usage_hour)
     }
 }
 
