@@ -521,12 +521,8 @@ impl TunnelManager {
             peer.ifidx,
         );
 
-        let (new_key, tunnel) = create_new_tunnel(
-            peer.contact_socket.ip(),
-            our_port,
-            peer.ifidx,
-            their_localid,
-        )?;
+        let (new_key, tunnel) =
+            create_new_tunnel(peer.contact_socket.ip(), our_port, their_localid)?;
 
         self.tunnels
             .entry(new_key)
@@ -539,11 +535,10 @@ impl TunnelManager {
 fn create_new_tunnel(
     peer_ip: IpAddr,
     our_port: u16,
-    ifidx: u32,
     their_localid: LocalIdentity,
 ) -> Result<(Identity, Tunnel), RitaCommonError> {
     // Create new tunnel
-    let tunnel = Tunnel::new(peer_ip, our_port, ifidx, their_localid);
+    let tunnel = Tunnel::new(peer_ip, our_port, 0, their_localid);
     let tunnel = match tunnel {
         Ok(tunnel) => {
             trace!("Tunnel {:?} is open", tunnel);
