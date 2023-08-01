@@ -14,6 +14,7 @@ use rita_common::rita_loop::{
     start_core_rita_endpoints, start_rita_common_loops,
     write_to_disk::{save_to_disk_loop, SettingsOnDisk},
 };
+use rita_exit::initialize_db_pool;
 use rita_exit::{
     operator_update::update_loop::start_operator_update_loop,
     rita_loop::{start_rita_exit_endpoints, start_rita_exit_loop},
@@ -238,6 +239,8 @@ pub fn spawn_rita_exit(
         *router_identity_ref.write().unwrap() = Some(resettings.get_identity().unwrap());
 
         let system = actix_async::System::new();
+
+        initialize_db_pool();
 
         start_rita_common_loops();
         start_rita_exit_loop();
