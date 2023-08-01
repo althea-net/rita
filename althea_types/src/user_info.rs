@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::hash::{Hash, Hasher};
 use std::net::Ipv4Addr;
 use std::time::SystemTime;
 
@@ -74,10 +75,22 @@ pub struct UsageTracker {
 
 /// A struct for tracking each hour of usage, indexed by time in hours since
 /// the unix epoch.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct UsageHour {
     pub index: u64,
     pub up: u64,
     pub down: u64,
     pub price: u32,
 }
+
+impl Hash for UsageHour {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.index.hash(state);
+    }
+}
+impl PartialEq for UsageHour {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index
+    }
+}
+impl Eq for UsageHour {}
