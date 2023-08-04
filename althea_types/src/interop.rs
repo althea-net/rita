@@ -770,6 +770,8 @@ pub struct OperatorExitCheckinMessage {
     pub pass: String,
     /// This is to keep track of the rita exit uptime for debugging purposes
     pub exit_uptime: Duration,
+    /// A list of registered wg keys that ops can use to display routers to be registered
+    pub registered_keys: Option<Vec<WgKey>>,
     /// Number of users online
     pub users_online: Option<u32>,
 }
