@@ -4,11 +4,17 @@ pub mod update_loop;
 use althea_types::ExitClientIdentity;
 use althea_types::OperatorExitCheckinMessage;
 use althea_types::OperatorExitUpdateMessage;
+use althea_types::WgKey;
+use diesel::QueryDsl;
+use diesel::RunQueryDsl;
+use exit_db::schema::clients::dsl::clients as db_client;
+use exit_db::schema::clients::wg_pubkey;
 use rita_common::KI;
 use std::time::{Duration, Instant};
 
 use crate::database::signup_client;
 use crate::database::EXIT_INTERFACE;
+use crate::get_database_connection;
 
 pub struct UptimeStruct {
     pub prev_time: Duration,
@@ -33,7 +39,7 @@ const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
 pub const OPERATOR_UPDATE_TIMEOUT: Duration = Duration::from_secs(4);
 
 /// Checks in with the operator server
-pub async fn operator_update() {
+pub async fn operator_update(rita_started: Instant) {
     let url: &str;
     if cfg!(feature = "dev_env") {
         url = "http://0.0.0.0:8080/exitcheckin";
@@ -56,7 +62,9 @@ pub async fn operator_update() {
             .send_json(&OperatorExitCheckinMessage {
                 id,
                 pass,
-                exit_uptime: RITA_UPTIME.elapsed(),
+                exit_uptime: rita_started.elapsed(),
+                registered_keys: get_registered_list(),
+                // Since this checkin works only from b20, we only need to look on wg_exit_v2
                 users_online: KI.get_wg_exit_clients_online(EXIT_INTERFACE).ok(),
             })
             .await;
@@ -95,5 +103,39 @@ async fn register_op_clients(clients: Vec<ExitClientIdentity>) {
         if let Err(e) = signup_client(c, true).await {
             error!("Unable to signup client {} with {:?}", c_key, e);
         };
+    }
+}
+
+pub fn get_registered_list() -> Option<Vec<WgKey>> {
+    match get_database_connection() {
+        Ok(conn) => {
+            let registered_routers = db_client.select(wg_pubkey);
+            let registered_routers = match registered_routers.load::<String>(&conn) {
+                Ok(a) => a,
+                Err(e) => {
+                    error!("Unable to retrive wg keys {}", e);
+                    return None;
+                }
+            };
+            Some(
+                registered_routers
+                    .iter()
+                    .filter_map(|r| match r.parse() {
+                        Ok(a) => Some(a),
+                        Err(_) => {
+                            error!("Invalid wg key in database! {}", r);
+                            None
+                        }
+                    })
+                    .collect::<Vec<WgKey>>(),
+            )
+        }
+        Err(e) => {
+            error!(
+                "Unable to get a database connection to retrieve registered exits: {}",
+                e
+            );
+            None
+        }
     }
 }
