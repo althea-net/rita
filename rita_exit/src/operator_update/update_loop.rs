@@ -13,6 +13,7 @@ pub fn start_operator_update_loop() {
     thread::spawn(move || {
         // this will always be an error, so it's really just a loop statement
         // with some fancy destructuring
+
         while let Err(e) = {
             thread::spawn(move || loop {
                 let start = Instant::now();
