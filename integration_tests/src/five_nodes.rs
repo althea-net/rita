@@ -3,7 +3,9 @@ use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{get_default_settings, register_to_exit, test_reach_all, test_routes};
 use log::{error, info};
+use core::time;
 use std::collections::HashMap;
+use std::thread;
 
 /// Runs a five node fixed network map test scenario, this does basic network setup and tests reachability to
 /// all destinations
@@ -26,7 +28,8 @@ pub async fn run_five_node_test_scenario() {
     info!("Thread Spawner: {res:?}");
 
     // this sleep is for debugging so that the container can be accessed to poke around in
-    //thread::sleep(SETUP_WAIT * 500);
+    let ten_mins = time::Duration::from_secs(600);
+    thread::sleep(ten_mins);
 
     test_reach_all(namespaces.clone());
 
