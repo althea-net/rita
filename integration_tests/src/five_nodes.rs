@@ -28,13 +28,13 @@ pub async fn run_five_node_test_scenario() {
     info!("Thread Spawner: {res:?}");
 
     // this sleep is for debugging so that the container can be accessed to poke around in
-    let ten_mins = time::Duration::from_secs(600);
+    let ten_mins = time::Duration::from_secs(300);
     thread::sleep(ten_mins);
 
     test_reach_all(namespaces.clone());
 
     test_routes(namespaces.clone(), expected_routes);
-
+    /*
     info!("Registering routers to the exit");
     for r in namespaces.names {
         if let NodeType::Client = r.node_type {
@@ -44,6 +44,7 @@ pub async fn run_five_node_test_scenario() {
             }
         }
     }
+    */
 }
 
 /// This defines the network map for a five node scenario

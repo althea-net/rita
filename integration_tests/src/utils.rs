@@ -47,7 +47,7 @@ use std::{
 use web30::{client::Web3, jsonrpc::error::Web3Error};
 
 /// Wait this long for network convergence
-const REACHABILITY_TEST_TIMEOUT: Duration = Duration::from_secs(600);
+const REACHABILITY_TEST_TIMEOUT: Duration = Duration::from_secs(300);
 /// How long the reacability test should wait in between tests
 const REACHABILITY_TEST_CHECK_SPEED: Duration = Duration::from_secs(5);
 /// Pay thresh used in payment tests
@@ -86,9 +86,12 @@ pub fn test_reach_all(nsinfo: NamespaceInfo) {
 pub fn test_reach_all_async(nsinfo: NamespaceInfo) -> bool {
     for i in nsinfo.clone().names {
         for j in nsinfo.clone().names {
-            if test_reach(i.clone(), j) {
+            if test_reach(i.clone(), j.clone()) {
                 // ping failed
+                info!("failed test from {:?} to {:?}", i, j);
                 return false;
+            } else {
+                info!("Test OK from {:?} to {:?}", i, j);
             }
         }
     }
@@ -111,7 +114,7 @@ fn test_reach(from: Namespace, to: Namespace) -> bool {
         )
         .expect(&errormsg);
     let output = from_utf8(&output.stdout).expect("could not get output for ping6!");
-    trace!("ping output: {output:?} end");
+    info!("ping output: {output:?} end");
     output.contains("1 packets transmitted, 1 received, 0% packet loss")
 }
 
