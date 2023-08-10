@@ -1,7 +1,6 @@
 use crate::blockchain_oracle::update as BlockchainOracleUpdate;
 use crate::debt_keeper::send_debt_update;
 use crate::eth_compatible_withdraw;
-use crate::handle_shaping;
 use crate::network_monitor::update_network_info;
 use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::payment_controller::tick_payment_controller;
@@ -82,8 +81,6 @@ pub fn start_rita_fast_loop() {
                     if let Err(e) = send_debt_update() {
                         warn!("Debt keeper update failed! {:?}", e);
                     }
-
-                    handle_shaping();
 
                     // updating blockchain info often is easier than dealing with edge cases
                     // like out of date nonces or balances, also users really really want fast

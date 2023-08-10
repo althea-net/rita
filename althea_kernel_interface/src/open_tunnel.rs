@@ -50,6 +50,7 @@ fn socket_to_string(endpoint: &SocketAddr, interface_name: Option<String>) -> St
     }
 }
 
+#[derive(Debug)]
 pub struct TunnelOpenArgs<'a> {
     /// the wg tunnel name
     pub interface: String,
@@ -84,7 +85,7 @@ impl dyn KernelInterface {
             }
             Err(_) => {
                 external_peer = true;
-                args.external_nic
+                args.external_nic.clone()
             }
         };
 
@@ -154,7 +155,8 @@ impl dyn KernelInterface {
         let output = self.run_command("ip", &["link", "set", "dev", &args.interface, "up"])?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
-                "received error setting wg interface up: {}",
+                "received error setting wg interface {:?} up: {}",
+                args,
                 String::from_utf8(output.stderr)?
             )));
         }

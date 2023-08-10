@@ -1,6 +1,7 @@
 use crate::KernelInterface;
 use crate::KernelInterfaceError;
 use crate::KernelInterfaceError as Error;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::prelude::*;
 use std::u16;
@@ -40,13 +41,13 @@ impl dyn KernelInterface {
     }
 
     /// Returns list of ports in use as seen in the UDP socket table (/proc/net/udp)
-    pub fn used_ports(&self) -> Result<Vec<u16>, Error> {
+    pub fn used_ports(&self) -> Result<HashSet<u16>, Error> {
         let udp_sockets_table = self.read_udp_socket_table()?;
         let mut lines = udp_sockets_table.split('\n');
 
         lines.next(); // advance iterator to skip header
 
-        let ports: Vec<u16> = lines
+        let ports: HashSet<u16> = lines
             .take_while(|line| !line.is_empty()) // until end of the table is reached,
             .map(parse_local_port) // parse each udp port,
             .filter_map(Result::ok) // only taking those which parsed successfully

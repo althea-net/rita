@@ -10,7 +10,7 @@ use crate::peer_listener::structs::Peer;
 use crate::peer_listener::structs::PeerListener;
 use crate::rita_loop::is_gateway;
 use crate::tm_identity_callback;
-use crate::tunnel_manager::tm_get_port;
+use crate::tunnel_manager::get_tunnel_manager;
 use crate::IdentityCallback;
 use crate::RitaCommonError;
 use crate::KI;
@@ -71,7 +71,7 @@ pub struct Hello {
 
 pub async fn tm_neighbor_inquiry_manual_peer(peer: Peer) -> Result<(), RitaCommonError> {
     trace!("TunnelManager neigh inquiry for {:?}", peer);
-    let our_port = tm_get_port();
+    let our_port = get_tunnel_manager().get_next_available_port()?;
     let mut settings = settings::get_rita_common();
     let changed = KI.manual_peers_route(
         &peer.contact_socket.ip(),
@@ -147,7 +147,7 @@ pub async fn tm_neighbor_inquiry_manual_peer(peer: Peer) -> Result<(), RitaCommo
 /// interface name. Sends a Hello over udp
 pub fn tm_neighbor_inquiry_udp_peer(peer: &Peer, pl: &PeerListener) -> Result<(), RitaCommonError> {
     trace!("TunnelManager neigh inquiry for {:?}", peer);
-    let our_port = tm_get_port();
+    let our_port = get_tunnel_manager().get_next_available_port()?;
 
     let peer_listener = pl;
     let iface_name = match peer_listener.interface_map.get(&peer.contact_socket) {
