@@ -911,10 +911,6 @@ mod tests {
 
         // next tick its updated accordingly
         last_states.last_exit_details = Some(exit_server.info.clone());
-        assert!(!has_exit_changed(
-            last_states.clone(),
-            selected_exit,
-            exit_server.clone()
-        ));
+        assert!(!has_exit_changed(last_states, selected_exit, exit_server));
     }
 }
