@@ -3277,6 +3277,7 @@ name = "test_runner"
 version = "0.1.0"
 dependencies = [
  "actix-rt",
+ "althea_kernel_interface",
  "awc",
  "ctrlc",
  "docopt",
