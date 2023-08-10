@@ -3,8 +3,9 @@ use super::ExitManager;
 use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
 use crate::exit_manager::{
     correct_default_route, exit_general_details_request, exit_status_request, get_client_pub_ipv6,
-    get_cluster_ip_list, get_full_selected_exit, get_routes_hashmap, initialize_selected_exit_list,
-    linux_setup_exit_tunnel, remove_nat, restore_nat, run_ping_test, set_exit_list,
+    get_cluster_ip_list, get_full_selected_exit, get_routes_hashmap, has_exit_changed,
+    initialize_selected_exit_list, linux_setup_exit_tunnel, remove_nat, restore_nat, run_ping_test,
+    set_exit_list,
 };
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
@@ -54,7 +55,7 @@ pub fn start_exit_manager_loop() {
                             Some(a) => a,
                             None => "".to_string(),
                         };
-                        let last_exit = em_state.last_exit;
+                        let last_exit_states = em_state.last_exit_state.clone();
                         let mut exits = rita_client.exit_client.exits;
                         // Initialize all exits ip addrs in local lazy static if they havent been set already
                         for (k, s) in exits.clone() {
@@ -129,14 +130,17 @@ pub fn start_exit_manager_loop() {
                                         }
                                     };
                                 info!("Exit_Switcher: After selecting best exit this tick, we have selected_exit_details: {:?}", get_full_selected_exit(current_exit.clone()));
-                                em_state.last_exit = selected_exit;
+
+                                // Set last state vairables
+                                em_state.last_exit_state.last_exit = selected_exit;
+                                em_state.last_exit_state.last_exit_details = Some(exit.info.clone());
+
                                 // check the exit's time and update locally if it's very different
                                 maybe_set_local_to_exit_time(exit.clone(), current_exit.clone()).await;
+
                                 // Determine states to setup tunnels
                                 let signed_up_for_exit = exit.info.our_details().is_some();
-                                let exit_has_changed = !(last_exit.is_some()
-                                    && selected_exit.is_some()
-                                    && last_exit.unwrap() == selected_exit.unwrap());
+                                let exit_has_changed = has_exit_changed(last_exit_states, selected_exit, exit.clone());
 
                                 let default_route = match KI.get_default_route() {
                                     Ok(route) => route,
