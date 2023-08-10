@@ -15,3 +15,4 @@ ctrlc = {version = "3.2.1", features = ["termination"]}
 awc = "3.1"
 actix-rt = "2.8"
 integration_tests = {path = "../integration_tests"}
+althea_kernel_interface = { path = "../althea_kernel_interface" }
