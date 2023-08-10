@@ -1,10 +1,8 @@
+use crate::handle_shaping;
 use crate::simulated_txfee_manager::tick_simulated_tx;
-use crate::tm_trigger_gc;
 use crate::token_bridge::tick_token_bridge;
-use crate::tunnel_manager::tm_monitor_check;
+use crate::tunnel_manager::tm_common_slow_loop_helper;
 use crate::KI;
-use crate::TUNNEL_HANDSHAKE_TIMEOUT;
-use crate::TUNNEL_TIMEOUT;
 use actix_async::System as AsyncSystem;
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use babel_monitor::open_babel_stream;
@@ -39,6 +37,9 @@ pub fn start_rita_slow_loop() {
 
                check_for_hap_reboot();
 
+                // checks for and updates tunnel manager traffic shaper values
+                handle_shaping();
+
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
                     info!("Ticking token bridge");
@@ -62,14 +63,8 @@ pub fn start_rita_slow_loop() {
 
                         match parse_interfaces(&mut stream) {
                             Ok(babel_interfaces) => {
-                                tm_monitor_check(&babel_interfaces);
-
-                                trace!("Sending tunnel GC");
-                                tm_trigger_gc(
-                                    TUNNEL_TIMEOUT,
-                                    TUNNEL_HANDSHAKE_TIMEOUT,
-                                    babel_interfaces,
-                                );
+                                // performs tunnel GC + checks babel interfaces
+                                tm_common_slow_loop_helper(babel_interfaces);
 
                                 // reset failure count
                                 num_babel_failures = 0;

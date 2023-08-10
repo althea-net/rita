@@ -1,74 +1,74 @@
-use super::Tunnel;
-use crate::tunnel_manager::{get_tunnel_manager_write_ref, TUNNEL_MANAGER};
+use super::{Tunnel, TunnelManager};
 use crate::KI;
 use althea_types::Identity;
 use babel_monitor::structs::Interface;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
-/// Performs a cleanup of all babel tunnels that we have not heard from in the configured time
-/// tunnel_timeout:
-///
-/// if we do not receive a hello within this many seconds we attempt to gc the tunnel
-/// this garbage collection can be avoided if the tunnel has seen a handshake within
-/// tunnel_handshake_timeout time
-///
-/// tunnel_handshake_timeout
-///
-/// The backup value that prevents us from deleting an active tunnel. We check the last
-/// handshake on the tunnel and if it's within this amount of time we don't GC it.
-///
-/// babel_interfaces
-/// a vector of babel interfaces, if we find an interface that babel doesn't classify as
-/// 'up' we will gc it for recreation via the normal hello/ihu process, this prevents us
-/// from having tunnels that don't work for babel peers
-pub fn tm_trigger_gc(
-    tunnel_timeout: Duration,
-    tunnel_handshake_timeout: Duration,
-    babel_interfaces: Vec<Interface>,
-) {
-    let tm_pin = &mut *TUNNEL_MANAGER.write().unwrap();
-    let tunnel_manager = get_tunnel_manager_write_ref(tm_pin);
-
-    let interfaces = into_interfaces_hashmap(&babel_interfaces);
-    trace!("Starting tunnel gc {:?}", interfaces);
-    let mut good: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
-    let mut to_delete: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
-    // Split entries into good and timed out rebuilding the double hashmap structure
-    // as you can tell this is totally copy based and uses 2n ram to prevent borrow
-    // checker issues, we should consider a method that does modify in place
-    for (_identity, tunnels) in tunnel_manager.tunnels.iter() {
-        for tunnel in tunnels.iter() {
-            if tunnel_should_be_kept(
-                tunnel,
-                tunnel_handshake_timeout,
-                tunnel_timeout,
-                &interfaces,
-            ) {
-                insert_into_tunnel_list(tunnel, &mut good);
-            } else {
-                insert_into_tunnel_list(tunnel, &mut to_delete)
+impl TunnelManager {
+    /// Performs a cleanup of all babel tunnels that we have not heard from in the configured time
+    /// tunnel_timeout:
+    ///
+    /// if we do not receive a hello within this many seconds we attempt to gc the tunnel
+    /// this garbage collection can be avoided if the tunnel has seen a handshake within
+    /// tunnel_handshake_timeout time
+    ///
+    /// tunnel_handshake_timeout
+    ///
+    /// The backup value that prevents us from deleting an active tunnel. We check the last
+    /// handshake on the tunnel and if it's within this amount of time we don't GC it.
+    ///
+    /// babel_interfaces
+    /// a vector of babel interfaces, if we find an interface that babel doesn't classify as
+    /// 'up' we will gc it for recreation via the normal hello/ihu process, this prevents us
+    /// from having tunnels that don't work for babel peers
+    pub fn tunnel_gc(
+        &mut self,
+        tunnel_timeout: Duration,
+        tunnel_handshake_timeout: Duration,
+        babel_interfaces: Vec<Interface>,
+    ) {
+        let interfaces = into_interfaces_hashmap(&babel_interfaces);
+        trace!("Starting tunnel gc {:?}", interfaces);
+        let mut good: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
+        let mut to_delete: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
+        // Split entries into good and timed out rebuilding the double hashmap structure
+        // as you can tell this is totally copy based and uses 2n ram to prevent borrow
+        // checker issues, we should consider a method that does modify in place
+        for (identity, tunnels) in self.tunnels.iter() {
+            for tunnel in tunnels.iter() {
+                if tunnel_should_be_kept(
+                    *identity,
+                    tunnel,
+                    tunnel_handshake_timeout,
+                    tunnel_timeout,
+                    &interfaces,
+                ) {
+                    insert_into_tunnel_list(tunnel, &mut good);
+                } else {
+                    insert_into_tunnel_list(tunnel, &mut to_delete)
+                }
             }
         }
-    }
 
-    for (id, tunnels) in to_delete.iter() {
-        for tunnel in tunnels {
-            info!("TriggerGC: removing tunnel: {} {}", id, tunnel);
+        for (id, tunnels) in to_delete.iter() {
+            for tunnel in tunnels {
+                info!("TriggerGC: removing tunnel: {} {}", id, tunnel);
+            }
         }
+
+        // Please keep in mind it makes more sense to update the tunnel map *before* yielding the
+        // actual interfaces and ports from timed_out.
+        //
+        // The difference is leaking interfaces on del_interface() failure vs. Rita thinking
+        // it has freed ports/interfaces which are still there/claimed.
+        //
+        // The former would be a mere performance bug while inconsistent-with-reality Rita state
+        // would lead to nasty bugs in case del_interface() goes wrong for whatever reason.
+        self.tunnels = good;
+
+        unmonitor_tunnels(to_delete);
     }
-
-    // Please keep in mind it makes more sense to update the tunnel map *before* yielding the
-    // actual interfaces and ports from timed_out.
-    //
-    // The difference is leaking interfaces on del_interface() failure vs. Rita thinking
-    // it has freed ports/interfaces which are still there/claimed.
-    //
-    // The former would be a mere performance bug while inconsistent-with-reality Rita state
-    // would lead to nasty bugs in case del_interface() goes wrong for whatever reason.
-    tunnel_manager.tunnels = good;
-
-    unmonitor_tunnels(to_delete);
 }
 
 fn unmonitor_tunnels(to_delete: HashMap<Identity, Vec<Tunnel>>) {
@@ -125,11 +125,17 @@ fn unmonitor_tunnels(to_delete: HashMap<Identity, Vec<Tunnel>>) {
 ///   successful. In theory we could look for a neighbor that's online from the tunnel interface in the babel routing
 ///   table and solve both this and the previous complication at once. So that's a possible improvement to this routine.
 fn tunnel_should_be_kept(
+    category_id: Identity,
     tunnel: &Tunnel,
     tunnel_handshake_timeout: Duration,
     tunnel_timeout: Duration,
     interfaces: &HashMap<String, bool>,
 ) -> bool {
+    // tunnel misfiled under the wrong id, this should never happen but we protect against it
+    if category_id != tunnel.neigh_id.global {
+        return false;
+    }
+
     let since_created = Instant::now().checked_duration_since(tunnel.created());
     let since_last_contact = Instant::now().checked_duration_since(tunnel.last_contact);
     // this is almost always true, unless one of the two is in the future versus 'now' it's safe to just skip this
@@ -172,7 +178,7 @@ fn tunnel_should_be_kept(
 }
 
 /// A simple helper function to reduce the number of if/else statements in tunnel GC
-fn insert_into_tunnel_list(input: &Tunnel, tunnels_list: &mut HashMap<Identity, Vec<Tunnel>>) {
+pub fn insert_into_tunnel_list(input: &Tunnel, tunnels_list: &mut HashMap<Identity, Vec<Tunnel>>) {
     let identity = &input.neigh_id.global;
     let input = input.clone();
     match tunnels_list.get_mut(identity) {
