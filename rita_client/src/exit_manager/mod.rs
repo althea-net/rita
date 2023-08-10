@@ -80,6 +80,13 @@ pub struct SelectedExitList {
     pub exit_blacklist: ExitBlacklist,
 }
 
+/// Data to use identity whether a clients wg exit tunnel needs to be setup up again across ticks
+#[derive(Default, Clone)]
+pub struct LastExitStates {
+    last_exit: Option<IpAddr>,
+    last_exit_details: Option<ExitState>,
+}
+
 /// An actor which pays the exit
 #[derive(Clone)]
 pub struct ExitManager {
@@ -87,7 +94,7 @@ pub struct ExitManager {
     /// Every tick we query an exit endpoint to get a list of exits in that cluster. We use this list for exit switching
     pub exit_list: ExitList,
     /// Store last exit here, when we see an exit change, we reset wg tunnels
-    pub last_exit: Option<IpAddr>,
+    pub last_exit_state: LastExitStates,
     /// Store exit connection status. If no update in > 10, perform a power cycle
     pub last_connection_time: Instant,
 }
@@ -97,7 +104,7 @@ impl Default for ExitManager {
         ExitManager {
             nat_setup: false,
             exit_list: ExitList::default(),
-            last_exit: None,
+            last_exit_state: LastExitStates::default(),
             last_connection_time: Instant::now(),
         }
     }
@@ -783,5 +790,125 @@ pub fn run_ping_test() -> bool {
             error!("ipv4 ping error: {:?}", e);
             false
         }
+    }
+}
+
+/// Verfies if exit has changed to reestablish wg tunnels
+/// 1.) When exit instance ip has changed
+/// 2.) Exit reg details have chaged
+pub fn has_exit_changed(
+    state: LastExitStates,
+    selected_exit: Option<IpAddr>,
+    cluster: ExitServer,
+) -> bool {
+    let last_exit = state.last_exit;
+
+    let instance_has_changed = !(last_exit.is_some()
+        && selected_exit.is_some()
+        && last_exit.unwrap() == selected_exit.unwrap());
+
+    let last_exit_details = state.last_exit_details;
+    let exit_reg_has_changed =
+        !(last_exit_details.is_some() && last_exit_details.unwrap() == cluster.info);
+
+    instance_has_changed | exit_reg_has_changed
+}
+
+#[cfg(test)]
+mod tests {
+    use althea_types::SystemChain;
+
+    use super::*;
+
+    #[test]
+    fn test_exit_has_changed() {
+        let mut exit_server = ExitServer {
+            root_ip: "fd00::1337".parse().unwrap(),
+            subnet: None,
+            eth_address: "0xd2C5b6dd6ca641BE4c90565b5d3DA34C14949A53"
+                .parse()
+                .unwrap(),
+            registration_port: 3452,
+            wg_public_key: "V9I9yrxAqFqLV+9GeT5pnXPwk4Cxgfvl30Fv8khVGsM="
+                .parse()
+                .unwrap(),
+            description: "Dummy exit server!".to_string(),
+            info: ExitState::New,
+        };
+        let dummy_exit_details = ExitDetails {
+            server_internal_ip: "172.0.0.1".parse().unwrap(),
+            netmask: 0,
+            wg_exit_port: 123,
+            exit_price: 123,
+            exit_currency: SystemChain::Xdai,
+            description: "".to_string(),
+            verif_mode: ExitVerifMode::Off,
+        };
+        let mut last_states = LastExitStates::default();
+
+        // Exit moves from New -> GotInfo
+        exit_server.info = ExitState::GotInfo {
+            general_details: dummy_exit_details.clone(),
+            message: "".to_string(),
+        };
+
+        // An ip is selected and setup in last_states
+        let selected_exit = Some("fd00::2602".parse().unwrap());
+
+        assert!(has_exit_changed(
+            last_states.clone(),
+            selected_exit,
+            exit_server.clone()
+        ));
+
+        // Last states get updated next tick
+        last_states.last_exit = Some("fd00::2602".parse().unwrap());
+        last_states.last_exit_details = Some(exit_server.info.clone());
+        assert!(!has_exit_changed(
+            last_states.clone(),
+            selected_exit,
+            exit_server.clone()
+        ));
+
+        // Registration Details change
+        exit_server.info = ExitState::Registered {
+            general_details: dummy_exit_details.clone(),
+            our_details: ExitClientDetails {
+                client_internal_ip: "172.1.1.1".parse().unwrap(),
+                internet_ipv6_subnet: None,
+            },
+            message: "".to_string(),
+        };
+        assert!(has_exit_changed(
+            last_states.clone(),
+            selected_exit,
+            exit_server.clone()
+        ));
+
+        // next tick last stats get updated accordingly
+        last_states.last_exit_details = Some(exit_server.info.clone());
+
+        // Registration detail for client change
+        exit_server.info = ExitState::Registered {
+            general_details: dummy_exit_details,
+            our_details: ExitClientDetails {
+                client_internal_ip: "172.1.1.14".parse().unwrap(),
+                internet_ipv6_subnet: None,
+            },
+            message: "".to_string(),
+        };
+        assert!(has_exit_changed(
+            last_states.clone(),
+            selected_exit,
+            exit_server.clone()
+        ));
+
+        // next tick its updated accordingly
+        last_states.last_exit_details = Some(exit_server.info.clone());
+        assert!(!has_exit_changed(
+            last_states.clone(),
+            selected_exit,
+            exit_server.clone()
+        ));
     }
 }
