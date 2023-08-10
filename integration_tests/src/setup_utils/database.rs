@@ -16,7 +16,7 @@ pub fn start_postgres() {
     const POSTGRES_BIN: &str = "/usr/lib/postgresql/15/bin/postgres";
     const INITDB_BIN: &str = "/usr/lib/postgresql/15/bin/initdb";
     // for this test script
-    const DB_URL_LOCAL: &str = "postgres://postgres@localhost/test";
+    const DB_URL_LOCAL: &str = "postgres://postgres@127.0.0.1/test";
     // for the rita exit instances
     const POSTGRES_DATABASE_LOCATION: &str = "/var/lib/postgresql/data";
     let migration_directory = Path::new("/althea_rs/exit_db/migrations/");
