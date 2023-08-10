@@ -12,6 +12,8 @@ use log::SetLoggerError;
 use settings::SettingsError;
 use std::boxed::Box;
 
+use crate::tunnel_manager::error::TunnelManagerError;
+
 #[derive(Debug)]
 pub enum RitaCommonError {
     ConversionError(String),
@@ -34,6 +36,7 @@ pub enum RitaCommonError {
     JsonPayloadError(JsonPayloadError),
     DuplicatePayment,
     PaymentFailed(String),
+    TunnelManagerError(TunnelManagerError),
 }
 
 impl From<LoggerError> for RitaCommonError {
@@ -87,6 +90,11 @@ impl From<JsonPayloadError> for RitaCommonError {
         RitaCommonError::JsonPayloadError(error)
     }
 }
+impl From<TunnelManagerError> for RitaCommonError {
+    fn from(error: TunnelManagerError) -> Self {
+        RitaCommonError::TunnelManagerError(error)
+    }
+}
 
 impl Display for RitaCommonError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
@@ -94,6 +102,7 @@ impl Display for RitaCommonError {
             RitaCommonError::ConversionError(a) => write!(
                 f, "Conversion Error: {a}",
             ),
+            RitaCommonError::TunnelManagerError(e) => write!(f, "{e}"),
             RitaCommonError::LoggerError(e) => write!(f, "{e}"),
             RitaCommonError::SetLoggerError(e) => write!(f, "{e}"),
             RitaCommonError::UCIError(a) => write!(f, "{a}",),

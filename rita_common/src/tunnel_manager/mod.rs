@@ -5,16 +5,22 @@
 //! then into TunnelManager to open a tunnel for them.
 
 pub mod contact_peers;
+pub mod error;
 pub mod gc;
 pub mod id_callback;
 pub mod neighbor_status;
 pub mod shaping;
 
 use crate::blockchain_oracle::potential_payment_issues_detected;
+use crate::insert_into_tunnel_list;
 use crate::peer_listener::structs::Peer;
+use crate::tunnel_manager::error::TunnelManagerError;
 use crate::RitaCommonError;
+use crate::Shaper;
 use crate::FAST_LOOP_TIMEOUT;
 use crate::KI;
+use crate::TUNNEL_HANDSHAKE_TIMEOUT;
+use crate::TUNNEL_TIMEOUT;
 use althea_kernel_interface::open_tunnel::TunnelOpenArgs;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
@@ -25,7 +31,6 @@ use babel_monitor::structs::Interface;
 use babel_monitor::unmonitor;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -230,8 +235,8 @@ impl Tunnel {
 
 #[derive(Clone)]
 pub struct TunnelManager {
-    free_ports: VecDeque<u16>,
     tunnels: HashMap<Identity, Vec<Tunnel>>,
+    shaper: Shaper,
 }
 
 impl Default for TunnelManager {
@@ -239,8 +244,6 @@ impl Default for TunnelManager {
         TunnelManager::new()
     }
 }
-
-pub struct GetNeighbors;
 
 #[derive(Debug, Clone)]
 pub struct Neighbor {
@@ -266,31 +269,6 @@ impl Neighbor {
     }
 }
 
-/// This function goes through all tunnels preset in rita memory and add them to babel is they are not present already
-pub fn tm_monitor_check(interface_list: &[Interface]) {
-    // Hashset of all interface names. This allows for an O(n) search instead of O(n^2)
-    let mut interface_map: HashSet<String> = HashSet::new();
-    for int in interface_list {
-        interface_map.insert(int.name.clone());
-    }
-
-    let rita_tunnels = get_tunnel_manager().tunnels;
-    for (_, tunnels) in rita_tunnels.iter() {
-        for tun in tunnels.iter() {
-            if !interface_map.contains(&tun.iface_name) {
-                info!(
-                    "Babel was not monitored a tunnel, Readding the tunnel: {:?}",
-                    tun.iface_name
-                );
-                let res = tun.monitor();
-                if let Err(e) = res {
-                    error!("Unable to re-add tunnel to babel with: {:?}", e);
-                }
-            }
-        }
-    }
-}
-
 pub fn tm_get_neighbors() -> Vec<Neighbor> {
     let tunnel_manager = get_tunnel_manager();
     let mut res = Vec::new();
@@ -307,256 +285,289 @@ pub fn tm_get_neighbors() -> Vec<Neighbor> {
     res
 }
 
-pub fn tm_get_tunnels() -> Result<Vec<Tunnel>, RitaCommonError> {
-    let tunnel_manager = get_tunnel_manager();
-    let mut res = Vec::new();
-    for (_, tunnels) in tunnel_manager.tunnels.iter() {
-        for tunnel in tunnels.iter() {
-            res.push(tunnel.clone());
-        }
-    }
-    Ok(res)
-}
-
-/// Gets a port off of the internal port list after checking that said port is free
-/// with the operating system. It maintains a list of all possible ports and gives out
-/// the oldest port, i.e. when it gives out a port, it pushes it back on the end of the
-/// vecdeque so that by the time we come back around to it, it is either in use, or tunnel
-/// allocation has failed so we can use it without issues.
-fn tm_get_port() -> u16 {
-    let udp_table = KI.used_ports();
+/// Simple helper function to run tunnel GC + check babel interfaces
+pub fn tm_common_slow_loop_helper(babel_interfaces: Vec<Interface>) {
     let tm_pin = &mut *TUNNEL_MANAGER.write().unwrap();
     let tunnel_manager = get_tunnel_manager_write_ref(tm_pin);
-
-    loop {
-        let port = match tunnel_manager.free_ports.pop_front() {
-            Some(a) => a,
-            None => {
-                error!("No elements present in the ports vecdeque");
-                panic!("No elements present in the ports vecdeque")
-            }
-        };
-        tunnel_manager.free_ports.push_back(port);
-        match (port, &udp_table) {
-            (p, Ok(used_ports)) => {
-                if used_ports.contains(&p) {
-                    continue;
-                } else {
-                    return p;
-                }
-            }
-            (_p, Err(e)) => {
-                // better not to open an individual tunnel than it is to
-                // risk having a failed one
-                error!("Failed to check if port was in use! UdpTable from get_port returned error {:?}", e);
-
-                panic!("Failed to check if port was in use! UdpTable from get_port returned error {:?}", e);
-            }
-        }
-    }
-}
-
-/// determines if the list contains a tunnel with the given target ip
-fn have_tunnel_by_ip(ip: IpAddr, tunnels: &[Tunnel]) -> bool {
-    for tunnel in tunnels.iter() {
-        if tunnel.ip == ip {
-            return true;
-        }
-    }
-    false
-}
-
-/// determines if the list contains a tunnel with the given target ifidx
-fn have_tunnel_by_ifidx(ifidx: u32, tunnels: &[Tunnel]) -> bool {
-    for tunnel in tunnels.iter() {
-        if tunnel.listen_ifidx == ifidx {
-            return true;
-        }
-    }
-    false
-}
-
-/// gets the tunnel from the list with the given index
-fn get_tunnel_by_ifidx(ifidx: u32, tunnels: &[Tunnel]) -> Option<&Tunnel> {
-    tunnels.iter().find(|&tunnel| tunnel.listen_ifidx == ifidx)
-}
-
-/// deletes all instances of a given tunnel from the list
-fn del_tunnel(to_del: &Tunnel, tunnels: &mut Vec<Tunnel>) {
-    tunnels.retain(|val| *val != *to_del)
+    tunnel_manager.monitor_check(&babel_interfaces);
+    trace!("Sending tunnel GC");
+    tunnel_manager.tunnel_gc(TUNNEL_TIMEOUT, TUNNEL_HANDSHAKE_TIMEOUT, babel_interfaces);
 }
 
 impl TunnelManager {
     pub fn new() -> Self {
-        let start = settings::get_rita_common().network.wg_start_port;
-        let ports = (start..65535).collect();
         TunnelManager {
-            free_ports: ports,
             tunnels: HashMap::new(),
+            shaper: Shaper::default(),
+        }
+    }
+
+    /// Gets all ports currently in use by TunnelManager
+    fn get_all_used_ports(&self) -> HashSet<u16> {
+        let mut ports = HashSet::new();
+        for (_, tl) in self.tunnels.iter() {
+            for t in tl {
+                if !ports.insert(t.listen_port) {
+                    // we panic here in tests so we can identify the issue
+                    if cfg!(test) || cfg!(integration_test) || cfg!(legacy_integration_test) {
+                        panic!("Found duplicate port in use by tunnel manager!?");
+                    }
+                }
+            }
+        }
+        ports
+    }
+
+    /// Gets a port off of the internal port list after checking that said port is free
+    /// with the operating system.
+    fn get_next_available_port(&self) -> Result<u16, TunnelManagerError> {
+        let udp_table = KI.used_ports()?;
+        let used_ports = self.get_all_used_ports();
+
+        let start = settings::get_rita_common().network.wg_start_port;
+        for port in start..65535 {
+            if udp_table.contains(&port) || used_ports.contains(&port) {
+                continue;
+            } else {
+                return Ok(port);
+            }
+        }
+        Err(TunnelManagerError::NoFreePortsError)
+    }
+
+    /// This function goes through all tunnels preset in rita memory and add them to babel is they are not present already
+    pub fn monitor_check(&self, interface_list: &[Interface]) {
+        // Hashset of all interface names. This allows for an O(n) search instead of O(n^2)
+        let mut interface_map: HashSet<String> = HashSet::new();
+        for int in interface_list {
+            interface_map.insert(int.name.clone());
+        }
+
+        let rita_tunnels = self.tunnels.iter();
+        for (_, tunnels) in rita_tunnels {
+            for tun in tunnels.iter() {
+                if !interface_map.contains(&tun.iface_name) {
+                    info!(
+                        "Babel was not monitored a tunnel, Readding the tunnel: {:?}",
+                        tun.iface_name
+                    );
+                    let res = tun.monitor();
+                    if let Err(e) = res {
+                        error!("Unable to re-add tunnel to babel with: {:?}", e);
+                    }
+                }
+            }
+        }
+    }
+
+    /// gets the tunnel from the list with the same ifidx, ip, and identity
+    fn get_tunnel_mut(&mut self, ifidx: u32, ip: IpAddr, id: Identity) -> Option<&mut Tunnel> {
+        for (index_id, tunnel_list) in self.tunnels.iter_mut() {
+            for tunnel in tunnel_list.iter_mut() {
+                // ensure a match, including an index match to protect against misfiled tunnels
+                if tunnel.listen_ifidx == ifidx
+                    && tunnel.neigh_id.global == id
+                    && *index_id == id
+                    && tunnel.ip == ip
+                {
+                    return Some(tunnel);
+                }
+            }
+        }
+        None
+    }
+
+    /// deletes all instances of a given tunnel with the same ip, ifidx, and wgkey
+    fn del_tunnel(&mut self, target_tunnel: Tunnel) {
+        // the problem with just running 'retain' with the tunnel is that duplicates may remain
+        // say for example a duplicate tunnel set has different open times, the duplicate would
+        // not be equal and thus not be deleted.
+        // Instead we find matching tunnels and then mark them for deletion, the tunnel won't change out
+        // from under us so we can be sure that the matches we found are being deleted in the second loop
+        for (_, tunnel_list) in self.tunnels.iter_mut() {
+            let mut tunnels_to_delete: Vec<Tunnel> = Vec::new();
+
+            for tunnel in tunnel_list.iter() {
+                if target_tunnel.listen_ifidx == tunnel.listen_ifidx
+                    && target_tunnel.ip == tunnel.ip
+                    && target_tunnel.neigh_id.global == tunnel.neigh_id.global
+                {
+                    tunnels_to_delete.push(tunnel.clone());
+                }
+            }
+
+            for to_del in tunnels_to_delete {
+                tunnel_list.retain(|val| *val != to_del)
+            }
+        }
+    }
+
+    /// Creates a new tunnel and inserts it into the tunnel index
+    fn create_new_tunnel(
+        &mut self,
+        peer_ip: IpAddr,
+        ifidx: u32,
+        their_localid: LocalIdentity,
+    ) -> Result<Tunnel, RitaCommonError> {
+        let our_port = self.get_next_available_port()?;
+        // Create new tunnel
+        let tunnel = Tunnel::new(peer_ip, our_port, ifidx, their_localid);
+        match tunnel {
+            Ok(tunnel) => {
+                trace!("Tunnel {:?} is open", tunnel);
+                insert_into_tunnel_list(&tunnel, &mut self.tunnels);
+                Ok(tunnel)
+            }
+            Err(e) => {
+                error!("Unable to open tunnel {}", e);
+                Err(e)
+            }
         }
     }
 
     /// Given a LocalIdentity, connect to the neighbor over wireguard
-    /// return the tunnel object and if already had a tunnel
+    /// return the tunnel object and if we already had a tunnel
     pub fn open_tunnel(
         &mut self,
         their_localid: LocalIdentity,
         peer: Peer,
-        our_port: u16,
     ) -> Result<(Tunnel, bool), RitaCommonError> {
         trace!("getting existing tunnel or opening a new one");
-        // ifidx must be a part of the key so that we can open multiple tunnels
-        // if we have more than one physical connection to the same peer
-        let key = their_localid.global;
 
-        let we_have_tunnel = match self.tunnels.get(&key) {
-            Some(tunnels) => {
-                have_tunnel_by_ifidx(peer.ifidx, tunnels)
-                    && have_tunnel_by_ip(peer.contact_socket.ip(), tunnels)
-            }
-            None => false,
-        };
+        let our_tunnel =
+            self.get_tunnel_mut(peer.ifidx, peer.contact_socket.ip(), their_localid.global);
 
         // when we don't know take the more conservative option and assume they do have a tunnel
         let they_have_tunnel = their_localid.have_tunnel.unwrap_or(true);
 
-        let mut return_bool = false;
-        if we_have_tunnel {
-            // Scope the last_contact bump to let go of self.tunnels before next use
-            {
-                let tunnels = match self.tunnels.get_mut(&key) {
-                    Some(a) => a,
-                    None => {
-                        error!("Logic Error: Identity {:?} doesnt exist", key.clone());
-                        panic!("Identity not in hashmap");
-                    }
-                };
-                for tunnel in tunnels.iter_mut() {
-                    if tunnel.listen_ifidx == peer.ifidx && tunnel.ip == peer.contact_socket.ip() {
-                        info!("We already have a tunnel for {}", tunnel);
-                        trace!(
-                            "Bumping timestamp after {}s for tunnel: {}",
-                            tunnel.last_contact.elapsed().as_secs(),
-                            tunnel
-                        );
-                        tunnel.last_contact = Instant::now();
-                        // update the nickname in case they changed it live
-                        tunnel.neigh_id.global.nickname = their_localid.global.nickname;
-                    }
-                }
-            }
+        match our_tunnel {
+            Some(our_tunnel) => {
+                // bump the last seen time on this tunnel so it doesn't get deleted
+                our_tunnel.last_contact = Instant::now();
+                // update the nickname in case they changed it live
+                our_tunnel.neigh_id.global.nickname = their_localid.global.nickname;
 
-            if they_have_tunnel {
-                trace!("Looking up for a tunnels by {:?}", key);
-                // Unwrap is safe because we confirm membership
-                let tunnels = &self.tunnels[&key];
-                // Filter by Tunnel::ifidx
-                trace!(
-                    "Got tunnels by key {:?}: {:?}. Ifidx is {}",
-                    key,
-                    tunnels,
-                    peer.ifidx
-                );
-                let tunnel = match get_tunnel_by_ifidx(peer.ifidx, tunnels) {
-                    Some(a) => a,
-                    _ => {
-                        error!("Unable to find tunnel by ifidx how did this happen?");
-                        panic!("Unable to find tunnel by ifidx how did this happen?");
-                    }
-                };
-
-                return Ok((tunnel.clone(), true));
-            } else {
-                // In the case that we have a tunnel and they don't we drop our existing one
-                // and agree on the new parameters in this message
-                info!(
-                    "We have a tunnel but our peer {:?} does not! Handling",
-                    peer.contact_socket.ip()
-                );
-                // Unwrapping is safe because we confirm membership. This is done
-                // in a separate scope to limit surface of borrow checker.
-                let (tunnel, size) = {
-                    // Find tunnels by identity
-                    let tunnels = match self.tunnels.get_mut(&key) {
-                        Some(a) => a,
-                        None => {
-                            error!("LOGIC ERROR: Unable to find a tunnel that should exist, we already confirmed membership");
-                            panic!("Unable to find tunnel");
-                        }
-                    };
-                    // Find tunnel by interface index
-                    let value = match get_tunnel_by_ifidx(peer.ifidx, tunnels) {
-                        Some(a) => a.clone(),
-                        None => {
-                            error!("LOGIC ERROR: Unable to find a tunnel with ifidx when membership is already confirmed");
-                            panic!("Uanble to find tunnel");
-                        }
-                    };
-                    del_tunnel(&value, tunnels);
-                    // Outer HashMap (self.tunnels) can contain empty HashMaps,
-                    // so the resulting tuple will consist of the tunnel itself, and
-                    // how many tunnels are still associated with that ID.
-                    (value, tunnels.len())
-                };
-                if size == 0 {
-                    // Remove this identity if there are no tunnels associated with it.
-                    self.tunnels.remove(&key);
-                }
-
-                // tell Babel to flush the interface and then delete it
-                let res = tunnel.unmonitor();
-                if res.is_err() {
-                    error!(
-                        "We failed to delete the interface {:?} with {:?} it's now orphaned",
-                        tunnel.iface_name, res
+                if they_have_tunnel {
+                    Ok((our_tunnel.clone(), true))
+                } else {
+                    // In the case that we have a tunnel and they don't we drop our existing one
+                    // and agree on the new parameters in this message
+                    info!(
+                        "We have a tunnel but our peer {:?} does not! Handling",
+                        peer.contact_socket.ip()
                     );
+                    // tell Babel to flush the interface and then delete it, if this fails we continue
+                    // with what we're doing becuase we don't know the state of the remaining tunnel
+                    // so we leave it orphaned to be cleared on system reboot.
+                    let res = our_tunnel.unmonitor();
+                    if res.is_err() {
+                        error!(
+                            "We failed to unmonitor the interface {:?} with {:?} it's now orphaned",
+                            our_tunnel.iface_name, res
+                        );
+                    }
+                    // drop the mutable tunnel reference via cloning
+                    let our_tunnel = our_tunnel.clone();
+                    self.del_tunnel(our_tunnel);
+                    // create a new tunnel with details from this message
+                    let tunnel = self.create_new_tunnel(
+                        peer.contact_socket.ip(),
+                        peer.ifidx,
+                        their_localid,
+                    )?;
+                    Ok((tunnel, true))
                 }
-
-                return_bool = true;
+            }
+            None => {
+                info!(
+                    "no tunnel found for {:?}%{:?} creating",
+                    peer.contact_socket.ip(),
+                    peer.ifidx,
+                );
+                let tunnel =
+                    self.create_new_tunnel(peer.contact_socket.ip(), peer.ifidx, their_localid)?;
+                Ok((tunnel, false))
             }
         }
-        info!(
-            "no tunnel found for {:?}%{:?} creating",
-            peer.contact_socket.ip(),
-            peer.ifidx,
-        );
-
-        let (new_key, tunnel) = create_new_tunnel(
-            peer.contact_socket.ip(),
-            our_port,
-            peer.ifidx,
-            their_localid,
-        )?;
-
-        self.tunnels
-            .entry(new_key)
-            .or_insert_with(Vec::new)
-            .push(tunnel.clone());
-        Ok((tunnel, return_bool))
     }
-}
 
-fn create_new_tunnel(
-    peer_ip: IpAddr,
-    our_port: u16,
-    ifidx: u32,
-    their_localid: LocalIdentity,
-) -> Result<(Identity, Tunnel), RitaCommonError> {
-    // Create new tunnel
-    let tunnel = Tunnel::new(peer_ip, our_port, ifidx, their_localid);
-    let tunnel = match tunnel {
-        Ok(tunnel) => {
-            trace!("Tunnel {:?} is open", tunnel);
-            tunnel
-        }
-        Err(e) => {
-            error!("Unable to open tunnel {}", e);
-            return Err(e);
-        }
-    };
-    let new_key = tunnel.neigh_id.global;
+    /// Updates the tunnel payment state based on if the user has paid or not
+    fn tunnel_payment_state_change(&mut self, msg: TunnelChange) {
+        let id = msg.identity;
+        let action = msg.action;
+        trace!(
+            "Tunnel state change request for {:?} with action {:?}",
+            id,
+            action,
+        );
+        let mut tunnel_bw_limits_need_change = false;
 
-    Ok((new_key, tunnel))
+        // Find a tunnel
+        match self.tunnels.get_mut(&id) {
+            Some(tunnels) => {
+                for tunnel in tunnels.iter_mut() {
+                    trace!("Handle action {} on tunnel {:?}", action, tunnel);
+                    match action {
+                        TunnelAction::PaidOnTime => {
+                            trace!("identity {:?} has paid!", id);
+                            match tunnel.payment_state {
+                                PaymentState::Paid => {
+                                    continue;
+                                }
+                                PaymentState::Overdue => {
+                                    info!(
+                                        "Tunnel {} has returned to a paid state.",
+                                        tunnel.neigh_id.global.wg_public_key
+                                    );
+                                    tunnel.payment_state = PaymentState::Paid;
+                                    tunnel_bw_limits_need_change = true;
+                                    // latency detector probably got confused while enforcement
+                                    // occurred
+                                    tunnel.speed_limit = None;
+                                }
+                            }
+                        }
+                        TunnelAction::PaymentOverdue => {
+                            trace!("No payment from identity {:?}", id);
+                            match tunnel.payment_state {
+                                PaymentState::Paid => {
+                                    info!(
+                                        "Tunnel {} has entered an overdue state.",
+                                        tunnel.neigh_id.global.wg_public_key
+                                    );
+                                    tunnel.payment_state = PaymentState::Overdue;
+                                    tunnel_bw_limits_need_change = true;
+                                }
+                                PaymentState::Overdue => {
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            None => {
+                // This is now pretty common since there's no more none action
+                // and exits have identities for all clients (active or not)
+                // on hand
+                trace!("Couldn't find tunnel for identity {:?}", id);
+            }
+        }
+
+        // this is done outside of the match to make the borrow checker happy
+        if tunnel_bw_limits_need_change {
+            if potential_payment_issues_detected() {
+                warn!("Potential payment issue detected");
+                return;
+            }
+            let res = tunnel_bw_limit_update(&self.tunnels);
+            // if this fails consistently it could be a wallet draining attack
+            // TODO check for that case
+            if res.is_err() {
+                error!("Bandwidth limiting failed with {:?}", res);
+            }
+        }
+    }
 }
 
 pub struct TunnelChange {
@@ -573,86 +584,9 @@ pub fn tm_tunnel_state_change(msg: TunnelStateChange) -> Result<(), RitaCommonEr
     let tm_pin = &mut *TUNNEL_MANAGER.write().unwrap();
     let tunnel_manager = get_tunnel_manager_write_ref(tm_pin);
     for tunnel in msg.tunnels {
-        tunnel_state_change(tunnel, &mut tunnel_manager.tunnels);
+        tunnel_manager.tunnel_payment_state_change(tunnel);
     }
     Ok(())
-}
-
-fn tunnel_state_change(msg: TunnelChange, tunnels: &mut HashMap<Identity, Vec<Tunnel>>) {
-    let id = msg.identity;
-    let action = msg.action;
-    trace!(
-        "Tunnel state change request for {:?} with action {:?}",
-        id,
-        action,
-    );
-    let mut tunnel_bw_limits_need_change = false;
-
-    // Find a tunnel
-    match tunnels.get_mut(&id) {
-        Some(tunnels) => {
-            for tunnel in tunnels.iter_mut() {
-                trace!("Handle action {} on tunnel {:?}", action, tunnel);
-                match action {
-                    TunnelAction::PaidOnTime => {
-                        trace!("identity {:?} has paid!", id);
-                        match tunnel.payment_state {
-                            PaymentState::Paid => {
-                                continue;
-                            }
-                            PaymentState::Overdue => {
-                                info!(
-                                    "Tunnel {} has returned to a paid state.",
-                                    tunnel.neigh_id.global.wg_public_key
-                                );
-                                tunnel.payment_state = PaymentState::Paid;
-                                tunnel_bw_limits_need_change = true;
-                                // latency detector probably got confused while enforcement
-                                // occurred
-                                tunnel.speed_limit = None;
-                            }
-                        }
-                    }
-                    TunnelAction::PaymentOverdue => {
-                        trace!("No payment from identity {:?}", id);
-                        match tunnel.payment_state {
-                            PaymentState::Paid => {
-                                info!(
-                                    "Tunnel {} has entered an overdue state.",
-                                    tunnel.neigh_id.global.wg_public_key
-                                );
-                                tunnel.payment_state = PaymentState::Overdue;
-                                tunnel_bw_limits_need_change = true;
-                            }
-                            PaymentState::Overdue => {
-                                continue;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        None => {
-            // This is now pretty common since there's no more none action
-            // and exits have identities for all clients (active or not)
-            // on hand
-            trace!("Couldn't find tunnel for identity {:?}", id);
-        }
-    }
-
-    // this is done outside of the match to make the borrow checker happy
-    if tunnel_bw_limits_need_change {
-        if potential_payment_issues_detected() {
-            warn!("Potential payment issue detected");
-            return;
-        }
-        let res = tunnel_bw_limit_update(tunnels);
-        // if this fails consistently it could be a wallet draining attack
-        // TODO check for that case
-        if res.is_err() {
-            error!("Bandwidth limiting failed with {:?}", res);
-        }
-    }
 }
 
 /// Takes the tunnels list and iterates over it to update all of the traffic control settings
@@ -737,12 +671,6 @@ pub mod tests {
         tunnels
             .iter_mut()
             .find(|tunnel| tunnel.listen_ifidx == ifidx)
-    }
-
-    #[test]
-    pub fn test_tunnel_manager() {
-        let mut tunnel_manager = TunnelManager::new();
-        assert_eq!(tunnel_manager.free_ports.pop_back().unwrap(), 65534);
     }
 
     #[test]
