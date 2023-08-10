@@ -1,11 +1,12 @@
 use crate::{
+    config::{CONFIG_FILE_PATH, EXIT_CONFIG_PATH},
     payments_althea::get_althea_evm_priv,
     payments_eth::{eth_chain_id, get_miner_address, get_miner_key},
     setup_utils::namespaces::{get_nsfd, Namespace, NamespaceInfo, NodeType, RouteHop},
 };
 use actix_rt::time::sleep;
 use actix_rt::System;
-use althea_kernel_interface::{file_io::write_out, KernelInterfaceError, KI};
+use althea_kernel_interface::KI;
 use althea_proto::cosmos_sdk_proto::cosmos::gov::v1beta1::VoteOption;
 use althea_proto::{
     canto::erc20::v1::RegisterCoinProposal,
@@ -236,13 +237,11 @@ pub const EXIT_ROOT_IP: IpAddr =
     IpAddr::V6(Ipv6Addr::new(0xfd00, 200, 199, 198, 197, 196, 195, 194));
 // this masks public ipv6 ips in the test env and is being used to test assignment
 pub const EXIT_SUBNET: Ipv6Addr = Ipv6Addr::new(0xfbad, 200, 0, 0, 0, 0, 0, 0);
-// this is where the generated config file is saved and loaded from.
-pub const CONFIG_FILE_PATH: &str = "/config.toml";
 
 /// Gets the default client and exit settings handling the pre-launch exchange of exit into and its insertion into
 /// the
 pub fn get_default_settings() -> (RitaClientSettings, RitaExitSettingsStruct) {
-    let mut exit = RitaExitSettingsStruct::new("/althea_rs/settings/test_exit.toml").unwrap();
+    let mut exit = RitaExitSettingsStruct::new(EXIT_CONFIG_PATH).unwrap();
 
     // exit should allow instant registration by any requester
     exit.verif_settings = None;
@@ -909,61 +908,4 @@ pub async fn validate_debt_entry(
     info!("Recieved Debt values {:?}", res);
     let debts = res.get(&from_node).unwrap()[0].clone();
     assert!(f(debts));
-}
-
-pub fn generate_config_file(path: String) -> Result<(), KernelInterfaceError> {
-    let mut lines: Vec<String> = Vec::new();
-
-    let payment = "
-    [payment]\n
-    pay_threshold = \"10000000000000\"\n
-    close_threshold = \"-10000000000000\"\n
-    close_fraction = \"100\"\n
-    buffer_period = 3\n
-    eth_address = \"0x0101010101010101010101010101010101010101\"\n"
-        .to_string();
-    lines.push(payment);
-
-    let network = "
-    [network]\n
-    mesh_ip = \"fd00::1\"\n
-    discovery_ip = \"ff02::1:8\"\n
-    babel_port = 6872\n
-    rita_hello_port = 4876\n
-    rita_contact_port = 4874\n
-    rita_dashboard_port = 4877\n
-    rita_tick_interval = 5\n
-    wg_private_key_path = \"/tmp/priv\"\n
-    wg_start_port = 60000\n
-    tunnel_timeout_seconds = 900\n
-    peer_interfaces = []\n
-    manual_peers = []\n
-    default_route = []\n"
-        .to_string();
-    lines.push(network);
-
-    let dao = "
-    [dao]\n
-    dao_enforcement = false\n
-    cache_timeout_seconds = 600\n
-    node_list = []\n
-    dao_addresses = []\n"
-        .to_string();
-    lines.push(dao);
-
-    let exit = "
-    [exit_client]\n
-    wg_listen_port = 59999\n
-    lan_nics = [\"lo\"]\n"
-        .to_string();
-    lines.push(exit);
-
-    let log = "
-    [log]\n
-    enabled = false\n
-    "
-    .to_string();
-    lines.push(log);
-
-    write_out(&path, lines)
 }
