@@ -826,40 +826,6 @@ fn generate_index_from_subnet(
     Ok(ret as u64)
 }
 
-/// This function run on startup initializes databases and other missing fields from the previous database schema
-/// for ipv6 support. Existing clients in the previous schema will not have an ipv6 addr assigned, so every client is
-/// given one on startup
-pub fn initialize_exisitng_clients_ipv6() -> Result<(), Box<RitaExitError>> {
-    use self::schema::clients::dsl::{clients, mesh_ip};
-    let conn = get_database_connection()?;
-
-    // initialize the assigned_ips database
-    let rita_exit = settings::get_rita_exit();
-    let exit_settings = rita_exit.exit_network;
-    let subnet = exit_settings.subnet;
-
-    if let Some(subnet) = subnet {
-        // If subnet isnt already present in database, create it
-        let subnet_entry = initialize_subnet_datastore(subnet, &conn)?;
-        info!("Subnet Database entry: {:?}", subnet_entry);
-
-        // update all client entries to have an ipv6 addr
-        // 1.) get list of mesh ips
-        // 2.) for each ip, select ipv6 field, if empty set an ipv6, else continue
-        let filtered_list = clients.select(mesh_ip);
-        let ip_list = match filtered_list.load::<String>(&conn) {
-            Ok(a) => a,
-            Err(e) => return Err(Box::new(e.into())),
-        };
-
-        for ip in ip_list {
-            assign_ip_to_client(ip, subnet, &conn)?;
-        }
-    }
-
-    Ok(())
-}
-
 /// This function updates the clients database with an added entry in the internet ipv6 field
 /// that stores client ipv6 addrs. ipv6 addrs are stored in the form of "fd00:1330/64,fde0::1100/40" etc
 /// with a comma being the delimiter

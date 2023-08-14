@@ -34,7 +34,6 @@ use rita_common::rita_loop::write_to_disk::save_to_disk_loop;
 use rita_common::rita_loop::write_to_disk::SettingsOnDisk;
 use rita_common::usage_tracker::save_usage_on_shutdown;
 use rita_common::utils::env_vars_contains;
-use rita_exit::database::database_tools::initialize_exisitng_clients_ipv6;
 use rita_exit::database::sms::send_admin_notification_sms;
 use rita_exit::initialize_db_pool;
 use rita_exit::operator_update::update_loop::start_operator_update_loop;
@@ -153,11 +152,6 @@ fn main() {
 
     // Initialize db pool
     initialize_db_pool();
-
-    // Setup database for ipv6
-    if let Err(e) = initialize_exisitng_clients_ipv6() {
-        error!("Unable to run database initialization with {:?}", e);
-    }
 
     let system = actix_async::System::new();
 
