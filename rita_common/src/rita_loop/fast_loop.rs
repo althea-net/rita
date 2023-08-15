@@ -13,7 +13,6 @@ use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_neighs;
 use babel_monitor::parse_routes;
-use futures::future::join3;
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -85,17 +84,18 @@ pub fn start_rita_fast_loop() {
                     // updating blockchain info often is easier than dealing with edge cases
                     // like out of date nonces or balances, also users really really want fast
                     // balance updates, think very long and very hard before running this more slowly
-                    let bou = BlockchainOracleUpdate();
+                    BlockchainOracleUpdate().await;
+                    info!("Finished oracle update!");
                     // Check on payments, only really needs to be run this quickly
                     // on large nodes where very high variation in throughput can result
                     // in blowing through the entire grace in less than a minute
-                    let val = validate();
+                    validate().await;
+                    info!("Finished validated!");
                     // Process payments queued for sending, needs to be run often for
                     // the same reason as the validate code, during high throughput periods
                     // payments must be sent quickly to avoid enforcement
-                    let tpc = tick_payment_controller();
-                    // execute the above in parallel
-                    join3(bou, val, tpc).await;
+                    tick_payment_controller().await;
+                    info!("Finished tick payment controller!");
                 });
                 info!(
                     "Common Fast tick completed in {}s {}ms",
