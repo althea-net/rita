@@ -7,8 +7,9 @@ use crate::setup_utils::database::start_postgres;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    generate_traffic, get_default_settings, get_ip_from_namespace, query_debts, register_to_exit,
-    test_all_internet_connectivity, test_reach_all, test_routes, DEBT_ACCURACY_THRES,
+    generate_traffic, get_default_settings, get_ip_from_namespace, query_debts,
+    register_all_namespaces_to_exit, test_all_internet_connectivity, test_reach_all, test_routes,
+    DEBT_ACCURACY_THRES,
 };
 use althea_types::Identity;
 use log::info;
@@ -44,7 +45,8 @@ pub async fn run_debts_test() {
     let namespaces = node_config.0;
     let expected_routes = node_config.1;
 
-    let (rita_settings, rita_exit_settings) = get_default_settings();
+    let (client_settings, exit_settings) =
+        get_default_settings("test".to_string(), namespaces.clone());
 
     // The exit price is set to ns.cost during thread_spawner
     let exit_price = namespaces.get_namespace(4).unwrap().cost;
@@ -55,7 +57,7 @@ pub async fn run_debts_test() {
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let rita_identities = thread_spawner(namespaces.clone(), rita_settings, rita_exit_settings)
+    let rita_identities = thread_spawner(namespaces.clone(), client_settings, exit_settings)
         .expect("Could not spawn Rita threads");
     // There should be only 1 exit identity
     let exit_identity = rita_identities
@@ -71,16 +73,7 @@ pub async fn run_debts_test() {
     test_routes(namespaces.clone(), expected_routes);
 
     info!("Registering routers to the exit");
-    for r in namespaces.names.clone() {
-        if let NodeType::Client = r.node_type {
-            let res = register_to_exit(r.get_name()).await;
-            if !res.is_success() {
-                panic!("Failed to register {} to exit with {:?}", r.get_name(), res);
-            } else {
-                info!("{} registered to exit", r.get_name());
-            }
-        }
-    }
+    register_all_namespaces_to_exit(namespaces.clone()).await;
 
     // Let network stabalize
     thread::sleep(Duration::from_secs(20));
@@ -132,8 +125,9 @@ pub async fn run_debts_test() {
         // if to_node is none, we are querying the internet, so last node has to be an exit node
         if to_node.is_none() {
             exit_node = query_nodes.pop();
-            if exit_node.clone().unwrap().node_type != NodeType::Exit {
-                panic!("Why is last element not an exit?");
+            match exit_node.clone().unwrap().node_type {
+                NodeType::Exit { .. } => {}
+                _ => panic!("Why is last element not an exit?"),
             }
         }
 

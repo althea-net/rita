@@ -1,17 +1,18 @@
 use crate::five_nodes::five_node_config;
 use crate::setup_utils::database::start_postgres;
+use crate::setup_utils::namespaces::setup_ns;
 use crate::setup_utils::namespaces::Namespace;
-use crate::setup_utils::namespaces::{setup_ns, NodeType};
 use crate::setup_utils::rita::thread_spawner;
-use crate::utils::{generate_traffic, validate_debt_entry};
+use crate::utils::{generate_traffic, register_all_namespaces_to_exit, validate_debt_entry};
 use crate::utils::{
-    get_default_settings, register_to_exit, send_eth_bulk, test_reach_all, test_routes,
-    TEST_PAY_THRESH,
+    get_default_settings, send_eth_bulk, test_reach_all, test_routes, TEST_PAY_THRESH,
 };
 use clarity::Address as EthAddress;
 use clarity::{PrivateKey as EthPrivateKey, Uint256};
 use log::info;
 use rita_common::debt_keeper::GetDebtsResult;
+use settings::client::RitaClientSettings;
+use settings::exit::RitaExitSettingsStruct;
 use std::thread;
 use std::time::Duration;
 use web30::client::Web3;
@@ -43,11 +44,12 @@ pub async fn run_eth_payments_test_scenario() {
     let namespaces = node_config.0;
     let expected_routes = node_config.1;
 
-    let (mut rita_settings, mut rita_exit_settings) = get_default_settings();
+    let (mut client_settings, mut exit_settings) =
+        get_default_settings("test".to_string(), namespaces.clone());
 
     // Set payment thresholds low enough so that they get triggered after an iperf
-    rita_settings.payment.payment_threshold = TEST_PAY_THRESH.into();
-    rita_exit_settings.payment.payment_threshold = TEST_PAY_THRESH.into();
+    let (client_settings, exit_settings) =
+        eth_payments_map(&mut client_settings, &mut exit_settings);
 
     namespaces.validate();
     start_postgres();
@@ -55,7 +57,7 @@ pub async fn run_eth_payments_test_scenario() {
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let rita_identities = thread_spawner(namespaces.clone(), rita_settings, rita_exit_settings)
+    let rita_identities = thread_spawner(namespaces.clone(), client_settings, exit_settings)
         .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
@@ -63,16 +65,7 @@ pub async fn run_eth_payments_test_scenario() {
     test_routes(namespaces.clone(), expected_routes);
 
     info!("Registering routers to the exit");
-    for r in namespaces.names.clone() {
-        if let NodeType::Client = r.node_type {
-            let res = register_to_exit(r.get_name()).await;
-            if !res.is_success() {
-                panic!("Failed to register {} to exit with {:?}", r.get_name(), res);
-            } else {
-                info!("{} registered to exit", r.get_name());
-            }
-        }
-    }
+    register_all_namespaces_to_exit(namespaces.clone()).await;
 
     thread::sleep(Duration::from_secs(10));
 
@@ -116,4 +109,13 @@ fn eth_payment_conditions(debts: GetDebtsResult) -> bool {
         ),
         (true, true)
     )
+}
+
+fn eth_payments_map(
+    c_set: &mut RitaClientSettings,
+    exit_set: &mut RitaExitSettingsStruct,
+) -> (RitaClientSettings, RitaExitSettingsStruct) {
+    c_set.payment.payment_threshold = TEST_PAY_THRESH.into();
+    exit_set.payment.payment_threshold = TEST_PAY_THRESH.into();
+    (c_set.clone(), exit_set.clone())
 }

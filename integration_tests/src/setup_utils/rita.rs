@@ -1,9 +1,13 @@
+use crate::utils::TEST_EXIT_DETAILS;
+
 use super::babel::spawn_babel;
 use super::namespaces::get_nsfd;
 use super::namespaces::NamespaceInfo;
 use super::namespaces::NodeType;
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::Identity;
+use ipnetwork::IpNetwork;
+use ipnetwork::Ipv6Network;
 use log::info;
 use nix::sched::{setns, CloneFlags};
 use rita_client::{
@@ -44,8 +48,8 @@ pub struct InstanceData {
 /// returns data about the spanwed instances that is used for coordination
 pub fn thread_spawner(
     namespaces: NamespaceInfo,
-    rita_settings: RitaClientSettings,
-    rita_exit_settings: RitaExitSettingsStruct,
+    client_settings: RitaClientSettings,
+    exit_settings: RitaExitSettingsStruct,
 ) -> Result<InstanceData, KernelInterfaceError> {
     let mut instance_data = InstanceData::default();
     let babeld_path = "/var/babeld/babeld/babeld".to_string();
@@ -65,21 +69,22 @@ pub fn thread_spawner(
 
         // todo spawn exits first in order to pass data to the clients? Or configure via endpoints later?
 
-        match ns.node_type {
-            NodeType::Client => {
+        match ns.node_type.clone() {
+            NodeType::Client { cluster_name: _ } => {
                 let instance_info = spawn_rita(
                     ns.get_name(),
                     veth_interfaces,
-                    rita_settings.clone(),
+                    client_settings.clone(),
                     ns.cost,
                 );
                 instance_data.client_identities.push(instance_info);
             }
-            NodeType::Exit => {
+            NodeType::Exit { instance_name } => {
                 let instance_info = spawn_rita_exit(
                     ns.get_name(),
+                    instance_name,
                     veth_interfaces,
-                    rita_exit_settings.clone(),
+                    exit_settings.clone(),
                     ns.cost as u64,
                     ns.cost,
                 );
@@ -183,6 +188,7 @@ pub fn spawn_rita(
 /// Spawn a thread for rita given a NamespaceInfo which will be assigned to the namespace given
 pub fn spawn_rita_exit(
     ns: String,
+    instance_name: String,
     veth_interfaces: HashSet<String>,
     mut resettings: RitaExitSettingsStruct,
     exit_fee: u64,
@@ -217,6 +223,17 @@ pub fn spawn_rita_exit(
             0,
             id.try_into().unwrap(),
         )));
+        let instance = TEST_EXIT_DETAILS
+            .get("test")
+            .unwrap()
+            .instances
+            .get(&instance_name)
+            .expect("Why is there no instance?");
+        resettings.exit_network.subnet = Some(IpNetwork::V6(
+            Ipv6Network::new(instance.subnet, 40).unwrap(),
+        ));
+        resettings.network.wg_private_key = Some(instance.wg_priv_key);
+        resettings.network.wg_public_key = Some(instance.wg_pub_key);
         resettings.network.wg_private_key_path = wg_keypath;
         resettings.network.peer_interfaces = veth_interfaces;
         resettings.payment.local_fee = local_fee;
@@ -227,10 +244,7 @@ pub fn spawn_rita_exit(
         resettings.db_uri = "postgresql://postgres@10.0.0.1/test".to_string();
 
         // mirrored from rita_bin/src/exit.rs
-        let mut resettings = clu::exit_init("linux", resettings);
-
-        // the exit must be added to the cluster after generating appropriate details
-        resettings.exit_network.cluster_exits = vec![resettings.get_identity().unwrap()];
+        let resettings = clu::exit_init("linux", resettings);
 
         set_flag_config(config_path.into());
         settings::set_rita_exit(resettings.clone());

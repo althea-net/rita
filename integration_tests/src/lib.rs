@@ -1,8 +1,12 @@
+#[macro_use]
+extern crate lazy_static;
+
 use std::time::Duration;
 
 pub mod config;
 pub mod debts;
 pub mod five_nodes;
+pub mod mutli_exit;
 pub mod payments_althea;
 pub mod payments_eth;
 pub mod setup_utils;
