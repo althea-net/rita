@@ -1,6 +1,6 @@
 [package]
 name = "rita_exit"
-version = "0.20.27"
+version = "0.20.28"
 edition = "2018"
 license = "Apache-2.0"
 
