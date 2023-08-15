@@ -15,7 +15,7 @@ use std::fs::File;
 use std::io::Read;
 use std::net::IpAddr;
 use std::path::Path;
-use std::str;
+use std::{str, thread};
 
 mod error;
 pub use error::NewCluError;
@@ -58,23 +58,26 @@ pub fn cleanup() -> Result<(), NewCluError> {
         static ref RE: Regex = Regex::new(r"^wg[0-9]+$").unwrap();
     }
 
+    let mut interfaces: Vec<String> = Vec::new();
+
     for i in KI.get_interfaces()? {
         if RE.is_match(&i) {
-            if let Err(e) = KI.del_interface(&i) {
-                trace!("Failed to delete wg# {:?}", e);
-            }
+            interfaces.push(i);
         }
     }
+    interfaces.push("wg_exit".to_string());
+    interfaces.push("wg_exit_v2".to_string());
 
-    if let Err(e) = KI.del_interface("wg_exit") {
-        trace!("Failed to delete wg_exit {:?}", e);
-    }
-
-    if let Err(e) = KI.del_interface("wg_exit_v2") {
-        trace!("Failed to delete wg_exit_v2 {:?}", e);
-    }
-
+    del_multiple_interfaces(interfaces);
     Ok(())
+}
+
+/// Given a list of interfaces, deletes all them in parallel
+pub fn del_multiple_interfaces(interfaces: Vec<String>) {
+    for name in interfaces {
+        // run each command in its own thread to prevent
+        thread::spawn(move || KI.del_interface(&name.clone()));
+    }
 }
 
 fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, NewCluError> {
