@@ -1,6 +1,6 @@
 [package]
 name = "rita_bin"
-version = "0.21.0"
+version = "0.21.1"
 edition = "2018"
 license = "Apache-2.0"
 build = "build.rs"
