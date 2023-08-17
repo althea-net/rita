@@ -55,7 +55,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v1
       - name: Cross test mips
-        run: cargo install cross && cross test --target mips-unknown-linux-musl --verbose -- --test-threads=1
+        run: cargo install cross && cross test --target mips-unknown-linux-musl --verbose --all -- --test-threads=1
   cross-mipsel:
     needs: test
     runs-on: ubuntu-latest
@@ -63,7 +63,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v1
       - name: Cross test mipsel
-        run: cargo install cross && cross test --target mipsel-unknown-linux-musl --verbose -- --test-threads=1
+        run: cargo install cross && cross test --target mipsel-unknown-linux-musl --verbose --all -- --test-threads=1
   cross-aarch64:
     needs: test
     runs-on: ubuntu-latest
@@ -71,7 +71,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v1
       - name: Cross test aarch64
-        run: cargo install cross && cross test --target aarch64-unknown-linux-musl --verbose -- --test-threads=1
+        run: cargo install cross && cross test --target aarch64-unknown-linux-musl --verbose --all -- --test-threads=1
   cross-armv7:
     needs: test
     runs-on: ubuntu-latest
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v1
       - name: Cross test armv7
-        run: cargo install cross && cross test --target armv7-unknown-linux-musleabihf --verbose -- --test-threads=1
+        run: cargo install cross && cross test --target armv7-unknown-linux-musleabihf --verbose --all -- --test-threads=1
   legacy_integration-test-with-backcompat:
     needs: test
     runs-on: ubuntu-latest
