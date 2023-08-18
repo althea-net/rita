@@ -142,9 +142,9 @@ fn main() {
 
     start_rita_common_loops();
     start_rita_client_loops();
-    save_to_disk_loop(SettingsOnDisk::RitaClientSettings(
+    save_to_disk_loop(SettingsOnDisk::RitaClientSettings(Box::new(
         settings::get_rita_client(),
-    ));
+    )));
     start_core_rita_endpoints(4);
     start_client_dashboard(settings.network.rita_dashboard_port);
     start_antenna_forwarder(settings);

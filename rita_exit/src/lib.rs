@@ -18,20 +18,11 @@ use actix_async::System;
 use actix_web_async::web;
 use actix_web_async::App;
 use actix_web_async::HttpServer;
-use althea_kernel_interface::KI;
 pub use error::RitaExitError;
-use r2d2::PooledConnection;
 
 pub use crate::database::database_tools::*;
 pub use crate::database::database_tools::*;
-pub use crate::database::db_client::*;
-pub use crate::database::email::*;
 pub use crate::database::geoip::*;
-pub use crate::database::sms::*;
-use crate::network_endpoints::nuke_db;
-use diesel::r2d2::ConnectionManager;
-use diesel::r2d2::Pool;
-use diesel::PgConnection;
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
@@ -45,45 +36,7 @@ use rita_common::dashboard::wallet::*;
 use rita_common::dashboard::wg_key::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::version;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::RwLock;
 use std::thread;
-
-lazy_static! {
-    pub static ref DB_POOL: Arc<RwLock<HashMap<u32, Pool<ConnectionManager<PgConnection>>>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-}
-
-pub fn initialize_db_pool() {
-    let db_uri = settings::get_rita_exit().db_uri;
-    if !(db_uri.contains("postgres://")
-        || db_uri.contains("postgresql://")
-        || db_uri.contains("psql://"))
-    {
-        panic!("You must provide a valid postgressql database uri!");
-    }
-    let manager = ConnectionManager::new(settings::get_rita_exit().db_uri);
-    let db_pool = &mut *DB_POOL.write().unwrap();
-    let netns = KI.check_integration_test_netns();
-
-    db_pool.insert(
-        netns,
-        r2d2::Pool::builder()
-            .max_size(settings::get_rita_exit().workers + 1)
-            .build(manager)
-            .expect("Failed to create pool. Check exit IP is trusted to access postgresql"),
-    );
-}
-
-pub fn get_db_pool() -> Option<PooledConnection<ConnectionManager<PgConnection>>> {
-    let netns = KI.check_integration_test_netns();
-    let db_pool = DB_POOL.read().unwrap();
-    db_pool
-        .get(&netns)
-        .expect("This should be initialized at startup")
-        .try_get()
-}
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Args {
@@ -121,7 +74,6 @@ pub fn start_rita_exit_dashboard() {
                     .route("/version", web::get().to(version))
                     .route("/wg_public_key", web::get().to(get_wg_public_key))
                     .route("/wipe", web::post().to(wipe))
-                    .route("/database", web::delete().to(nuke_db))
                     .route("/debts", web::get().to(get_debts))
                     .route("/debts/reset", web::post().to(reset_debt))
                     .route("/withdraw/{address}/{amount}", web::post().to(withdraw))

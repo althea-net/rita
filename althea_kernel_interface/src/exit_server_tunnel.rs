@@ -6,10 +6,10 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use KernelInterfaceError as Error;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ExitClient {
     pub internal_ip: IpAddr,
-    pub internet_ipv6_list: Vec<IpNetwork>,
+    pub internet_ipv6: Option<IpNetwork>,
     pub public_key: WgKey,
     pub mesh_ip: IpAddr,
     pub port: u16,
@@ -39,15 +39,13 @@ impl dyn KernelInterface {
 
         for c in clients.iter() {
             // For the allowed IPs, we appends the clients internal ip as well
-            // as the client ipv6 assigned list and add this to wireguards allowed ips
-            // internet_ipv6_list is already in the form of "<subnet1>,<subnet2>.."
-            let i_ipv6 = &c.internet_ipv6_list;
+            // as the client ipv6 assigned ip and add this to wireguards allowed ips
+            // internet_ipv6 is already in the form of "<subnet1>,<subnet2>.."
+            let i_ipv6 = &c.internet_ipv6;
             let mut allowed_ips = c.internal_ip.to_string().to_owned();
-            if !i_ipv6.is_empty() {
-                for ip_net in i_ipv6 {
-                    allowed_ips.push(',');
-                    allowed_ips.push_str(&ip_net.to_string());
-                }
+            if let Some(i_ipv6) = i_ipv6 {
+                allowed_ips.push(',');
+                allowed_ips.push_str(&i_ipv6.to_string());
             }
 
             args.push("peer".into());

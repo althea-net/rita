@@ -7,7 +7,7 @@ license = "Apache-2.0"
 
 [dependencies]
 compressed_log = "0.5"
-num-traits="0.2"
+num-traits = "0.2"
 num256 = "0.5"
 serde = "1.0"
 serde_derive = "1.0"
@@ -25,20 +25,19 @@ lettre = "0.10"
 rand = "0.8.0"
 phonenumber = "0.3"
 babel_monitor = { path = "../babel_monitor" }
-arrayvec = {version= "0.7", features = ["serde"]}
+arrayvec = { version = "0.7", features = ["serde"] }
 sodiumoxide = "0.2"
-clu = { path = "../clu" }
 web30 = "1.0"
 awc = "3.1"
 ipnetwork = "0.20"
-actix-async = {package="actix", version = "0.13"}
-actix-web-async = { package="actix-web", version = "4.3", default_features = false, features= ["openssl"]}
-actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.8.0"}
+actix-async = { package = "actix", version = "0.13" }
+actix-web-async = { package = "actix-web", version = "4.3", default_features = false, features = [
+    "openssl",
+] }
 clarity = "1.2"
 openssh-keys = "0.6"
 mac_address = "1.1.4"
 futures = { version = "0.3", features = ["compat"] }
-deep_space = {workspace = true}
 
 [lib]
 name = "rita_client"

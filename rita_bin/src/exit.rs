@@ -13,8 +13,6 @@
 #![allow(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
-use std::collections::HashSet;
-
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
 #[cfg(feature = "jemalloc")]
@@ -25,7 +23,6 @@ static GLOBAL: Jemalloc = Jemalloc;
 extern crate log;
 
 use docopt::Docopt;
-use ipnetwork::IpNetwork;
 use rita_common::debt_keeper::save_debt_on_shutdown;
 use rita_common::logging::enable_remote_logging;
 use rita_common::rita_loop::start_core_rita_endpoints;
@@ -34,8 +31,6 @@ use rita_common::rita_loop::write_to_disk::save_to_disk_loop;
 use rita_common::rita_loop::write_to_disk::SettingsOnDisk;
 use rita_common::usage_tracker::save_usage_on_shutdown;
 use rita_common::utils::env_vars_contains;
-use rita_exit::database::sms::send_admin_notification_sms;
-use rita_exit::initialize_db_pool;
 use rita_exit::operator_update::update_loop::start_operator_update_loop;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 use rita_exit::rita_loop::start_rita_exit_loop;
@@ -56,28 +51,6 @@ fn sanity_check_config() {
 
     // check wg_exit_v2 port is valid
     assert!(exit_settings.exit_network.wg_v2_tunnel_port < 59999);
-
-    // Check that there is atleast one exit in cluster
-    assert!(!exit_settings.exit_network.cluster_exits.is_empty());
-
-    // Check cluster exits have different ips and wg_keys
-    let mut ip_sub: Option<IpNetwork> = None;
-    let mut wg_key_hashset = HashSet::new();
-    for id in exit_settings.exit_network.cluster_exits.iter() {
-        if let Some(net) = ip_sub {
-            if net.contains(id.mesh_ip) {
-                panic!("Ips in cluster exits collide in /116 subnet");
-            }
-        } else {
-            ip_sub = Some(IpNetwork::new(id.mesh_ip, 116).unwrap())
-        }
-
-        if wg_key_hashset.contains(&id.wg_public_key) {
-            panic!("Conflicting wg keys in cluster exits, please fix");
-        } else {
-            wg_key_hashset.insert(id.wg_public_key);
-        }
-    }
 }
 
 fn main() {
@@ -148,19 +121,14 @@ fn main() {
     );
     trace!("Starting with Identity: {:?}", settings.get_identity());
 
-    send_admin_notification_sms("Exit restarted");
-
-    // Initialize db pool
-    initialize_db_pool();
-
     let system = actix_async::System::new();
 
     start_rita_common_loops();
     start_rita_exit_loop();
     start_operator_update_loop();
-    save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(
+    save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(Box::new(
         settings::get_rita_exit(),
-    ));
+    )));
 
     let workers = settings.workers;
     start_core_rita_endpoints(workers as usize);

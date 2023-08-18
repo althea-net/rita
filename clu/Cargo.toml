@@ -10,15 +10,12 @@ althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }
 lazy_static = "1.4"
 log = "0.4"
-env_logger = "0.10.0"
 ipgen = "1.0.1"
 rand = "0.8"
-serde = "1.0"
-serde_derive = "1.0"
 serde_json = "1.0"
 clarity = "1.2"
 sodiumoxide = "0.2"
-deep_space = {workspace = true}
+deep_space = { workspace = true }
 
 [dependencies.regex]
 version = "1.5"

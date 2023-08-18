@@ -18,7 +18,6 @@ use rita_common::rita_loop::{
     start_core_rita_endpoints, start_rita_common_loops,
     write_to_disk::{save_to_disk_loop, SettingsOnDisk},
 };
-use rita_exit::initialize_db_pool;
 use rita_exit::{
     operator_update::update_loop::start_operator_update_loop,
     rita_loop::{start_rita_exit_endpoints, start_rita_exit_loop},
@@ -164,9 +163,9 @@ pub fn spawn_rita(
 
         start_rita_common_loops();
         start_rita_client_loops();
-        save_to_disk_loop(SettingsOnDisk::RitaClientSettings(
+        save_to_disk_loop(SettingsOnDisk::RitaClientSettings(Box::new(
             settings::get_rita_client(),
-        ));
+        )));
         start_core_rita_endpoints(4);
         start_client_dashboard(s.network.rita_dashboard_port);
         start_antenna_forwarder(s);
@@ -254,14 +253,12 @@ pub fn spawn_rita_exit(
 
         let system = actix_async::System::new();
 
-        initialize_db_pool();
-
         start_rita_common_loops();
         start_rita_exit_loop();
         start_operator_update_loop();
-        save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(
+        save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(Box::new(
             settings::get_rita_exit(),
-        ));
+        )));
 
         let workers = 4;
         start_core_rita_endpoints(workers as usize);

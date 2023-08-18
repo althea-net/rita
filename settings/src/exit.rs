@@ -5,7 +5,6 @@ use crate::{json_merge, set_rita_exit, setup_accepted_denoms, SettingsError};
 use althea_types::{Identity, WgKey};
 use core::str::FromStr;
 use ipnetwork::IpNetwork;
-use phonenumber::PhoneNumber;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
 use std::path::Path;
@@ -23,18 +22,12 @@ pub struct ExitNetworkSettings {
     pub exit_price: u64,
     /// This is the exit's own ip/gateway ip in the exit wireguard tunnel
     pub own_internal_ip: Ipv4Addr,
-    /// This is the start of the exit tunnel's internal address allocation to clients, incremented
-    /// by 1 every time a new client is added
-    pub exit_start_ip: Ipv4Addr,
     /// The netmask, in bits to mask out, for the exit tunnel
     pub netmask: u8,
     /// The subnet we use to assign to client routers for ipv6
     pub subnet: Option<IpNetwork>,
     /// The specified client subnet, else use /56
     pub client_subnet_size: Option<u8>,
-    /// Time in seconds before user is dropped from the db due to inactivity
-    /// 0 means disabled
-    pub entry_timeout: u32,
     /// api credentials for Maxmind geoip
     pub geoip_api_user: Option<String>,
     pub geoip_api_key: Option<String>,
@@ -45,13 +38,6 @@ pub struct ExitNetworkSettings {
     pub wg_private_key: WgKey,
     /// path for the exit tunnel keyfile must be distinct from the common tunnel path!
     pub wg_private_key_path: String,
-    /// Magic phone number operators enter in order to register to exit without auth
-    pub magic_phone_number: Option<String>,
-    /// Lists of exit ip addrs in this cluster
-    pub cluster_exits: Vec<Identity>,
-    /// when this is set, clear out all ipv6 entries from database
-    #[serde(default = "recompute_ipv6_default")]
-    pub recompute_ipv6: bool,
     /// password that operator tools uses to verify that this is an exit
     pub pass: Option<String>,
     /// Determines if enforcement is ensabled on the wg_exit interfaces, the htb classifier used here
@@ -65,10 +51,6 @@ fn enable_enforcement_default() -> bool {
     true
 }
 
-fn recompute_ipv6_default() -> bool {
-    false
-}
-
 impl ExitNetworkSettings {
     /// Generates a configuration that can be used in integration tests, does not use the
     /// default trait to prevent some future code from picking up on the 'default' implementation
@@ -80,20 +62,15 @@ impl ExitNetworkSettings {
             wg_v2_tunnel_port: 59998,
             exit_price: 10,
             own_internal_ip: "172.16.255.254".parse().unwrap(),
-            exit_start_ip: "172.16.0.0".parse().unwrap(),
             netmask: 12,
             subnet: Some(IpNetwork::V6("ff01::0/128".parse().unwrap())),
             client_subnet_size: None,
-            entry_timeout: 0,
             geoip_api_user: None,
             geoip_api_key: None,
             wg_public_key: WgKey::from_str("Ha2YlTfDimJNboqxOSCh6M29W/H0jKtB4utitjaTO3A=").unwrap(),
             wg_private_key: WgKey::from_str("mFFBLqQYrycxfHo10P9l8I2G7zbw8tia4WkGGgjGCn8=")
                 .unwrap(),
             wg_private_key_path: String::new(),
-            magic_phone_number: None,
-            cluster_exits: Vec::new(),
-            recompute_ipv6: false,
             pass: None,
             enable_enforcement: true,
         }
@@ -123,6 +100,9 @@ fn default_remote_log() -> bool {
 }
 fn default_save_interval() -> u64 {
     300
+}
+pub fn default_reg_url() -> String {
+    "https://operator.althea.net:8080/register_router".to_string()
 }
 
 /// These are the settings for email verification
@@ -167,39 +147,14 @@ pub struct EmailVerifSettings {
     pub notify_low_balance: bool,
 }
 
-/// These are the settings for text message verification using the twillio api
-/// note that while you would expect the authentication and text notification flow
-/// to be the same they are in fact totally different and each have separate
-/// credentials below
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
-pub struct PhoneVerifSettings {
-    /// API key used for the authentication calls
-    pub auth_api_key: String,
-    /// The Twillio number used to send the notification message
-    pub notification_number: String,
-    /// The Twillio account id used to authenticate for notifications
-    pub twillio_account_id: String,
-    /// The auth token used to authenticate for notifications
-    pub twillio_auth_token: String,
-    /// Operator notification numbers, used to text the operators when we need them
-    #[serde(default)]
-    pub operator_notification_number: Vec<PhoneNumber>,
-}
-
-/// Struct containing the different types of supported verification
-/// and their respective settings
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-#[serde(tag = "type", content = "contents")]
-pub enum ExitVerifSettings {
-    Email(EmailVerifSettings),
-    Phone(PhoneVerifSettings),
-}
-
 /// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct RitaExitSettingsStruct {
     /// starts with file:// or postgres://username:password@localhost/diesel_demo
     pub db_uri: String,
+    /// url exit uses to request a clients registration
+    #[serde(default = "default_reg_url")]
+    pub client_registration_url: String,
     /// the size of the worker thread pool, the connection pool is this plus one
     pub workers: u32,
     /// if we should log remotely or if we should send our logs to the logging server
@@ -216,10 +171,6 @@ pub struct RitaExitSettingsStruct {
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     pub allowed_countries: HashSet<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub verif_settings: Option<ExitVerifSettings>,
-    #[serde(skip)]
-    pub future: bool,
     /// The save interval defaults to 5 minutes for exit settings represented in seconds
     #[serde(default = "default_save_interval")]
     pub save_interval: u64,
@@ -231,6 +182,7 @@ impl RitaExitSettingsStruct {
     pub fn test_default() -> Self {
         RitaExitSettingsStruct {
             db_uri: "".to_string(),
+            client_registration_url: "".to_string(),
             workers: 1,
             remote_log: false,
             description: "".to_string(),
@@ -239,8 +191,6 @@ impl RitaExitSettingsStruct {
             network: NetworkSettings::default(),
             exit_network: ExitNetworkSettings::test_default(),
             allowed_countries: HashSet::new(),
-            verif_settings: None,
-            future: false,
             save_interval: default_save_interval(),
         }
     }

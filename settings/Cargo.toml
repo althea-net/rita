@@ -5,7 +5,7 @@ authors = ["Ben <wangben3@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-althea_types = { path = "../althea_types"}
+althea_types = { path = "../althea_types" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 auto-bridge = { path = "../auto_bridge" }
 num256 = "0.5"
@@ -16,9 +16,8 @@ toml = "0.5"
 log = "0.4"
 lazy_static = "1.4"
 clarity = "1.2"
-arrayvec = {version= "0.7", features = ["serde"]}
+arrayvec = { version = "0.7", features = ["serde"] }
 phonenumber = "0.3"
 ipnetwork = "0.20"
-deep_space = {workspace = true}
 
 [features]

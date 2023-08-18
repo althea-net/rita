@@ -1,8 +1,8 @@
 //! Network endpoints for rita-exit that are not dashboard or local infromational endpoints
 //! these are called by rita instances to operate the mesh
 
-use crate::database::database_tools::get_database_connection;
 use crate::database::{client_status, get_exit_info, signup_client};
+use crate::get_clients_exit_cluster_list;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::DbClient;
 #[cfg(feature = "development")]
@@ -158,7 +158,7 @@ pub async fn secure_setup_request(
 
     let remote_mesh_ip = remote_mesh_socket.ip();
     if remote_mesh_ip == client_mesh_ip {
-        let result = signup_client(*client, false).await;
+        let result = signup_client(*client).await;
         match result {
             Ok(exit_state) => HttpResponse::Ok().json(secure_setup_return(
                 exit_state,
@@ -199,14 +199,7 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
     };
     trace!("got status request from {}", their_wg_pubkey);
 
-    let conn = match get_database_connection() {
-        Ok(conn) => conn,
-        Err(e) => {
-            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                .json(format!("Error getting database connection: {e:?}"))
-        }
-    };
-    let state = match client_status(*decrypted_id, &conn) {
+    let state = match client_status(*decrypted_id) {
         Ok(state) => state,
         Err(e) => match *e {
             RitaExitError::NoClientError => {
@@ -254,7 +247,7 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
     let their_nacl_pubkey = request.pubkey.into();
 
     let ret: ExitList = ExitList {
-        exit_list: settings::get_rita_exit().exit_network.cluster_exits,
+        exit_list: get_clients_exit_cluster_list(request.pubkey),
         wg_exit_listen_port: settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
     };
 
@@ -329,21 +322,4 @@ pub async fn get_client_debt(client: Json<Identity>) -> HttpResponse {
         }
     }
     HttpResponse::NotFound().json("No client by that ID")
-}
-
-#[cfg(not(feature = "development"))]
-pub async fn nuke_db(_req: HttpRequest) -> HttpResponse {
-    // This is returned on production builds.
-    HttpResponse::NotFound().finish()
-}
-
-#[cfg(feature = "development")]
-pub async fn nuke_db(_req: HttpRequest) -> HttpResponse {
-    use crate::truncate_db_tables;
-
-    trace!("nuke_db: Truncating all data from the database");
-    if let Err(e) = truncate_db_tables() {
-        error!("Error: {}", e);
-    }
-    HttpResponse::NoContent().finish()
 }
