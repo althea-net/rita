@@ -59,7 +59,7 @@ type = "Email"
 
 [verif_settings.contents]
 test = true
-email_cooldown=60
+email_cooldown = 60
 test_dir = "mail"
 from_address = "email-verif@example.com"
 balance_notification_interval = 600

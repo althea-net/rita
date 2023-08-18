@@ -348,10 +348,7 @@ pub fn get_default_settings(
 
     let mut exit = exit.clone();
     let mut client = client.clone();
-    // exit should allow instant registration by any requester
-    exit.verif_settings = None;
     exit.network.mesh_ip = Some(cluster.root_ip);
-    exit.exit_network.cluster_exits = cluster_exits.clone();
     client.exit_client.contact_info = Some(
         ContactType::Both {
             number: "+11111111".parse().unwrap(),

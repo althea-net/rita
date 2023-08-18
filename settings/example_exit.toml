@@ -56,7 +56,7 @@ wg_public_key = "bvM10HW73yePrxdtCQQ4U20W5ogogdiZtUihrPc/oGY="
 type = "Email"
 
 [verif_settings.contents]
-email_cooldown=60
+email_cooldown = 60
 from_address = "verification@example.com"
 smtp_url = "smtp.fastmail.com"
 smtp_domain = "mail.example.com"

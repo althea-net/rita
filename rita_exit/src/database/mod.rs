@@ -1,59 +1,52 @@
 //! This module contains all the tools and functions that integrate with the clients database
 //! for the exit, which is most exit logic in general. Keep in mind database connections are remote
 //! and therefore synchronous database requests are quite expensive (on the order of tens of milliseconds)
-
-use crate::create_or_update_user_record;
-use crate::database::database_tools::client_conflict;
-use crate::database::database_tools::delete_client;
-use crate::database::database_tools::get_client;
-use crate::database::database_tools::get_database_connection;
-use crate::database::database_tools::set_client_timestamp;
-use crate::database::database_tools::update_client;
-use crate::database::database_tools::verify_client;
-use crate::database::database_tools::verify_db_client;
-use crate::database::email::handle_email_registration;
-use crate::database::geoip::get_country;
 use crate::database::geoip::get_gateway_ip_bulk;
 use crate::database::geoip::get_gateway_ip_single;
 use crate::database::geoip::verify_ip;
-use crate::database::sms::handle_sms_registration;
 use crate::database::struct_tools::display_hashset;
+use crate::database::struct_tools::get_client_internal_ip;
+use crate::database::struct_tools::get_client_ipv6;
 use crate::database::struct_tools::to_exit_client;
-use crate::database::struct_tools::to_identity;
-use crate::database::struct_tools::verif_done;
-use crate::get_client_ipv6;
+use crate::get_registered_client_using_wgkey;
 use crate::rita_loop::EXIT_INTERFACE;
 use crate::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::rita_loop::LEGACY_INTERFACE;
 use crate::RitaExitError;
+use crate::DEFAULT_CLIENT_SUBNET_SIZE;
 use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
-use diesel::prelude::PgConnection;
-use exit_db::models::Client;
 use rita_common::blockchain_oracle::calculate_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
-use rita_common::utils::secs_since_unix_epoch;
 use rita_common::KI;
-use settings::exit::ExitVerifSettings;
 use settings::get_rita_exit;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
+use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 
 pub mod database_tools;
-pub mod db_client;
-pub mod email;
 pub mod geoip;
-pub mod sms;
 pub mod struct_tools;
 
 /// one day in seconds
 pub const ONE_DAY: i64 = 86400;
+
+/// Timeout when requesting client registration
+pub const CLIENT_REGISTER_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ExitSignupReturn {
+    RegistrationOk,
+    PendingRegistration,
+    BadPhoneNumber,
+    InternalServerError { e: String },
+}
 
 pub fn get_exit_info() -> ExitDetails {
     let exit_settings = get_rita_exit();
@@ -64,21 +57,14 @@ pub fn get_exit_info() -> ExitDetails {
         exit_currency: exit_settings.payment.system_chain,
         netmask: exit_settings.exit_network.netmask,
         description: exit_settings.description,
-        verif_mode: match exit_settings.verif_settings {
-            Some(ExitVerifSettings::Email(_mailer_settings)) => ExitVerifMode::Email,
-            Some(ExitVerifSettings::Phone(_phone_settings)) => ExitVerifMode::Phone,
-            None => ExitVerifMode::Off,
-        },
+        verif_mode: ExitVerifMode::Phone,
     }
 }
 
 /// Handles a new client registration api call. Performs a geoip lookup
 /// on their registration ip to make sure that they are coming from a valid gateway
 /// ip and then sends out an email of phone message
-pub async fn signup_client(
-    client: ExitClientIdentity,
-    from_ops: bool,
-) -> Result<ExitState, Box<RitaExitError>> {
+pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<RitaExitError>> {
     let exit_settings = get_rita_exit();
     info!("got setup request {:?}", client);
     let gateway_ip = get_gateway_ip_single(client.global.mesh_ip)?;
@@ -87,110 +73,120 @@ pub async fn signup_client(
     let verify_status = verify_ip(gateway_ip)?;
     info!("verified the ip country {:?}", client);
 
-    let user_country = get_country(gateway_ip)?;
-    info!("got the country  {:?}", client);
-
-    let conn = get_database_connection()?;
-
-    info!(
-        "Doing database work for {:?} in country {} with verify_status {}",
-        client, user_country, verify_status
-    );
-    // check if we have any users with conflicting details
-
-    match client_conflict(&client, &conn) {
-        Ok(true) => {
-            return Ok(ExitState::Denied {
-                message: format!(
-                    "Partially changed registration details! Please reset your router and re-register with all new details. Backup your key first! {}",
-                    display_hashset(&exit_settings.allowed_countries),
-                ),
-            })
-        },
-        Ok(false) => {}
-        Err(e) => return Err(e),
-    }
-
-    let their_record = create_or_update_user_record(&conn, &client, user_country)?;
-
-    // either update and grab an existing entry or create one
-    match (verify_status, exit_settings.verif_settings, from_ops) {
-        (true, _, true) => {
-            verify_client(&client, true, &conn)?;
-            let client_internal_ip = match their_record.internal_ip.parse() {
-                Ok(ip) => ip,
-                Err(e) => return Err(Box::new(RitaExitError::AddrParseError(e))),
-            };
-            let client_internet_ipv6_subnet = get_client_ipv6(&their_record)?;
-            Ok(ExitState::Registered {
-                our_details: ExitClientDetails {
-                    client_internal_ip,
-                    internet_ipv6_subnet: client_internet_ipv6_subnet,
-                },
-                general_details: get_exit_info(),
-                message: "Registration OK".to_string(),
-            })
-        }
-
-        (true, None, false) => {
-            verify_client(&client, true, &conn)?;
-            let client_internal_ip = match their_record.internal_ip.parse() {
-                Ok(ip) => ip,
-                Err(e) => return Err(Box::new(RitaExitError::AddrParseError(e))),
-            };
-            let client_internet_ipv6_subnet = get_client_ipv6(&their_record)?;
-            Ok(ExitState::Registered {
-                our_details: ExitClientDetails {
-                    client_internal_ip,
-                    internet_ipv6_subnet: client_internet_ipv6_subnet,
-                },
-                general_details: get_exit_info(),
-                message: "Registration OK".to_string(),
-            })
-        }
-        (true, Some(ExitVerifSettings::Email(mailer)), false) => {
-            handle_email_registration(&client, &their_record, &conn, mailer.email_cooldown as i64)
-        }
-        (true, Some(ExitVerifSettings::Phone(phone)), false) => {
-            handle_sms_registration(client, their_record, phone.auth_api_key).await
-        }
-
-        (false, _, _) => Ok(ExitState::Denied {
+    // Is client requesting from a valid country? If so send registration request to ops
+    if !verify_status {
+        return Ok(ExitState::Denied {
             message: format!(
                 "This exit only accepts connections from {}",
                 display_hashset(&exit_settings.allowed_countries),
             ),
-        }),
+        });
     }
-}
 
-/// Gets the status of a client and updates it in the database
-pub fn client_status(
-    client: ExitClientIdentity,
-    conn: &PgConnection,
-) -> Result<ExitState, Box<RitaExitError>> {
-    trace!("Checking if record exists for {:?}", client.global.mesh_ip);
+    // Forward request to ops and send result to client accordingly
+    let exit_client = to_exit_client(client.global);
+    if let Ok(exit_client) = exit_client {
+        match forward_client_signup_request(client).await {
+            ExitSignupReturn::RegistrationOk => Ok(ExitState::Registered {
+                our_details: ExitClientDetails {
+                    client_internal_ip: exit_client.internal_ip,
+                    internet_ipv6_subnet: exit_client.internet_ipv6,
+                },
+                general_details: get_exit_info(),
+                message: "Registration OK".to_string(),
+            }),
 
-    if let Some(their_record) = get_client(&client, conn)? {
-        trace!("record exists, updating");
-
-        if !verif_done(&their_record) {
-            return Ok(ExitState::Pending {
+            ExitSignupReturn::PendingRegistration => Ok(ExitState::Pending {
                 general_details: get_exit_info(),
                 message: "awaiting email verification".to_string(),
                 email_code: None,
                 phone_code: None,
-            });
+            }),
+            ExitSignupReturn::BadPhoneNumber => Ok(ExitState::Denied {
+                message: format!(
+                    "Error parsing client phone number {:?}",
+                    exit_client.public_key,
+                ),
+            }),
+            ExitSignupReturn::InternalServerError { e } => Ok(ExitState::Denied {
+                message: format!("Internal Error from registration server {:?}", e,),
+            }),
         }
+    } else {
+        Ok(ExitState::Denied {
+            message: format!("Error parsing client details with {:?}", exit_client,),
+        })
+    }
+}
 
-        let current_ip: IpAddr = match their_record.internal_ip.parse() {
-            Ok(a) => a,
-            Err(e) => return Err(Box::new(e.into())),
-        };
+pub async fn forward_client_signup_request(exit_client: ExitClientIdentity) -> ExitSignupReturn {
+    let url: &str;
+    let reg_url = get_rita_exit().client_registration_url;
+    if cfg!(feature = "dev_env") {
+        url = "http://0.0.0.0:8080/register_router";
+    } else if cfg!(feature = "operator_debug") {
+        url = "http://192.168.10.2:8080/register_router";
+    } else {
+        url = &reg_url;
+    }
 
-        let current_internet_ipv6 = get_client_ipv6(&their_record)?;
+    info!(
+        "About to request client {} registration with {}",
+        exit_client.global, url
+    );
 
-        update_client(&client, &their_record, conn)?;
+    let client = awc::Client::default();
+    let response = client
+        .post(url)
+        .timeout(CLIENT_REGISTER_TIMEOUT)
+        .send_json(&exit_client)
+        .await;
+
+    let response = match response {
+        Ok(mut response) => {
+            trace!("Response is {:?}", response.status());
+            trace!("Response is {:?}", response.headers());
+            response.json().await
+        }
+        Err(e) => {
+            error!("Failed to perform client registration with {:?}", e);
+            return ExitSignupReturn::InternalServerError {
+                e: format!("Unable to contact registration server: {}", e),
+            };
+        }
+    };
+
+    let response: ExitSignupReturn = match response {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Failed to decode registration request {:?}", e);
+            return ExitSignupReturn::InternalServerError {
+                e: format!("Failed to decode registration request {:?}", e),
+            };
+        }
+    };
+    response
+}
+
+/// Gets the status of a client and updates it in the database
+pub fn client_status(client: ExitClientIdentity) -> Result<ExitState, Box<RitaExitError>> {
+    trace!("Checking if record exists for {:?}", client.global.mesh_ip);
+
+    if let Some(their_record) = get_registered_client_using_wgkey(client.global.wg_public_key) {
+        trace!("record exists, updating");
+
+        let current_ip: IpAddr = get_client_internal_ip(
+            their_record,
+            get_rita_exit().exit_network.netmask,
+            get_rita_exit().exit_network.own_internal_ip,
+        )?;
+        let current_internet_ipv6 = get_client_ipv6(
+            their_record,
+            settings::get_rita_exit().exit_network.subnet,
+            settings::get_rita_exit()
+                .get_client_subnet_size()
+                .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
+        )?;
 
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
@@ -209,28 +205,19 @@ pub fn client_status(
 /// we also do this in the client status requests but we want to handle the edge case of a modified
 /// client that doesn't make status requests
 pub fn validate_clients_region(
-    clients_list: Vec<exit_db::models::Client>,
-    conn: &PgConnection,
-) -> Result<(), Box<RitaExitError>> {
+    clients_list: Vec<Identity>,
+) -> Result<Vec<Identity>, Box<RitaExitError>> {
     info!("Starting exit region validation");
     let start = Instant::now();
+
+    let mut blacklist = Vec::new();
 
     trace!("Got clients list {:?}", clients_list);
     let mut ip_vec = Vec::new();
     let mut client_map = HashMap::new();
     for item in clients_list {
-        // there's no need to check clients that aren't verified
-        // as they are never setup
-        if !item.verified {
-            continue;
-        }
-        match item.mesh_ip.parse() {
-            Ok(ip) => {
-                client_map.insert(ip, item);
-                ip_vec.push(ip);
-            }
-            Err(_e) => error!("Database entry with invalid mesh ip! {:?}", item),
-        }
+        client_map.insert(item.mesh_ip, item);
+        ip_vec.push(item.mesh_ip);
     }
     let list = get_gateway_ip_bulk(ip_vec, EXIT_LOOP_TIMEOUT)?;
     for item in list.iter() {
@@ -240,14 +227,12 @@ pub fn validate_clients_region(
             Ok(false) => {
                 info!(
                     "Found unauthorized client already registered {}, removing",
-                    client_map[&item.mesh_ip].wg_pubkey
+                    client_map[&item.mesh_ip].wg_public_key
                 );
                 // get_gateway_ip_bulk can't add new entires to the list
                 // therefore client_map is strictly a superset of ip_bulk results
                 let client_to_deauth = &client_map[&item.mesh_ip];
-                if verify_db_client(client_to_deauth, false, conn).is_err() {
-                    error!("Failed to deauth client {:?}", client_to_deauth);
-                }
+                blacklist.push(*client_to_deauth);
             }
             Err(e) => warn!("Failed to verify ip with {:?}", e),
         }
@@ -258,65 +243,7 @@ pub fn validate_clients_region(
         start.elapsed().as_secs(),
         start.elapsed().subsec_millis(),
     );
-    Ok(())
-}
-
-/// Iterates over the the database of clients, if a client's last_seen value
-/// is zero it is set to now if a clients last_seen value is older than
-/// the client timeout it is deleted
-pub fn cleanup_exit_clients(
-    clients_list: &[exit_db::models::Client],
-    conn: &PgConnection,
-) -> Result<(), Box<RitaExitError>> {
-    trace!("Running exit client cleanup");
-    let start = Instant::now();
-
-    for client in clients_list.iter() {
-        trace!("Checking client {:?}", client);
-        match to_exit_client(client.clone()) {
-            Ok(client_id) => {
-                let time_delta = secs_since_unix_epoch() - client.last_seen;
-                let entry_timeout = i64::from(settings::get_rita_exit().exit_network.entry_timeout);
-                // entry timeout can be disabled, or longer than a day, but not shorter
-                assert!(entry_timeout == 0 || entry_timeout >= ONE_DAY);
-                if client.last_seen == 0 {
-                    info!(
-                        "{} does not have a last seen timestamp, adding one now ",
-                        client.wg_pubkey
-                    );
-                    let res = set_client_timestamp(client_id, conn);
-                    if res.is_err() {
-                        warn!(
-                            "Unable to update the client timestamp for {} with {:?}",
-                            client.wg_pubkey, res
-                        );
-                    }
-                }
-                // a entry_timeout value of 0 means the feature is disabled
-                else if entry_timeout != 0 && time_delta > entry_timeout {
-                    warn!(
-                        "{} has been inactive for too long, deleting! ",
-                        client.wg_pubkey
-                    );
-                    let res = delete_client(client_id, conn);
-                    if res.is_err() {
-                        error!(
-                            "Unable to remove inactive client {:?} with {:?}",
-                            client, res
-                        )
-                    }
-                }
-            }
-            Err(e) => error!("Invalid database entry! {:?}", e),
-        }
-    }
-
-    info!(
-        "Exit cleanup completed in {}s {}ms",
-        start.elapsed().as_secs(),
-        start.elapsed().subsec_millis(),
-    );
-    Ok(())
+    Ok(blacklist)
 }
 
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
@@ -344,7 +271,8 @@ pub struct CurrentExitClientState {
 /// wg_exit tunnel (or created if it's the first run). This is the offically supported
 /// way to update live WireGuard tunnels and should not disrupt traffic
 pub fn setup_clients(
-    clients_list: &[exit_db::models::Client],
+    clients_list: Vec<Identity>,
+    geoip_blacklist: Vec<Identity>,
     client_states: ExitClientSetupStates,
 ) -> Result<ExitClientSetupStates, Box<RitaExitError>> {
     let mut client_states = client_states;
@@ -352,7 +280,8 @@ pub fn setup_clients(
 
     // use hashset to ensure uniqueness and check for duplicate db entries
     let mut wg_clients = HashSet::new();
-    let mut key_to_client_map: HashMap<WgKey, Client> = HashMap::new();
+    let mut geoip_blacklist_map = HashSet::new();
+    let key_to_client_map: HashMap<WgKey, Identity> = HashMap::new();
 
     trace!(
         "got clients from db {:?} {:?}",
@@ -361,19 +290,46 @@ pub fn setup_clients(
     );
 
     for c in clients_list.iter() {
-        match (c.verified, to_exit_client(c.clone())) {
-            (true, Ok(exit_client_c)) => {
-                if !wg_clients.insert(exit_client_c.clone()) {
-                    error!("Duplicate database entry! {}", c.wg_pubkey);
+        match to_exit_client(*c) {
+            Ok(a) => {
+                if !wg_clients.insert(a) {
+                    error!("Duplicate database entry! {}", c.wg_public_key);
                 }
-                key_to_client_map.insert(exit_client_c.public_key, c.clone());
             }
-            (true, Err(e)) => warn!("Error converting {:?} to exit client {:?}", c, e),
-            (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
+            Err(e) => {
+                error!(
+                    "Unable to convert client to ExitClient! {} with error {}",
+                    c.wg_public_key, e
+                );
+            }
+        }
+        //key_to_client_map.insert(c.wg_public_key, c.clone());
+    }
+
+    for c in geoip_blacklist.iter() {
+        match to_exit_client(*c) {
+            Ok(a) => {
+                if !geoip_blacklist_map.insert(a) {
+                    error!("Duplicate database entry! {}", c.wg_public_key);
+                }
+            }
+            Err(e) => {
+                error!(
+                    "Unable to convert client to ExitClient! {} with error {}",
+                    c.wg_public_key, e
+                );
+            }
         }
     }
 
     trace!("converted clients {:?}", wg_clients);
+
+    // remove geoip blacklisted clients from wg clients
+    let wg_clients: HashSet<ExitClient> = wg_clients
+        .difference(&geoip_blacklist_map)
+        .copied()
+        .collect();
+
     // symetric difference is an iterator of all items in A but not in B
     // or in B but not in A, in short if there's any difference between the two
     // it must be nonzero, since all entires must be unique there can not be duplicates
@@ -448,7 +404,7 @@ pub fn setup_clients(
         .into_iter()
         .collect();
 
-    let client_list_for_setup: Vec<Client> = key_to_client_map
+    let client_list_for_setup: Vec<Identity> = key_to_client_map
         .clone()
         .into_iter()
         .filter_map(|(k, v)| {
@@ -470,7 +426,7 @@ pub fn setup_clients(
         client_states.clone(),
         new_wg_exit_clients_timestamps,
         wg_exit_clients_timestamps,
-        &client_list_for_setup,
+        client_list_for_setup,
     );
 
     // set previous tick states to current clients on wg interfaces
@@ -483,7 +439,20 @@ pub fn setup_clients(
     for c_key in changed_clients_return.new_v1 {
         if let Some(c) = key_to_client_map.get(&c_key) {
             KI.setup_individual_client_routes(
-                c.internal_ip.parse().expect("Invalid ipv4 in the db!"),
+                match get_client_internal_ip(
+                    *c,
+                    get_rita_exit().exit_network.netmask,
+                    get_rita_exit().exit_network.own_internal_ip,
+                ) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        error!(
+                            "Received error while trying to retrieve client internal ip {}",
+                            e
+                        );
+                        continue;
+                    }
+                },
                 internal_ip_v4.into(),
                 LEGACY_INTERFACE,
             );
@@ -492,7 +461,20 @@ pub fn setup_clients(
     for c_key in changed_clients_return.new_v2 {
         if let Some(c) = key_to_client_map.get(&c_key) {
             KI.teardown_individual_client_routes(
-                c.internal_ip.parse().expect("Invalid ipv4 in the db!"),
+                match get_client_internal_ip(
+                    *c,
+                    get_rita_exit().exit_network.netmask,
+                    get_rita_exit().exit_network.own_internal_ip,
+                ) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        error!(
+                            "Received error while trying to retrieve client internal ip {}",
+                            e
+                        );
+                        continue;
+                    }
+                },
             );
         }
     }
@@ -506,7 +488,7 @@ fn find_changed_clients(
     client_states: ExitClientSetupStates,
     all_v2: HashMap<WgKey, SystemTime>,
     all_v1: HashMap<WgKey, SystemTime>,
-    clients_list: &[exit_db::models::Client],
+    clients_list: Vec<Identity>,
 ) -> CurrentExitClientState {
     let mut v1_clients = HashSet::new();
 
@@ -517,15 +499,9 @@ fn find_changed_clients(
         match get_client_interface(c, all_v2.clone(), all_v1.clone()) {
             Ok(interface) => {
                 if interface == ClientInterfaceType::LegacyInterface {
-                    v1_clients.insert(match c.wg_pubkey.parse() {
-                        Ok(a) => a,
-                        Err(_) => continue,
-                    });
+                    v1_clients.insert(c.wg_public_key);
                 } else if interface == ClientInterfaceType::ExitInterface {
-                    v2_clients.insert(match c.wg_pubkey.parse() {
-                        Ok(a) => a,
-                        Err(_) => continue,
-                    });
+                    v2_clients.insert(c.wg_public_key);
                 }
             }
             Err(_) => {
@@ -555,7 +531,7 @@ pub enum ClientInterfaceType {
 }
 
 pub fn get_client_interface(
-    c: &exit_db::models::Client,
+    c: Identity,
     new_wg_exit_clients: HashMap<WgKey, SystemTime>,
     wg_exit_clients: HashMap<WgKey, SystemTime>,
 ) -> Result<ClientInterfaceType, Box<RitaExitError>> {
@@ -565,14 +541,8 @@ pub fn get_client_interface(
         wg_exit_clients
     );
     match (
-        new_wg_exit_clients.get(match &c.wg_pubkey.parse() {
-            Ok(a) => a,
-            Err(e) => return Err(Box::new(e.clone().into())),
-        }),
-        wg_exit_clients.get(match &c.wg_pubkey.parse() {
-            Ok(a) => a,
-            Err(e) => return Err(Box::new(e.clone().into())),
-        }),
+        new_wg_exit_clients.get(&c.wg_public_key),
+        wg_exit_clients.get(&c.wg_public_key),
     ) {
         (Some(_), None) => Ok(ClientInterfaceType::ExitInterface),
         (None, Some(_)) => Ok(ClientInterfaceType::LegacyInterface),
@@ -586,7 +556,7 @@ pub fn get_client_interface(
         _ => {
             error!(
                 "WG EXIT SETUP: Client {}, does not have handshake with any wg exit interface. Setting up routes on wg_exit",
-                c.wg_pubkey
+                c.wg_public_key
             );
             Ok(ClientInterfaceType::LegacyInterface)
         }
@@ -599,16 +569,16 @@ pub fn get_client_interface(
 /// Unlike intermediary enforcement we do not need to subdivide the free tier to prevent
 /// ourselves from exceeding the upstream free tier. As an exit we are the upstream.
 pub fn enforce_exit_clients(
-    clients_list: Vec<exit_db::models::Client>,
+    clients_list: Vec<Identity>,
     old_debt_actions: &HashSet<(Identity, DebtAction)>,
 ) -> Result<HashSet<(Identity, DebtAction)>, Box<RitaExitError>> {
     let start = Instant::now();
     let mut clients_by_id = HashMap::new();
     let free_tier_limit = settings::get_rita_exit().payment.free_tier_throughput;
     let close_threshold = calculate_close_thresh();
-    for client in clients_list.iter() {
-        if let Ok(id) = to_identity(client) {
-            clients_by_id.insert(id, client);
+    for client_id in clients_list.iter() {
+        if let Ok(exit_client) = to_exit_client(*client_id) {
+            clients_by_id.insert(client_id, exit_client);
         }
     }
     let list = get_debts_list();
@@ -638,10 +608,10 @@ pub fn enforce_exit_clients(
     for debt_entry in list.iter() {
         match clients_by_id.get(&debt_entry.identity) {
             Some(client) => {
-                match client.internal_ip.parse() {
-                    Ok(IpAddr::V4(ip)) => {
+                match client.internal_ip {
+                    IpAddr::V4(ip) => {
                         if debt_entry.payment_details.action == DebtAction::SuspendTunnel {
-                            info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
+                            info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.public_key, debt_entry.payment_details.debt, close_threshold);
                             // setup flows this allows us to classify traffic we then limit the class, we delete the class as part of unenforcment but it's difficult to delete the flows
                             // so a user who has been enforced and unenforced while the exit has been online may already have them setup
                             let flow_setup_required = match (
@@ -672,7 +642,13 @@ pub fn enforce_exit_clients(
                                     error!("Failed to setup flow for wg_exit_v2 {:?}", e);
                                 }
                                 // gets the client ipv6 flow for this exit specifically
-                                let client_ipv6 = get_client_ipv6(client);
+                                let client_ipv6 = get_client_ipv6(
+                                    debt_entry.identity,
+                                    settings::get_rita_exit().exit_network.subnet,
+                                    settings::get_rita_exit()
+                                        .get_client_subnet_size()
+                                        .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
+                                );
                                 if let Ok(Some(client_ipv6)) = client_ipv6 {
                                     if let Err(e) =
                                         KI.create_flow_by_ipv6(EXIT_INTERFACE, client_ipv6, ip)
@@ -682,7 +658,7 @@ pub fn enforce_exit_clients(
                                 }
                                 info!(
                                     "Completed one time enforcement flow setup for {}",
-                                    client.wg_pubkey
+                                    client.public_key
                                 )
                             }
 
@@ -718,7 +694,7 @@ pub fn enforce_exit_clients(
                             if action_required {
                                 // Delete exisiting enforcement class, users who are not enforced are unclassifed becuase
                                 // leaving the class in place reduces their speeds.
-                                info!("Deleting enforcement classes for {}", client.wg_pubkey);
+                                info!("Deleting enforcement classes for {}", client.public_key);
                                 if let Err(e) = KI.delete_class(LEGACY_INTERFACE, ip) {
                                     error!("Unable to delete class on wg_exit, is {} still enforced when they shouldnt be? {:?}", ip, e);
                                 }

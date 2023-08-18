@@ -17,8 +17,8 @@ pub const FAST_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 // pub const SAVING_TO_DISK_FREQUENCY: Duration = Duration::from_secs(600);
 #[derive(Clone)]
 pub enum SettingsOnDisk {
-    RitaClientSettings(RitaClientSettings),
-    RitaExitSettingsStruct(RitaExitSettingsStruct),
+    RitaClientSettings(Box<RitaClientSettings>),
+    RitaExitSettingsStruct(Box<RitaExitSettingsStruct>),
 }
 /// This loop attempts to perform all write operations for writing to disk
 /// This includes writing config/settings, usage tracker, and debt tracker.
@@ -65,26 +65,26 @@ pub fn save_to_disk_loop(mut old_settings: SettingsOnDisk) {
             SettingsOnDisk::RitaClientSettings(old_settings_client) => {
                 let new_settings = get_rita_client();
 
-                if old_settings_client != new_settings {
+                if old_settings_client != new_settings.clone().into() {
                     let res = write_config();
                     if let Err(e) = res {
                         error!("Error saving client settings! {:?}", e);
                     }
                 }
 
-                old_settings = SettingsOnDisk::RitaClientSettings(new_settings);
+                old_settings = SettingsOnDisk::RitaClientSettings(Box::new(new_settings));
             }
             SettingsOnDisk::RitaExitSettingsStruct(old_settings_exit) => {
                 let new_settings = get_rita_exit();
 
-                if old_settings_exit != new_settings {
+                if old_settings_exit != new_settings.clone().into() {
                     let res = write_config();
                     if let Err(e) = res {
                         error!("Error saving exit settings! {:?}", e);
                     }
                 }
 
-                old_settings = SettingsOnDisk::RitaExitSettingsStruct(new_settings);
+                old_settings = SettingsOnDisk::RitaExitSettingsStruct(Box::new(new_settings));
             }
         }
 

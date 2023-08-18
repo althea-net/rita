@@ -16,7 +16,6 @@ pub enum RitaExitError {
     EmailNotFound(Box<ExitClientIdentity>),
     AddrParseError(AddrParseError),
     IpAddrError(IpAddr),
-    DieselError(diesel::result::Error),
     RitaCommonError(RitaCommonError),
     RenderError(RenderError),
     EmailError(lettre::error::Error),
@@ -31,11 +30,6 @@ pub enum RitaExitError {
     NoClientError,
 }
 
-impl From<diesel::result::Error> for RitaExitError {
-    fn from(error: diesel::result::Error) -> Self {
-        RitaExitError::DieselError(error)
-    }
-}
 impl From<AddrParseError> for RitaExitError {
     fn from(error: AddrParseError) -> Self {
         RitaExitError::AddrParseError(error)
@@ -109,7 +103,6 @@ impl Display for RitaExitError {
             RitaExitError::EmailNotFound(a) => write!(f, "Could not find email for {a:?}"),
             RitaExitError::AddrParseError(a) => write!(f, "{a:?}",),
             RitaExitError::IpAddrError(a) => write!(f, "No route found for mesh ip: {a:?}",),
-            RitaExitError::DieselError(a) => write!(f, "{a}",),
             RitaExitError::RitaCommonError(a) => write!(f, "{a}",),
             RitaExitError::DeepSpaceError(a) => write!(f, "{a}",),
             RitaExitError::RenderError(a) => write!(f, "{a}",),
