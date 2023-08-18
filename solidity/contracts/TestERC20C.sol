@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.12; // Force solidity compliance
+pragma solidity 0.8.21; // Force solidity compliance
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 // One of three testing coins named "Byecoin" with symbol "BYE", the constructor mints tokens
