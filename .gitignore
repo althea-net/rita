@@ -28,3 +28,12 @@ legacy-integration-tests/bounty.db-journal
 *.pem
 *__pycache__*
 *.tar*
+
+# Solidity build artifacts
+node_modules
+typechain
+solidity/dist
+# Hardhat
+cache
+artifacts
+*.test
