@@ -1,0 +1,15 @@
+[package]
+name = "rita_client_registration"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lazy_static = "1.4"
+althea_types = { path = "../althea_types" }
+log = { version = "0.4", features = ["release_max_level_info"] }
+serde = "1.0"
+clarity = "1.2"
+phonenumber = "0.3"
+awc = "3.1"

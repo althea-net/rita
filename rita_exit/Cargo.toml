@@ -10,6 +10,7 @@ license = "Apache-2.0"
 sodiumoxide = "0.2"
 num256 = "0.5"
 rita_common = { path = "../rita_common" }
+rita_client_registration = { path = "../rita_client_registration" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }
 settings = { path = "../settings" }

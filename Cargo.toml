@@ -5,14 +5,29 @@ authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 edition = "2018"
 
 [workspace]
-members = ["althea_kernel_interface", "settings", "clu", "exit_db", "antenna_forwarding_client", "antenna_forwarding_protocol", "auto_bridge","rita_common","rita_exit","rita_client", "rita_bin", "test_runner", "integration_tests"]
+members = [
+    "althea_kernel_interface",
+    "settings",
+    "clu",
+    "exit_db",
+    "antenna_forwarding_client",
+    "antenna_forwarding_protocol",
+    "auto_bridge",
+    "rita_common",
+    "rita_exit",
+    "rita_client",
+    "rita_client_registration",
+    "rita_bin",
+    "test_runner",
+    "integration_tests",
+]
 
 # Production relase profile, every trick is used to reduce binary size
 [profile.release]
 opt-level = "z"
 strip = true
 lto = true
-codegen-units=1
+codegen-units = 1
 incremental = false
 
 # testrunner should be fast to execute but also to compile
@@ -23,4 +38,4 @@ inherits = "dev"
 opt-level = 2
 
 [workspace.dependencies]
-deep_space = {version = "2", features = ["althea"], default-features=false}
+deep_space = { version = "2", features = ["althea"], default-features = false }

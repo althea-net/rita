@@ -1,4 +1,3 @@
-use althea_types::{Identity, WgKey};
 use ipnetwork::{IpNetwork, Ipv6Network};
 
 use crate::RitaExitError;
@@ -61,18 +60,6 @@ pub fn generate_iterative_client_subnet(
             "Index larger than available subnets".to_string(),
         )))
     }
-}
-
-pub fn get_all_regsitered_clients() -> Vec<Identity> {
-    unimplemented!()
-}
-
-pub fn get_registered_client_using_wgkey(_key: WgKey) -> Option<Identity> {
-    unimplemented!()
-}
-
-pub fn get_clients_exit_cluster_list(_key: WgKey) -> Vec<Identity> {
-    unimplemented!()
 }
 
 #[cfg(test)]

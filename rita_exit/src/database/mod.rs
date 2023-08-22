@@ -8,7 +8,6 @@ use crate::database::struct_tools::display_hashset;
 use crate::database::struct_tools::get_client_internal_ip;
 use crate::database::struct_tools::get_client_ipv6;
 use crate::database::struct_tools::to_exit_client;
-use crate::get_registered_client_using_wgkey;
 use crate::rita_loop::EXIT_INTERFACE;
 use crate::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::rita_loop::LEGACY_INTERFACE;
@@ -18,6 +17,8 @@ use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
+use rita_client_registration::client_db::get_registered_client_using_wgkey;
+use rita_client_registration::ExitSignupReturn;
 use rita_common::blockchain_oracle::calculate_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
@@ -39,14 +40,6 @@ pub const ONE_DAY: i64 = 86400;
 
 /// Timeout when requesting client registration
 pub const CLIENT_REGISTER_TIMEOUT: Duration = Duration::from_secs(5);
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ExitSignupReturn {
-    RegistrationOk,
-    PendingRegistration,
-    BadPhoneNumber,
-    InternalServerError { e: String },
-}
 
 pub fn get_exit_info() -> ExitDetails {
     let exit_settings = get_rita_exit();

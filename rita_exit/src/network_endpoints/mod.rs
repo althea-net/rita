@@ -2,7 +2,6 @@
 //! these are called by rita instances to operate the mesh
 
 use crate::database::{client_status, get_exit_info, signup_client};
-use crate::get_clients_exit_cluster_list;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::DbClient;
 #[cfg(feature = "development")]
@@ -20,6 +19,7 @@ use althea_types::{
 use althea_types::{EncryptedExitList, Identity};
 use althea_types::{ExitList, WgKey};
 use num256::Int256;
+use rita_client_registration::client_db::get_clients_exit_cluster_list;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::payment_validator::calculate_unverified_payments;
