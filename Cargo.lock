@@ -2669,6 +2669,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rita_client_registration"
+version = "0.1.0"
+dependencies = [
+ "althea_types",
+ "awc",
+ "clarity",
+ "lazy_static",
+ "log",
+ "phonenumber",
+ "serde",
+]
+
+[[package]]
 name = "rita_common"
 version = "0.21.2"
 dependencies = [
@@ -2728,6 +2741,7 @@ dependencies = [
  "num256",
  "phonenumber",
  "reqwest",
+ "rita_client_registration",
  "rita_common",
  "serde",
  "serde_derive",
