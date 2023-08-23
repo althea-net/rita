@@ -9,9 +9,8 @@ use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
     generate_traffic, get_default_settings, get_ip_from_namespace, query_debts,
     register_all_namespaces_to_exit, test_all_internet_connectivity, test_reach_all, test_routes,
-    DEBT_ACCURACY_THRES,
+    DEBT_ACCURACY_THRES, TEST_EXIT_DETAILS,
 };
-use althea_types::Identity;
 use log::info;
 use num256::Int256;
 use num_traits::Signed;
@@ -57,14 +56,8 @@ pub async fn run_debts_test() {
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let rita_identities = thread_spawner(namespaces.clone(), client_settings, exit_settings)
+    let _rita_identities = thread_spawner(namespaces.clone(), client_settings, exit_settings)
         .expect("Could not spawn Rita threads");
-    // There should be only 1 exit identity
-    let exit_identity = rita_identities
-        .exit_identities
-        .last()
-        .cloned()
-        .expect("Why is there no exit here");
     info!("Thread Spawner: {res:?}");
 
     // Test for network convergence
@@ -149,7 +142,7 @@ pub async fn run_debts_test() {
                 &existing_debts_screenshot,
                 1u32,
                 weight_left,
-                exit_identity,
+                to_node.is_none(),
             );
 
             weight_left -= to_neigh.cost
@@ -164,7 +157,7 @@ pub async fn run_debts_test() {
                 &existing_debts_screenshot,
                 1u32,
                 exit_price,
-                exit_identity,
+                to_node.is_none(),
             );
         }
     }
@@ -228,7 +221,7 @@ pub fn validate_debt_increase(
     existing_debts_screenshot: &HashMap<Namespace, Vec<GetDebtsResult>>,
     data_sent: u32,
     weight: u32,
-    exit_identity: Identity,
+    to_internet: bool,
 ) {
     let bytes_per_gb: Int256 = (1024u64 * 1024u64 * 1024u64).into();
 
@@ -236,9 +229,15 @@ pub fn validate_debt_increase(
     let (debt_entry, existing_debt_entry) = get_relevant_debt_entries(
         debts_screenshot,
         existing_debts_screenshot,
-        exit_identity,
+        to_internet,
         from_node.clone(),
         to_node.clone(),
+    );
+
+    info!(
+        "Calculating Debts between {:?} and {:?}",
+        from_node.get_name(),
+        to_node.get_name()
     );
 
     // Calculate actual and expected debt
@@ -262,14 +261,22 @@ pub fn validate_debt_increase(
     let (debt_entry, existing_debt_entry) = get_relevant_debt_entries(
         debts_screenshot,
         existing_debts_screenshot,
-        exit_identity,
+        to_internet,
         to_node.clone(),
         from_node.clone(),
     );
 
     let actual_debt_to = debt_entry.payment_details.debt - existing_debt_entry.payment_details.debt;
     let expected_debt_to = bytes_per_gb * data_sent.into() * weight.into() * Int256::from(-1i32);
-
+    info!(
+        "debt now is {:?}, exiting is {:?}",
+        debt_entry.payment_details.debt, existing_debt_entry.payment_details.debt
+    );
+    // Expected and actual debt should be within 75% accurate
+    info!(
+        "Actual: {} and expected: {}",
+        actual_debt_to, expected_debt_to
+    );
     // Expected and actual debt should be within 75% accurate
     let margin = ((actual_debt_to - expected_debt_to) * 100u8.into()) / expected_debt_to;
     assert!(margin.abs() < DEBT_ACCURACY_THRES.into());
@@ -297,7 +304,7 @@ pub fn validate_debt_increase(
 fn get_relevant_debt_entries(
     debts_screenshot: &HashMap<Namespace, Vec<GetDebtsResult>>,
     existing_debts_screenshot: &HashMap<Namespace, Vec<GetDebtsResult>>,
-    exit_identity: Identity,
+    to_internet: bool,
     debt_of_node: Namespace,
     querying_node: Namespace,
 ) -> (GetDebtsResult, GetDebtsResult) {
@@ -308,7 +315,20 @@ fn get_relevant_debt_entries(
         .get(&debt_of_node)
         .expect("There needs to be an entry here")
     {
-        if entry.identity.mesh_ip.to_string() == get_ip_from_namespace(querying_node.clone()) {
+        // If an exit, get the root ip debt entry as it acts a relay
+
+        if let NodeType::Exit { .. } = querying_node.node_type {
+            if to_internet {
+                if entry.identity.mesh_ip.to_string()
+                    == get_ip_from_namespace(querying_node.clone())
+                {
+                    debt_entry.push(entry.clone());
+                }
+            } else if entry.identity.mesh_ip == TEST_EXIT_DETAILS.get("test").unwrap().root_ip {
+                debt_entry.push(entry.clone());
+            }
+        } else if entry.identity.mesh_ip.to_string() == get_ip_from_namespace(querying_node.clone())
+        {
             debt_entry.push(entry.clone());
         }
     }
@@ -317,38 +337,29 @@ fn get_relevant_debt_entries(
         .get(&debt_of_node)
         .expect("There needs to be an entry here")
     {
-        if entry.identity.mesh_ip.to_string() == get_ip_from_namespace(querying_node.clone()) {
+        if let NodeType::Exit { .. } = querying_node.node_type {
+            if to_internet {
+                if entry.identity.mesh_ip.to_string()
+                    == get_ip_from_namespace(querying_node.clone())
+                {
+                    info!("Adding entry: {}", entry.identity);
+                    existing_debt_entry.push(entry.clone());
+                }
+            } else if entry.identity.mesh_ip == TEST_EXIT_DETAILS.get("test").unwrap().root_ip {
+                existing_debt_entry.push(entry.clone());
+            }
+        } else if entry.identity.mesh_ip.to_string() == get_ip_from_namespace(querying_node.clone())
+        {
+            info!("Adding entry: {}", entry.identity);
             existing_debt_entry.push(entry.clone());
         }
     }
 
-    let debt_entry = {
-        if debt_entry.len() == 1 {
-            debt_entry.last().unwrap().clone()
-        } else {
-            // The gateway may have two entries for debt, if some other node, panic
-            let mut ret = None;
-            for e in debt_entry {
-                if e.identity == exit_identity {
-                    ret = Some(e)
-                }
-            }
-            ret.expect("There needs to be a valid entry here")
-        }
-    };
-    let existing_debt_entry = {
-        if existing_debt_entry.len() == 1 {
-            existing_debt_entry.last().unwrap().clone()
-        } else {
-            let mut ret = None;
-            for e in existing_debt_entry {
-                if e.identity == exit_identity {
-                    ret = Some(e)
-                }
-            }
-            ret.expect("There needs to be a valid existing debt entry here")
-        }
-    };
+    assert_eq!(debt_entry.len(), 1);
+    assert_eq!(existing_debt_entry.len(), 1);
 
-    (debt_entry, existing_debt_entry)
+    (
+        debt_entry.last().unwrap().clone(),
+        existing_debt_entry.last().unwrap().clone(),
+    )
 }
