@@ -546,6 +546,10 @@ pub async fn query_debts(
         Some(a) => {
             let mut map = HashSet::new();
             for node in a {
+                // For an exit, add the root ip as well
+                if let NodeType::Exit { .. } = node.node_type {
+                    map.insert(TEST_EXIT_DETAILS.get("test").unwrap().root_ip.to_string());
+                }
                 map.insert(get_ip_from_namespace(node));
             }
             map
