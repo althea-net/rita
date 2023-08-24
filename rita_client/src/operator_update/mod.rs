@@ -67,7 +67,7 @@ pub async fn operator_update(
 ) -> Result<u64, ()> {
     let url: &str;
     if cfg!(feature = "dev_env") {
-        url = "http://0.0.0.0:8080/checkin";
+        url = "http://7.7.7.7:8080/checkin";
     } else if cfg!(feature = "operator_debug") {
         url = "http://192.168.10.2:8080/checkin";
     } else {

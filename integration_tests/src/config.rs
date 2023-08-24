@@ -53,7 +53,7 @@ pub fn generate_rita_config_file(path: String) -> Result<(), KernelInterfaceErro
 
     let log = "
     [log]\n
-    enabled = false\n"
+    enabled = true\n"
         .to_string();
     lines.push(log);
 
@@ -153,7 +153,7 @@ pub fn generate_exit_config_file(path: String) -> Result<(), KernelInterfaceErro
 
     let log = "
     [log]\n
-    enabled = false\n"
+    enabled = true\n"
         .to_string();
     lines.push(log);
 

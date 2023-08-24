@@ -125,8 +125,8 @@ pub fn send_heartbeat_loop() {
 fn send_udp_heartbeat() {
     let heartbeat_url: &str;
     if cfg!(feature = "dev_env") {
-        heartbeat_url = "0.0.0.0:33333";
-        info!("We are using localhost heartbeart url");
+        heartbeat_url = "7.7.7.7:33333";
+        info!("We are using dev env heartbeart url");
     } else if cfg!(feature = "operator_debug") {
         heartbeat_url = "192.168.10.2:33333";
         info!("We are setting operator debug heartbeart url");
