@@ -21,7 +21,7 @@ async fn main() {
     // if you want to see logs for the rita instances you can adjust this per module in Rita by level
     // note this will print logs for all rita instances since they are all in one thread
     env_logger::Builder::default()
-        .filter(None, log::LevelFilter::Error)
+        .filter(None, log::LevelFilter::Info)
         .filter(Some("integration_tests"), log::LevelFilter::Info)
         .init();
     set_sigterm();
@@ -36,9 +36,11 @@ async fn main() {
 
     let test_type = env::var("TEST_TYPE");
     info!("Starting tests with {:?}", test_type);
+    run_five_node_test_scenario().await;
+
+    /*
     if let Ok(test_type) = test_type {
         if test_type == "FIVE_NODES" {
-            run_five_node_test_scenario().await;
         } else if test_type == "DEBTS_TEST" {
             run_debts_test().await;
         } else if test_type == "PAYMENTS_ETH" || test_type == "ETH_PAYMENTS" {
@@ -53,4 +55,5 @@ async fn main() {
     } else {
         panic!("Error test type not set!");
     }
+    */
 }

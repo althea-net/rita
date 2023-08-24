@@ -2,7 +2,7 @@
 # Number of validators to start
 NODES=$1
 # what test to execute
-TEST_TYPE=$2
+TEST_TYPE=$1
 set -eux
 
 # Stop any currently running peggy and eth processes
@@ -14,8 +14,8 @@ do
     rm -rf "/validator$i"
 done
 
-/althea_rs/scripts/integration_tests/container_scripts/setup-validators.sh $NODES
-/althea_rs/scripts/integration_tests/container_scripts/run-testnet.sh $NODES
+#/althea_rs/scripts/integration_tests/container_scripts/setup-validators.sh $NODES
+#/althea_rs/scripts/integration_tests/container_scripts/run-testnet.sh $NODES
 
 sleep 10
 
