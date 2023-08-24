@@ -16,9 +16,9 @@ althea_kernel_interface = { path = "../althea_kernel_interface", features = ["in
 althea_types = { path = "../althea_types" }
 clu = { path = "../clu" }
 settings = { path = "../settings" }
-rita_client = { path = "../rita_client"}
+rita_client = { path = "../rita_client", features = ["dev_env"]}
 rita_common = { path = "../rita_common", features = ["integration_test"]}
-rita_exit = { path = "../rita_exit"}
+rita_exit = { path = "../rita_exit", features = ["dev_env"]}
 ctrlc = {version = "3.2.1", features = ["termination"]}
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 diesel_migrations = { version = "1.4", features = ["postgres"] }
