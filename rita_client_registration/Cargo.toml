@@ -13,3 +13,5 @@ serde = "1.0"
 clarity = "1.2"
 phonenumber = "0.3"
 awc = "3.1"
+web30 = "1.0"
+tokio = { version = "1.21", features = ["macros", "time"] }

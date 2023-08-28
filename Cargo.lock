@@ -2679,6 +2679,8 @@ dependencies = [
  "log",
  "phonenumber",
  "serde",
+ "tokio",
+ "web30",
 ]
 
 [[package]]
@@ -2748,6 +2750,7 @@ dependencies = [
  "serde_json",
  "settings",
  "sodiumoxide",
+ "web30",
 ]
 
 [[package]]
@@ -2852,6 +2855,27 @@ dependencies = [
  "ring",
  "rustls-webpki",
  "sct",
+]
+
+[[package]]
+name = "rustls-native-certs"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9aace74cb666635c918e9c12bc0d348266037aa8eb599b5cba565709a8dff00"
+dependencies = [
+ "openssl-probe",
+ "rustls-pemfile",
+ "schannel",
+ "security-framework",
+]
+
+[[package]]
+name = "rustls-pemfile"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d3987094b1d07b653b7dfdc3f70ce9a1da9c51ac18c1b06b662e4f9a0e9f4b2"
+dependencies = [
+ "base64 0.21.4",
 ]
 
 [[package]]
@@ -3223,14 +3247,21 @@ dependencies = [
 name = "test_runner"
 version = "0.1.0"
 dependencies = [
+ "actix",
  "actix-rt",
  "althea_kernel_interface",
+ "althea_types",
  "awc",
+ "clarity",
  "ctrlc",
+ "deep_space",
  "docopt",
  "env_logger",
+ "futures 0.3.28",
  "integration_tests",
  "log",
+ "rita_client_registration",
+ "web30",
 ]
 
 [[package]]
@@ -3359,6 +3390,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-rustls"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
+dependencies = [
+ "rustls",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-stream"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3412,7 +3453,10 @@ dependencies = [
  "percent-encoding",
  "pin-project",
  "prost",
+ "rustls-native-certs",
+ "rustls-pemfile",
  "tokio",
+ "tokio-rustls",
  "tokio-stream",
  "tower",
  "tower-layer",

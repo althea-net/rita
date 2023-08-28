@@ -3,6 +3,7 @@ use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_exit, setup_accepted_denoms, SettingsError};
 use althea_types::{Identity, WgKey};
+use clarity::Address;
 use core::str::FromStr;
 use ipnetwork::IpNetwork;
 use std::collections::HashSet;
@@ -33,6 +34,8 @@ pub struct ExitNetworkSettings {
     pub geoip_api_key: Option<String>,
     /// The our public key for the wg_exit tunnel
     pub wg_public_key: WgKey,
+    /// Lists of exit ip addrs in this cluster
+    pub cluster_exits: Vec<Identity>,
     /// Our private key for the wg_exit tunnel, not an option because it's better
     /// for exits to crash than to generate their own key
     pub wg_private_key: WgKey,
@@ -45,6 +48,8 @@ pub struct ExitNetworkSettings {
     /// to maintain a good user experience while migrating users or waiting on a faster enforcement classifier
     #[serde(default = "enable_enforcement_default")]
     pub enable_enforcement: bool,
+    /// Address of the Althea contract to store registered users data
+    pub registered_users_contract_addr: Address,
 }
 
 fn enable_enforcement_default() -> bool {
@@ -72,7 +77,11 @@ impl ExitNetworkSettings {
                 .unwrap(),
             wg_private_key_path: String::new(),
             pass: None,
+            cluster_exits: Vec::new(),
             enable_enforcement: true,
+            registered_users_contract_addr: "0x9BAbFde52Fe18A5CD00a542b87b4D124a4879582"
+                .parse()
+                .unwrap(),
         }
     }
 }

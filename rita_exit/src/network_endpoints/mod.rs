@@ -19,17 +19,22 @@ use althea_types::{
 use althea_types::{EncryptedExitList, Identity};
 use althea_types::{ExitList, WgKey};
 use num256::Int256;
-use rita_client_registration::client_db::get_clients_exit_cluster_list;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::payment_validator::calculate_unverified_payments;
+use rita_common::rita_loop::get_web3_server;
 use settings::get_rita_exit;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::net::SocketAddr;
+use std::time::Duration;
 use std::time::SystemTime;
+use web30::client::Web3;
+
+// Timeout to contact Althea contract and query info about a user
+pub const CLIENT_STATUS_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// helper function for returning from secure_setup_request()
 fn secure_setup_return(
@@ -187,6 +192,13 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
     let exit_settings = get_rita_exit();
     let our_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
     let our_secretkey = our_secretkey.into();
+    let our_address = exit_settings
+        .payment
+        .eth_private_key
+        .expect("Why dont we have a private key?")
+        .to_address();
+    let contract_addr = exit_settings.exit_network.registered_users_contract_addr;
+    let contact = Web3::new(&get_web3_server(), CLIENT_STATUS_TIMEOUT);
 
     let their_wg_pubkey = request.pubkey;
     let their_nacl_pubkey = request.pubkey.into();
@@ -199,7 +211,8 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
     };
     trace!("got status request from {}", their_wg_pubkey);
 
-    let state = match client_status(*decrypted_id) {
+    // We use our eth address as the requesting address
+    let state = match client_status(*decrypted_id, our_address, contract_addr, &contact).await {
         Ok(state) => state,
         Err(e) => match *e {
             RitaExitError::NoClientError => {
@@ -247,7 +260,7 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
     let their_nacl_pubkey = request.pubkey.into();
 
     let ret: ExitList = ExitList {
-        exit_list: get_clients_exit_cluster_list(request.pubkey),
+        exit_list: settings::get_rita_exit().exit_network.cluster_exits,
         wg_exit_listen_port: settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
     };
 

@@ -8,27 +8,29 @@ ipnetwork = "0.20"
 env_logger = "0.10"
 log = "0.4"
 docopt = "1.1"
-actix-async = {package="actix", version = "0.13"}
+actix-async = { package = "actix", version = "0.13" }
 nix = "0.26.1"
 petgraph = "0.6.2"
 babel_monitor = { path = "../babel_monitor" }
-althea_kernel_interface = { path = "../althea_kernel_interface", features = ["integration_test"] }
+althea_kernel_interface = { path = "../althea_kernel_interface", features = [
+    "integration_test",
+] }
 althea_types = { path = "../althea_types" }
 clu = { path = "../clu" }
 settings = { path = "../settings" }
-rita_client = { path = "../rita_client", features = ["dev_env"]}
-rita_common = { path = "../rita_common", features = ["integration_test"]}
-rita_exit = { path = "../rita_exit", features = ["dev_env"]}
-ctrlc = {version = "3.2.1", features = ["termination"]}
+rita_client = { path = "../rita_client", features = ["dev_env"] }
+rita_common = { path = "../rita_common", features = ["integration_test"] }
+rita_exit = { path = "../rita_exit", features = ["dev_env"] }
+ctrlc = { version = "3.2.1", features = ["termination"] }
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 diesel_migrations = { version = "1.4", features = ["postgres"] }
 awc = "3.1"
 actix-rt = "2.8"
-deep_space = {workspace = true}
+deep_space = { workspace = true }
 clarity = "1.2"
 althea_proto = "0.3.0"
 futures = { version = "0.3", features = ["compat"] }
 num256 = "0.5"
-num-traits="0.2"
+num-traits = "0.2"
 web30 = "1.0"
 lazy_static = "1.4"
