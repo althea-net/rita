@@ -212,7 +212,7 @@ pub fn start_antenna_forwarder(settings: RitaClientSettings) {
     if metrics_permitted() {
         let url: &str;
         if cfg!(feature = "dev_env") {
-            url = "0.0.0.0:33300";
+            url = "7.7.7.7:33300";
         } else if cfg!(feature = "operator_debug") {
             url = "192.168.10.2:33334";
         } else {
