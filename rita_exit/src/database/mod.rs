@@ -17,6 +17,7 @@ use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
+use clarity::Address;
 use rita_client_registration::client_db::get_registered_client_using_wgkey;
 use rita_client_registration::ExitSignupReturn;
 use rita_common::blockchain_oracle::calculate_close_thresh;
@@ -30,6 +31,7 @@ use std::net::IpAddr;
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
+use web30::client::Web3;
 
 pub mod database_tools;
 pub mod geoip;
@@ -162,35 +164,51 @@ pub async fn forward_client_signup_request(exit_client: ExitClientIdentity) -> E
 }
 
 /// Gets the status of a client and updates it in the database
-pub fn client_status(client: ExitClientIdentity) -> Result<ExitState, Box<RitaExitError>> {
+pub async fn client_status(
+    client: ExitClientIdentity,
+    our_address: Address,
+    contract_addr: Address,
+    contact: &Web3,
+) -> Result<ExitState, Box<RitaExitError>> {
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
-    if let Some(their_record) = get_registered_client_using_wgkey(client.global.wg_public_key) {
-        trace!("record exists, updating");
+    match get_registered_client_using_wgkey(
+        client.global.wg_public_key,
+        our_address,
+        contract_addr,
+        contact,
+    )
+    .await
+    {
+        Ok(their_record) => {
+            trace!("record exists, updating");
 
-        let current_ip: IpAddr = get_client_internal_ip(
-            their_record,
-            get_rita_exit().exit_network.netmask,
-            get_rita_exit().exit_network.own_internal_ip,
-        )?;
-        let current_internet_ipv6 = get_client_ipv6(
-            their_record,
-            settings::get_rita_exit().exit_network.subnet,
-            settings::get_rita_exit()
-                .get_client_subnet_size()
-                .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
-        )?;
+            let current_ip: IpAddr = get_client_internal_ip(
+                their_record,
+                get_rita_exit().exit_network.netmask,
+                get_rita_exit().exit_network.own_internal_ip,
+            )?;
+            let current_internet_ipv6 = get_client_ipv6(
+                their_record,
+                settings::get_rita_exit().exit_network.subnet,
+                settings::get_rita_exit()
+                    .get_client_subnet_size()
+                    .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
+            )?;
 
-        Ok(ExitState::Registered {
-            our_details: ExitClientDetails {
-                client_internal_ip: current_ip,
-                internet_ipv6_subnet: current_internet_ipv6,
-            },
-            general_details: get_exit_info(),
-            message: "Registration OK".to_string(),
-        })
-    } else {
-        Err(Box::new(RitaExitError::NoClientError))
+            Ok(ExitState::Registered {
+                our_details: ExitClientDetails {
+                    client_internal_ip: current_ip,
+                    internet_ipv6_subnet: current_internet_ipv6,
+                },
+                general_details: get_exit_info(),
+                message: "Registration OK".to_string(),
+            })
+        }
+        Err(e) => {
+            error!("Failed to retrieve a client: {}", e);
+            Err(Box::new(RitaExitError::NoClientError))
+        }
     }
 }
 

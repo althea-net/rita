@@ -1,6 +1,6 @@
 FROM postgres
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y sudo iputils-ping iproute2 jq vim netcat-traditional default-libmysqlclient-dev libsqlite3-dev postgresql-client-11 postgresql-server-dev-11 libpq-dev python3-pip bridge-utils wireguard linux-source curl git libssl-dev pkg-config build-essential ipset python3-setuptools python3-wheel dh-autoreconf procps net-tools iperf3 babeld make locales-all
+RUN apt-get update && apt-get install -y sudo iputils-ping iproute2 jq vim netcat-traditional default-libmysqlclient-dev libsqlite3-dev postgresql-client-11 postgresql-server-dev-11 libpq-dev python3-pip bridge-utils wireguard linux-source curl git libssl-dev pkg-config build-essential ipset python3-setuptools python3-wheel dh-autoreconf procps net-tools iperf3 babeld make locales-all npm
 # Install Rust
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 ENV PATH=$PATH:/root/.cargo/bin/

@@ -25,6 +25,8 @@ use babel_monitor::{open_babel_stream, parse_routes};
 
 use rita_client_registration::client_db::get_all_regsitered_clients;
 use rita_common::debt_keeper::DebtAction;
+use rita_common::rita_loop::get_web3_server;
+use web30::client::Web3;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -88,10 +90,13 @@ pub fn start_rita_exit_loop() {
             thread::spawn(move || {
                 // Internal exit cache that store state across multiple ticks
                 let mut rita_exit_cache = RitaExitCache::default();
-
-                loop {
-                    rita_exit_cache = rita_exit_loop(rita_exit_cache, usage_history.clone());
-                }
+                let runner = AsyncSystem::new();
+                runner.block_on(async move {
+                    loop {
+                        rita_exit_cache =
+                            rita_exit_loop(rita_exit_cache, usage_history.clone()).await;
+                    }
+                })
             })
             .join()
         } {
@@ -106,14 +111,38 @@ pub fn start_rita_exit_loop() {
     });
 }
 
-fn rita_exit_loop(rita_exit_cache: RitaExitCache, usage_history: ExitLock) -> RitaExitCache {
+async fn rita_exit_loop(rita_exit_cache: RitaExitCache, usage_history: ExitLock) -> RitaExitCache {
     let mut rita_exit_cache = rita_exit_cache;
     let start = Instant::now();
 
-    let babel_port = settings::get_rita_exit().network.babel_port;
+    let rita_exit = settings::get_rita_exit();
+    let babel_port = rita_exit.network.babel_port;
+    let contact = Web3::new(&get_web3_server(), CLIENT_STATUS_TIMEOUT);
+    let our_addr = rita_exit
+        .payment
+        .eth_private_key
+        .expect("Why do we not have a private key?")
+        .to_address();
+    let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
 
     let get_clients_benchmark = Instant::now();
-    let reg_clients_list = get_all_regsitered_clients();
+    let reg_clients_list = match get_all_regsitered_clients(&contact, our_addr, contract_addr).await
+    {
+        Ok(a) => a,
+        Err(e) => {
+            // Getting all clients is core functionality, we panic if fails
+            let message = format!(
+                "Failed to get all registered users with {}. Web3 url: {}, contract_addr: {}",
+                e,
+                get_web3_server(),
+                contract_addr
+            );
+            error!("{}", message);
+            let sys = AsyncSystem::current();
+            sys.stop();
+            panic!("{}", message);
+        }
+    };
     info!(
         "Finished Rita get clients, got {:?} clients in {}ms",
         reg_clients_list.len(),

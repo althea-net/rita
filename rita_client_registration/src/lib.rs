@@ -2,11 +2,15 @@
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
+    time::Duration,
 };
 
 use althea_types::{ExitClientIdentity, WgKey};
+use clarity::{Address, PrivateKey};
 use phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
+use tokio::join;
+use web30::client::Web3;
 
 use crate::client_db::{
     add_client_to_registered_list, get_registered_client_using_ethkey,
@@ -77,11 +81,16 @@ pub struct SmsRequest {
 }
 
 /// True if there is any client with the same eth address, wg key, or ip address already registered
-pub fn client_conflict(client: &ExitClientIdentity) -> bool {
+pub async fn client_conflict(
+    client: &ExitClientIdentity,
+    contact: &Web3,
+    contract_addr: Address,
+    our_address: Address,
+) -> bool {
     // we can't possibly have a conflict if we have exactly this client already
     // since client exists checks all major details this is safe and will return false
     // if it's not exactly the same client
-    if client_exists(client) {
+    if client_exists(client, our_address, contract_addr, contact).await {
         return false;
     }
     trace!("Checking if client exists");
@@ -89,9 +98,15 @@ pub fn client_conflict(client: &ExitClientIdentity) -> bool {
     let wg = client.global.wg_public_key;
     let key = client.global.eth_address;
 
-    let ip_exists = get_registered_client_using_meship(ip).is_some();
-    let wg_exists = get_registered_client_using_wgkey(wg).is_some();
-    let eth_exists = get_registered_client_using_ethkey(key).is_some();
+    let ip_exists = get_registered_client_using_meship(ip, our_address, contract_addr, contact);
+    let wg_exists = get_registered_client_using_wgkey(wg, our_address, contract_addr, contact);
+    let eth_exists = get_registered_client_using_ethkey(key, our_address, contract_addr, contact);
+
+    let (ip_exists, wg_exists, eth_exists) = join!(ip_exists, wg_exists, eth_exists);
+
+    let ip_exists = ip_exists.is_ok();
+    let wg_exists = wg_exists.is_ok();
+    let eth_exists = eth_exists.is_ok();
 
     info!(
         "Signup conflict ip {} eth {} wg {}",
@@ -100,12 +115,29 @@ pub fn client_conflict(client: &ExitClientIdentity) -> bool {
     ip_exists || eth_exists || wg_exists
 }
 
-fn client_exists(client: &ExitClientIdentity) -> bool {
+async fn client_exists(
+    client: &ExitClientIdentity,
+    our_address: Address,
+    contract_addr: Address,
+    contact: &Web3,
+) -> bool {
     trace!("Checking if client exists");
-    let c_id = get_registered_client_using_wgkey(client.global.wg_public_key);
+    let c_id = get_registered_client_using_wgkey(
+        client.global.wg_public_key,
+        our_address,
+        contract_addr,
+        contact,
+    )
+    .await;
     match c_id {
-        Some(a) => client.global == a,
-        None => false,
+        Ok(a) => client.global == a,
+        Err(e) => {
+            error!(
+                "Error retrieving an identity with wg key {} with {}",
+                client.global.wg_public_key, e
+            );
+            false
+        }
     }
 }
 
@@ -114,6 +146,10 @@ pub async fn handle_sms_registration(
     client: ExitClientIdentity,
     api_key: String,
     magic_number: Option<String>,
+    contact: &Web3,
+    contract_addr: Address,
+    our_private_key: PrivateKey,
+    wait_timeout: Option<Duration>,
 ) -> ExitSignupReturn {
     info!(
         "Handling phone registration for {}",
@@ -145,7 +181,15 @@ pub async fn handle_sms_registration(
                     "Phone registration complete for {}",
                     client.global.wg_public_key
                 );
-                add_client_to_registered_list(client.global);
+                let _ = add_client_to_registered_list(
+                    contact,
+                    client.global,
+                    contract_addr,
+                    our_private_key,
+                    wait_timeout,
+                    vec![],
+                )
+                .await;
                 reset_texts_sent(client.global.wg_public_key);
                 ExitSignupReturn::RegistrationOk
             } else {
@@ -178,7 +222,15 @@ pub async fn handle_sms_registration(
                     "Phone registration complete for {}",
                     client.global.wg_public_key
                 );
-                add_client_to_registered_list(client.global);
+                let _ = add_client_to_registered_list(
+                    contact,
+                    client.global,
+                    contract_addr,
+                    our_private_key,
+                    wait_timeout,
+                    vec![],
+                )
+                .await;
                 reset_texts_sent(client.global.wg_public_key);
                 ExitSignupReturn::RegistrationOk
             } else {

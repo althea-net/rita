@@ -4,6 +4,7 @@ import { TestERC20A } from "./typechain/TestERC20A";
 import { TestERC20B } from "./typechain/TestERC20B";
 import { TestERC20C } from "./typechain/TestERC20C";
 import { TestERC721A } from "./typechain/TestERC721A";
+import { AltheaDB } from "./typechain/AltheaDB";
 import { ethers } from "ethers";
 import fs from "fs";
 import commandLineArgs from "command-line-args";
@@ -27,15 +28,19 @@ const overrides = {
 // The contracts are then located in the filesystem and deployed with an ethers.js ContractFactory
 async function deploy() {
   var startTime = new Date();
+  console.log(args["eth-node"]);
   const provider = await new ethers.providers.JsonRpcProvider(args["eth-node"]);
   let wallet = new ethers.Wallet(args["eth-privkey"], provider);
 
   var success = false;
+  var tries = 0;
   while (!success) {
     var present = new Date();
     var timeDiff: number = present.getTime() - startTime.getTime();
     timeDiff = timeDiff / 1000
-    provider.getBlockNumber().then(_ => success = true).catch(_ => console.log("Ethereum RPC error, trying again"))
+    console.log(tries);
+    tries++;
+    provider.getBlockNumber().then(e => { console.log(e); success = true; }).catch(e => { console.log(e); console.log("Ethereum RPC error, trying again"); })
 
     if (timeDiff > 600) {
       console.log("Could not contact Ethereum RPC after 10 minutes, check the URL!")
@@ -51,36 +56,45 @@ async function deploy() {
   var erc20_b_path: string
   var erc20_c_path: string
   var erc721_a_path: string
-  const main_location_a = "/althea/solidity/artifacts/contracts/TestERC20A.sol/TestERC20A.json"
-  const main_location_b = "/althea/solidity/artifacts/contracts/TestERC20B.sol/TestERC20B.json"
-  const main_location_c = "/althea/solidity/artifacts/contracts/TestERC20C.sol/TestERC20C.json"
-  const main_location_721_a = "/althea/solidity/artifacts/contracts/TestERC721A.sol/TestERC721A.json"
+  var althea_db_path: string
+  const main_location_a = "/althea_rs/solidity/artifacts/contracts/TestERC20A.sol/TestERC20A.json"
+  const main_location_b = "/althea_rs/solidity/artifacts/contracts/TestERC20B.sol/TestERC20B.json"
+  const main_location_c = "/althea_rs/solidity/artifacts/contracts/TestERC20C.sol/TestERC20C.json"
+  const main_location_721_a = "/althea_rs/solidity/artifacts/contracts/TestERC721A.sol/TestERC721A.json"
+  const main_location_altheadb = "/althea_rs/solidity/artifacts/contracts/AltheaDB.sol/AltheaDB.json"
+
 
   const alt_location_1_a = "/solidity/TestERC20A.json"
   const alt_location_1_b = "/solidity/TestERC20B.json"
   const alt_location_1_c = "/solidity/TestERC20C.json"
   const alt_location_1_721a = "/solidity/TestERC721A.json"
+  const alt_location_1_altheadb = "/solidity/AltheaDB.json"
 
   const alt_location_2_a = "TestERC20A.json"
   const alt_location_2_b = "TestERC20B.json"
   const alt_location_2_c = "TestERC20C.json"
   const alt_location_2_721a = "TestERC721A.json"
+  const alt_location_2_altheadb = "AltheaDB.json"
+
 
   if (fs.existsSync(main_location_a)) {
     erc20_a_path = main_location_a
     erc20_b_path = main_location_b
     erc20_c_path = main_location_c
     erc721_a_path = main_location_721_a
+    althea_db_path = main_location_altheadb
   } else if (fs.existsSync(alt_location_1_a)) {
     erc20_a_path = alt_location_1_a
     erc20_b_path = alt_location_1_b
     erc20_c_path = alt_location_1_c
     erc721_a_path = alt_location_1_721a
+    althea_db_path = alt_location_1_altheadb
   } else if (fs.existsSync(alt_location_2_a)) {
     erc20_a_path = alt_location_2_a
     erc20_b_path = alt_location_2_b
     erc20_c_path = alt_location_2_c
     erc721_a_path = alt_location_2_721a
+    althea_db_path = alt_location_2_altheadb
   } else {
     console.log("Test mode was enabled but the ERC20 contracts can't be found!")
     exit(1)
@@ -103,7 +117,7 @@ async function deploy() {
   await testERC20.deployed(); // Wait
   const erc20TestAddress = testERC20.address;
   console.log("ERC20 deployed at Address - ", erc20TestAddress);
-  // Now testERC20 is ready to use, e.g. testERC20.transfer(from, to, amount)
+  // Now testERC20 is ready to use, e.g.testERC20.transfer(from, to, amount)
 
   const { abi: abi1, bytecode: bytecode1 } = getContractArtifacts(erc20_b_path);
   const erc20Factory1 = new ethers.ContractFactory(abi1, bytecode1, wallet);
@@ -125,6 +139,13 @@ async function deploy() {
   await testERC721.deployed();
   const erc721TestAddress = testERC721.address;
   console.log("ERC721 deployed at Address - ", erc721TestAddress);
+
+  const { abi: abi4, bytecode: bytecode4 } = getContractArtifacts(althea_db_path);
+  const altheadbFactory1 = new ethers.ContractFactory(abi4, bytecode4, wallet);
+  const testAltheaDB = (await altheadbFactory1.deploy(overrides)) as AltheaDB;
+  await testAltheaDB.deployed();
+  const altheaDBTestAddress = testAltheaDB.address;
+  console.log("Althea DB deployed at Address - ", altheaDBTestAddress);
 }
 
 function getContractArtifacts(path: string): { bytecode: string; abi: string } {

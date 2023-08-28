@@ -11,8 +11,17 @@ path = "src/main.rs"
 env_logger = "0.10"
 log = "0.4"
 docopt = "1.1"
-ctrlc = {version = "3.2.1", features = ["termination"]}
+ctrlc = { version = "3.2.1", features = ["termination"] }
 awc = "3.1"
 actix-rt = "2.8"
-integration_tests = {path = "../integration_tests"}
+integration_tests = { path = "../integration_tests" }
+althea_types = { path = "../althea_types" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
+deep_space = { version = "2", features = ["althea"] }
+rita_client_registration = { path = "../rita_client_registration" }
+web30 = "1.0"
+clarity = "1.2"
+
+[dev-dependencies]
+actix = "0.13"
+futures = "0.3"

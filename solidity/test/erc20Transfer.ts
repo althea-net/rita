@@ -27,7 +27,7 @@ async function runTest(opts: {}) {
   console.log("sender", sender.address, "receiver", receiver.address);
 
   // Deploy several ERC20 tokens
-  const { testERC20A, testERC20B, testERC20C } = await deployContracts(sender);
+  const { testERC20A, testERC20B, testERC20C, althea_db } = await deployContracts(sender);
 
   const amount = 100;
   // Expect is a chai test that monitors side effects and makes them available with ethereum-waffle features like .to.emit()
@@ -40,8 +40,22 @@ async function runTest(opts: {}) {
   expect(
     await testERC20A.transfer(receiver.address, 100)
   ).to
-  .emit(testERC20A, 'Transfer')
-  .withArgs(sender.address, receiver.address, amount);
+    .emit(testERC20A, 'Transfer')
+    .withArgs(sender.address, receiver.address, amount);
+
+  althea_db.add_registered_user({
+    mesh_ip: "fd00::1337",
+    wg_key: "asfsdf",
+    eth_addr: "0x054CA202089D58efB56a2B11ce812Ae3882fE1f3",
+  })
+
+  althea_db.add_registered_user({
+    mesh_ip: "fd00::1447",
+    wg_key: "lkjalsdjfl",
+    eth_addr: "0x76a884Fb9cCbA3C97b04Fc50c01c6E7b0ec54e30",
+  })
+
+  console.log(await althea_db.get_all_registered_users())
 }
 
 describe("ERC20Transfer tests", function () {

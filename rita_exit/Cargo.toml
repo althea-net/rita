@@ -32,6 +32,7 @@ actix-web-async = { package = "actix-web", version = "4.3", default_features = f
     "openssl",
 ] }
 deep_space = { workspace = true }
+web30 = "1.0"
 
 [features]
 # changes operator urls
