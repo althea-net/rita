@@ -21,7 +21,8 @@ do
         RPC_ADDRESS="--rpc.laddr tcp://0.0.0.0:26657"
         GRPC_ADDRESS="--grpc.address 0.0.0.0:9090"
         GRPC_WEB_ADDRESS="--grpc-web.address 0.0.0.0:9092"
-        ETH_RPC_ADDRESS="--json-rpc.address 127.0.0.1:8545"
+        ETH_RPC_ADDRESS="--json-rpc.address 0.0.0.0:8545"
+        ETH_RPC_WS_ADDRESS="--json-rpc.ws-address 0.0.0.0:8546" # We don't use the WS address, but without this it will break the server
         sed -i 's/enable-unsafe-cors = false/enable-unsafe-cors = true/g' /validator$i/config/app.toml
         sed -i 's/enabled-unsafe-cors = false/enabled-unsafe-cors = true/g' /validator$i/config/app.toml
         sed -i 's/enable = false/enable = true/g' /validator$i/config/app.toml #enables more than we want, but will work for now
@@ -34,11 +35,12 @@ do
         GRPC_ADDRESS="--grpc.address 7.7.7.$i:9091"
         GRPC_WEB_ADDRESS="--grpc-web.address 7.7.7.$i:9093"
         ETH_RPC_ADDRESS="--json-rpc.address 7.7.7.$i:8545"
+        ETH_RPC_WS_ADDRESS="--json-rpc.address 7.7.7.$i:8546" # We don't use the WS address, but without this it will break the server
     fi
     LISTEN_ADDRESS="--address tcp://7.7.7.$i:26655"
     P2P_ADDRESS="--p2p.laddr tcp://7.7.7.$i:26656"
     LOG_LEVEL="--log_level info"
     INVARIANTS_CHECK="--inv-check-period 1"
-    ARGS="$GAIA_HOME $LISTEN_ADDRESS $RPC_ADDRESS $GRPC_ADDRESS $GRPC_WEB_ADDRESS $ETH_RPC_ADDRESS $INVARIANTS_CHECK $LOG_LEVEL $P2P_ADDRESS"
+    ARGS="$GAIA_HOME $LISTEN_ADDRESS $RPC_ADDRESS $GRPC_ADDRESS $GRPC_WEB_ADDRESS $ETH_RPC_ADDRESS $ETH_RPC_WS_ADDRESS $INVARIANTS_CHECK $LOG_LEVEL $P2P_ADDRESS"
     $BIN $ARGS start &> /validator$i/logs &
 done
