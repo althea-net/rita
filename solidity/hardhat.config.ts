@@ -31,8 +31,9 @@ module.exports = {
     version: "0.8.21",
     settings: {
       optimizer: {
-        enabled: true
-      }
+        enabled: true,
+      },
+      evmVersion: "paris"
     }
   },
   networks: {
