@@ -28,9 +28,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 use std::io::Seek;
-
 use std::net::IpAddr;
-use std::net::Ipv4Addr;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -330,7 +328,7 @@ fn manage_babeld_logs() {
 /// as a dns resolver
 pub fn update_dns_conf() {
     let resolv_path = "/etc/resolv.conf";
-    let updated_config = "nameserver 172.168.0.254\nnameserver 8.8.8.8\nnameserver 1.0.0.1\nnameserver 74.82.42.42\nnameserver 149.112.112.10\nnameserver 64.6.65.6"
+    let updated_config = "nameserver 172.168.0.254\nnameserver 1.0.0.1\nnameserver 8.8.8.8\nnameserver 74.82.42.42\nnameserver 149.112.112.10\nnameserver 64.6.65.6"
         .to_string();
     // read line by line instead
     match File::open(resolv_path) {
@@ -362,24 +360,28 @@ pub fn update_dns_conf() {
         // not every device will take this dns server and use it, but many do, and some use it exclusively so it has to be correct
 
         const DHCP_DNS_LIST_KEY: &str = "dhcp.@dnsmasq[0].server";
-        const EXIT_INTERNAL_IP: Ipv4Addr = Ipv4Addr::new(172, 168, 0, 254);
+        const LAN_IP_KEY: &str = "network.lan.ipaddr";
 
         // this config value is the list of servers dnsmasq uses for resolving client requests
         // if it does not start with the exit internal nameserver add it. An empty value is acceptable
         // since dnsmasq simply uses resolv.conf servers which we update above in that case.
-        match parse_list_to_ip(KI.get_uci_var(DHCP_DNS_LIST_KEY)) {
-            Ok(dns_server_list) => {
+        match (
+            parse_list_to_ip(KI.get_uci_var(DHCP_DNS_LIST_KEY)),
+            maybe_parse_ip(KI.get_uci_var(LAN_IP_KEY)),
+        ) {
+            (Ok(dns_server_list), Ok(router_internal_ip)) => {
                 // an empty list uses the system resolver, this is acceptable since we just set the system resolver to
                 // point at the exit internal ip above
                 if let Some(first_server_list_entry) = dns_server_list.get(0) {
-                    if *first_server_list_entry != EXIT_INTERNAL_IP {
+                    if *first_server_list_entry != router_internal_ip {
                         let mut dns_server_list = dns_server_list;
-                        dns_server_list.insert(0, EXIT_INTERNAL_IP.into());
+                        dns_server_list.insert(0, router_internal_ip);
                         overwrite_dns_server_and_restart_dhcp(DHCP_DNS_LIST_KEY, dns_server_list)
                     }
                 }
             }
-            Err(e) => error!("Failed to get dns server list? {:?}", e),
+            (Err(e), _) => error!("Failed to get dns server list? {:?}", e),
+            (_, Err(e)) => error!("Failed to get router internal ip {:?}", e),
         }
     }
 }
@@ -433,5 +435,14 @@ pub fn update_system_time() {
             Ok(_) => info!("System time updated!"),
             Err(e) => error!("{}", e),
         }
+    }
+}
+
+fn maybe_parse_ip(
+    input: Result<String, KernelInterfaceError>,
+) -> Result<IpAddr, KernelInterfaceError> {
+    match input {
+        Ok(s) => Ok(s.parse()?),
+        Err(e) => Err(e),
     }
 }
