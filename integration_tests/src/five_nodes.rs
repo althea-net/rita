@@ -2,10 +2,13 @@ use crate::setup_utils::database::start_postgres;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    get_default_settings, register_all_namespaces_to_exit, test_reach_all, test_routes,
+    get_default_settings, register_all_namespaces_to_exit, test_all_internet_connectivity,
+    test_reach_all, test_routes,
 };
 use log::info;
 use std::collections::HashMap;
+use std::thread;
+use std::time::Duration;
 
 /// Runs a five node fixed network map test scenario, this does basic network setup and tests reachability to
 /// all destinations
@@ -37,6 +40,10 @@ pub async fn run_five_node_test_scenario() {
 
     info!("Registering routers to the exit");
     register_all_namespaces_to_exit(namespaces.clone()).await;
+
+    info!("Checking for wg_exit tunnel setup");
+    thread::sleep(Duration::from_secs(5));
+    test_all_internet_connectivity(namespaces.clone());
 }
 
 /// This defines the network map for a five node scenario
