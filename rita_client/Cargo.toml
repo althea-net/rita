@@ -38,7 +38,7 @@ clarity = "1.2"
 openssh-keys = "0.6"
 mac_address = "1.1.4"
 futures = { version = "0.3", features = ["compat"] }
-deep_space = {version = "2", features = ["althea"]}
+deep_space = {workspace = true}
 
 [lib]
 name = "rita_client"

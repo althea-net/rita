@@ -21,3 +21,6 @@ incremental = false
 [profile.testrunner]
 inherits = "dev"
 opt-level = 2
+
+[workspace.dependencies]
+deep_space = {version = "2", features = ["althea"], default-features=false}

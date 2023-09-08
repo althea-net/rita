@@ -19,6 +19,6 @@ clarity = "1.2"
 arrayvec = {version= "0.7", features = ["serde"]}
 phonenumber = "0.3"
 ipnetwork = "0.20"
-deep_space = {version = "2", features = ["althea"]}
+deep_space = {workspace = true}
 
 [features]
