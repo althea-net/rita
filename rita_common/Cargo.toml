@@ -37,8 +37,8 @@ actix-service = "2.0.2"
 web30 = "1.0"
 althea_types = { path = "../althea_types" }
 deep_space = {workspace = true}
-prost-types ="0.11"
-cosmos-sdk-proto-althea = {package = "cosmos-sdk-proto-althea", version = "0.15", features = ["ethermint"]} 
+prost-types ="0.12"
+cosmos-sdk-proto-althea = {package = "cosmos-sdk-proto-althea", version = "0.16", features = ["ethermint"]} 
 
 [dependencies.regex]
 version = "1.6"
