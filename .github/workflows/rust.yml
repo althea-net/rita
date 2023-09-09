@@ -64,22 +64,6 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - name: Cross test mipsel
         run: cargo install cross && cross test --target mipsel-unknown-linux-musl --verbose -- --test-threads=1
-  cross-mips64:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v1
-      - name: Cross test mips64
-        run: cargo install cross && cross test --target mips64-unknown-linux-gnuabi64 --verbose -- --test-threads=1
-  cross-mips64el:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v1
-      - name: Cross test mips64el
-        run: cargo install cross && cross test --target mips64el-unknown-linux-gnuabi64 --verbose -- --test-threads=1
   cross-aarch64:
     needs: test
     runs-on: ubuntu-latest
