@@ -80,24 +80,6 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - name: Cross test armv7
         run: cargo install cross && cross test --target armv7-unknown-linux-musleabihf --verbose -- --test-threads=1
-  legacy_integration-test-with-backcompat:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install Wireguard
-        run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
-      - name: Run integration test
-        run: bash scripts/legacy_integration_test/test-ci-backcompat.sh
-  legacy_integration-test:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install Wireguard
-        run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
-      - name: Run integration test
-        run: bash scripts/legacy_integration_test/test-ci.sh
   integration-test-five-nodes:
     needs: test
     runs-on: ubuntu-latest
@@ -145,3 +127,12 @@ jobs:
         run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
       - name: Run integration test
         run: bash scripts/integration_tests/all-up-test.sh MULTI_EXIT
+  integration-test-validate-contract:
+    needs: integration-test-five-nodes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Wireguard
+        run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
+      - name: Run integration test
+        run: bash scripts/integration_tests/all-up-test.sh CONTRACT_TEST

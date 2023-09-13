@@ -1,15 +1,16 @@
 use althea_kernel_interface::ExitClient;
 use althea_types::{Identity, WgKey};
-use ipnetwork::{IpNetwork, Ipv4Network};
+use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fmt::Write;
 use std::hash::{Hash, Hasher};
-use std::net::{IpAddr, Ipv4Addr};
-use std::sync::{Arc, RwLock};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use crate::{generate_iterative_client_subnet, RitaExitError, DEFAULT_CLIENT_SUBNET_SIZE};
+use crate::RitaExitError;
+
+use super::RITA_EXIT_STATE;
 
 /// Wg exit port on client side
 pub const CLIENT_WG_PORT: u16 = 59999;
@@ -17,12 +18,8 @@ pub const CLIENT_WG_PORT: u16 = 59999;
 /// Max number of time we try to generate a valid ip addr before returning an eror
 pub const MAX_IP_RETRIES: u8 = 10;
 
-lazy_static! {
-    /// Keep track of ip addrs assigned to clients and ensure collisions dont happen. In worst case
-    /// the exit restarts and loses all this data in which case those client they had collision may get new
-    /// ip addrs and would need to setup wg exit tunnel again
-    static ref IP_ASSIGNMENT_MAP: Arc<RwLock<IpAssignmentMap>> = Arc::new(RwLock::new(IpAssignmentMap::default()));
-}
+// Default Subnet size assigned to each client
+pub const DEFAULT_CLIENT_SUBNET_SIZE: u8 = 56;
 
 #[derive(Clone, Debug, Default)]
 pub struct IpAssignmentMap {
@@ -32,31 +29,95 @@ pub struct IpAssignmentMap {
 
 // Lazy static setters/getters
 pub fn get_ipv6_assignments() -> HashMap<IpAddr, WgKey> {
-    IP_ASSIGNMENT_MAP.read().unwrap().ipv6_assignments.clone()
+    RITA_EXIT_STATE
+        .read()
+        .unwrap()
+        .ip_assignment_map
+        .ipv6_assignments
+        .clone()
 }
 
 pub fn get_internal_ip_assignments() -> HashMap<IpAddr, WgKey> {
-    IP_ASSIGNMENT_MAP
+    RITA_EXIT_STATE
         .read()
         .unwrap()
+        .ip_assignment_map
         .internal_ip_assignments
         .clone()
 }
 
 pub fn add_new_ipv6_assignment(addr: IpAddr, key: WgKey) {
-    IP_ASSIGNMENT_MAP
+    RITA_EXIT_STATE
         .write()
         .unwrap()
+        .ip_assignment_map
         .ipv6_assignments
         .insert(addr, key);
 }
 
 pub fn add_new_internal_ip_assignement(addr: IpAddr, key: WgKey) {
-    IP_ASSIGNMENT_MAP
+    RITA_EXIT_STATE
         .write()
         .unwrap()
+        .ip_assignment_map
         .internal_ip_assignments
         .insert(addr, key);
+}
+
+/// Take an index i, a larger subnet and a smaller subnet length and generate the ith smaller subnet in the larger subnet
+/// For instance, if our larger subnet is fd00::1330/120, smaller sub len is 124, and index is 1, our generated subnet would be fd00::1310/124
+pub fn generate_iterative_client_subnet(
+    exit_sub: IpNetwork,
+    ind: u64,
+    subprefix: u8,
+) -> Result<IpNetwork, Box<RitaExitError>> {
+    let net;
+
+    // Covert the subnet's ip address into a u128 integer to allow for easy iterative
+    // addition operations. To this u128, we add (interative_index * client_subnet_size)
+    // and convert this result into an ipv6 addr. This is the starting ip in the client subnet
+    //
+    // For example, if we have exit subnet: fbad::1000/120, client subnet size is 124, index is 1
+    // we do (fbad::1000).to_int() + (16 * 1) = fbad::1010/124 is the client subnet
+    let net_as_int: u128 = if let IpAddr::V6(addr) = exit_sub.network() {
+        net = Ipv6Network::new(addr, subprefix).unwrap();
+        addr.into()
+    } else {
+        return Err(Box::new(RitaExitError::MiscStringError(
+            "Exit subnet expected to be ipv6!!".to_string(),
+        )));
+    };
+
+    if subprefix < exit_sub.prefix() {
+        return Err(Box::new(RitaExitError::MiscStringError(
+            "Client subnet larger than exit subnet".to_string(),
+        )));
+    }
+
+    // This bitshifting is the total number of client subnets available. We are checking that our iterative index
+    // is lower than this number. For example, exit subnet: fd00:1000/120, client subnet /124, number of subnets will be
+    // 2^(124 - 120) => 2^4 => 16
+    if ind < (1 << (subprefix - exit_sub.prefix())) {
+        let ret = net_as_int + (ind as u128 * net.size());
+        let v6addr = Ipv6Addr::from(ret);
+        let ret = IpNetwork::from(match Ipv6Network::new(v6addr, subprefix) {
+            Ok(a) => a,
+            Err(e) => {
+                return Err(Box::new(RitaExitError::MiscStringError(format!(
+                    "Unable to parse a valid client subnet: {e:?}"
+                ))))
+            }
+        });
+
+        Ok(ret)
+    } else {
+        error!(
+            "Our index is larger than available subnets, either error in logic or no more subnets"
+        );
+        Err(Box::new(RitaExitError::MiscStringError(
+            "Index larger than available subnets".to_string(),
+        )))
+    }
 }
 
 /// Given a client identity, get the clients ipv6 addr using the wgkey as a generative seed
@@ -255,9 +316,11 @@ pub fn display_hashset(input: &HashSet<String>) -> String {
 #[cfg(test)]
 mod tests {
     use althea_types::Identity;
+    use ipnetwork::IpNetwork;
 
-    use crate::database::struct_tools::{
-        get_client_internal_ip, get_internal_ip_assignments, get_ipv6_assignments,
+    use crate::database::in_memory_database::{
+        generate_iterative_client_subnet, get_client_internal_ip, get_internal_ip_assignments,
+        get_ipv6_assignments,
     };
 
     use super::{get_client_ipv6, hash_wgkey};
@@ -476,5 +539,52 @@ mod tests {
         );
 
         println!("Internal ip client 2: {}", ip);
+    }
+
+    /// Test iterative subnet generation
+    #[test]
+    fn test_generate_iterative_subnet() {
+        // Complex subnet example
+        let net: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 0, 64);
+        assert_eq!("2602:FBAD::/64".parse::<IpNetwork>().unwrap(), ret.unwrap());
+
+        let net: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 1, 64);
+        assert_eq!(
+            "2602:FBAD:0:1::/64".parse::<IpNetwork>().unwrap(),
+            ret.unwrap()
+        );
+
+        let net: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 50, 64);
+        assert_eq!(
+            "2602:FBAD:0:32::/64".parse::<IpNetwork>().unwrap(),
+            ret.unwrap()
+        );
+
+        let net: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 2_u64.pow(24), 64);
+        assert!(ret.is_err());
+
+        let net: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 0, 30);
+        assert!(ret.is_err());
+
+        // Simple subnet example
+        let net: IpNetwork = "fd00::1337/120".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 0, 124);
+        assert_eq!("fd00::1300/124".parse::<IpNetwork>().unwrap(), ret.unwrap());
+
+        let net: IpNetwork = "fd00::1337/120".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 2, 124);
+        assert_eq!("fd00::1320/124".parse::<IpNetwork>().unwrap(), ret.unwrap());
+
+        let net: IpNetwork = "fd00::1337/120".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 15, 124);
+        assert_eq!("fd00::13f0/124".parse::<IpNetwork>().unwrap(), ret.unwrap());
+        let net: IpNetwork = "fd00::1337/120".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 16, 124);
+        assert!(ret.is_err());
     }
 }

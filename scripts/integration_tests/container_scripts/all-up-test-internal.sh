@@ -10,4 +10,10 @@ bash /althea_rs/scripts/integration_tests/container_scripts/run-testnet.sh $NODE
 
 sleep 10
 
+pushd /althea_rs/solidity
+
+npm install
+
+npm run typechain
+
 bash /althea_rs/scripts/integration_tests/container_scripts/integration-tests.sh $TEST_TYPE

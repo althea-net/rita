@@ -1,12 +1,13 @@
 use crate::five_nodes::five_node_config;
-use crate::setup_utils::database::start_postgres;
+use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::setup_ns;
 use crate::setup_utils::namespaces::Namespace;
 use crate::setup_utils::rita::thread_spawner;
+use crate::utils::deploy_contracts;
+use crate::utils::populate_routers_eth;
+use crate::utils::test_all_internet_connectivity;
 use crate::utils::{generate_traffic, register_all_namespaces_to_exit, validate_debt_entry};
-use crate::utils::{
-    get_default_settings, send_eth_bulk, test_reach_all, test_routes, TEST_PAY_THRESH,
-};
+use crate::utils::{get_default_settings, test_reach_all, test_routes, TEST_PAY_THRESH};
 use clarity::Address as EthAddress;
 use clarity::{PrivateKey as EthPrivateKey, Uint256};
 use log::info;
@@ -15,11 +16,9 @@ use settings::client::RitaClientSettings;
 use settings::exit::RitaExitSettingsStruct;
 use std::thread;
 use std::time::Duration;
-use web30::client::Web3;
 
 /// Key with funds in the EVM that can be sent to routers
-pub const ETH_MINER_KEY: &str =
-    "0xb1bab011e03a9862664706fc3bbaa1b16651528e5f0e7fbfcbfdd8be302a13e7";
+const ETH_MINER_KEY: &str = "0xb1bab011e03a9862664706fc3bbaa1b16651528e5f0e7fbfcbfdd8be302a13e7";
 
 pub fn get_miner_key() -> EthPrivateKey {
     ETH_MINER_KEY.parse().unwrap()
@@ -44,6 +43,12 @@ pub async fn run_eth_payments_test_scenario() {
     let namespaces = node_config.0;
     let expected_routes = node_config.1;
 
+    info!("Waiting to deploy contracts");
+    let db_addr = deploy_contracts().await;
+
+    info!("Starting registration server");
+    start_registration_server(db_addr);
+
     let (mut client_settings, mut exit_settings) =
         get_default_settings("test".to_string(), namespaces.clone());
 
@@ -52,14 +57,16 @@ pub async fn run_eth_payments_test_scenario() {
         eth_payments_map(&mut client_settings, &mut exit_settings);
 
     namespaces.validate();
-    start_postgres();
 
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let rita_identities = thread_spawner(namespaces.clone(), client_settings, exit_settings)
-        .expect("Could not spawn Rita threads");
+    let rita_identities =
+        thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
+            .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
+
+    populate_routers_eth(rita_identities).await;
 
     test_reach_all(namespaces.clone());
     test_routes(namespaces.clone(), expected_routes);
@@ -69,22 +76,16 @@ pub async fn run_eth_payments_test_scenario() {
 
     thread::sleep(Duration::from_secs(10));
 
+    info!("Checking for wg_exit tunnel setup");
+    test_all_internet_connectivity(namespaces.clone());
+
+    info!("All clients successfully registered!");
+
+    thread::sleep(Duration::from_secs(10));
+
     let from_node: Option<Namespace> = namespaces.get_namespace(1);
     let forward_node: Option<Namespace> = namespaces.get_namespace(3);
     let end_node: Option<Namespace> = namespaces.get_namespace(6);
-
-    // start main test content
-    let web3 = Web3::new("http://localhost:8545", WEB3_TIMEOUT);
-    let mut to_top_up = Vec::new();
-    for c in rita_identities.client_identities {
-        to_top_up.push(c.eth_address);
-    }
-    for e in rita_identities.exit_identities {
-        to_top_up.push(e.eth_address)
-    }
-
-    info!("Sending 50 eth to all routers");
-    send_eth_bulk((ONE_ETH * 50).into(), &to_top_up, &web3).await;
 
     info!("Trying to generate traffic");
     generate_traffic(

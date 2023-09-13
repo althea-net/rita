@@ -20,9 +20,8 @@ use actix_web_async::App;
 use actix_web_async::HttpServer;
 pub use error::RitaExitError;
 
-pub use crate::database::database_tools::*;
-pub use crate::database::database_tools::*;
 pub use crate::database::geoip::*;
+pub use crate::database::in_memory_database::*;
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;

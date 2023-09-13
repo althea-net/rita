@@ -6,6 +6,7 @@ use super::namespaces::NamespaceInfo;
 use super::namespaces::NodeType;
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::Identity;
+use clarity::Address;
 use ipnetwork::IpNetwork;
 use ipnetwork::Ipv6Network;
 use log::info;
@@ -49,6 +50,7 @@ pub fn thread_spawner(
     namespaces: NamespaceInfo,
     client_settings: RitaClientSettings,
     exit_settings: RitaExitSettingsStruct,
+    db_addr: Address,
 ) -> Result<InstanceData, KernelInterfaceError> {
     let mut instance_data = InstanceData::default();
     let babeld_path = "/var/babeld/babeld/babeld".to_string();
@@ -86,6 +88,7 @@ pub fn thread_spawner(
                     exit_settings.clone(),
                     ns.cost as u64,
                     ns.cost,
+                    db_addr,
                 );
                 instance_data.exit_identities.push(instance_info);
             }
@@ -192,6 +195,7 @@ pub fn spawn_rita_exit(
     mut resettings: RitaExitSettingsStruct,
     exit_fee: u64,
     local_fee: u32,
+    db_addr: Address,
 ) -> Identity {
     let ns_dup = ns.clone();
     let wg_keypath = format!("/var/tmp/{ns}");
@@ -231,6 +235,7 @@ pub fn spawn_rita_exit(
         resettings.exit_network.subnet = Some(IpNetwork::V6(
             Ipv6Network::new(instance.subnet, 40).unwrap(),
         ));
+        resettings.exit_network.registered_users_contract_addr = db_addr;
         resettings.network.wg_private_key = Some(instance.wg_priv_key);
         resettings.network.wg_public_key = Some(instance.wg_pub_key);
         resettings.network.wg_private_key_path = wg_keypath;

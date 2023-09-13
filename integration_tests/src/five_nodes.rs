@@ -1,16 +1,14 @@
-use crate::payments_eth::{ONE_ETH, WEB3_TIMEOUT};
-use crate::setup_utils::database::start_postgres;
+use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    get_default_settings, register_all_namespaces_to_exit, send_eth_bulk,
+    deploy_contracts, get_default_settings, populate_routers_eth, register_all_namespaces_to_exit,
     test_all_internet_connectivity, test_reach_all, test_routes,
 };
 use log::info;
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
-use web30::client::Web3;
 
 /// Runs a five node fixed network map test scenario, this does basic network setup and tests reachability to
 /// all destinations
@@ -20,39 +18,34 @@ pub async fn run_five_node_test_scenario() {
     let namespaces = node_config.0;
     let expected_routes = node_config.1;
 
+    info!("Waiting to deploy contracts");
+    let db_addr = deploy_contracts().await;
+
+    info!("Starting registration server");
+    start_registration_server(db_addr);
+
     let (client_settings, exit_settings) =
         get_default_settings("test".to_string(), namespaces.clone());
 
     namespaces.validate();
 
-    start_postgres();
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let rita_identities = thread_spawner(namespaces.clone(), client_settings, exit_settings)
-        .expect("Could not spawn Rita threads");
+    let rita_identities =
+        thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
+            .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
     // this sleep is for debugging so that the container can be accessed to poke around in
     //thread::sleep(SETUP_WAIT * 500);
 
+    info!("About to populate routers with eth");
+    populate_routers_eth(rita_identities).await;
+
     test_reach_all(namespaces.clone());
 
     test_routes(namespaces.clone(), expected_routes);
-
-    // Exits need to have funds to request a registered client list, which is needed for proper setup
-    info!("Topup exits with funds");
-    let web3 = Web3::new("http://localhost:8545", WEB3_TIMEOUT);
-    let mut to_top_up = Vec::new();
-    for c in rita_identities.client_identities {
-        to_top_up.push(c.eth_address);
-    }
-    for e in rita_identities.exit_identities {
-        to_top_up.push(e.eth_address)
-    }
-
-    info!("Sending 50 eth to all routers");
-    send_eth_bulk((ONE_ETH * 50).into(), &to_top_up, &web3).await;
 
     info!("Registering routers to the exit");
     register_all_namespaces_to_exit(namespaces.clone()).await;
@@ -61,6 +54,8 @@ pub async fn run_five_node_test_scenario() {
 
     info!("Checking for wg_exit tunnel setup");
     test_all_internet_connectivity(namespaces.clone());
+
+    info!("All clients successfully registered!");
 }
 
 /// This defines the network map for a five node scenario

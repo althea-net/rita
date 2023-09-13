@@ -1,14 +1,15 @@
 use std::{collections::HashMap, str::from_utf8, thread, time::Duration};
 
 use crate::{
+    registration_server::start_registration_server,
     setup_utils::{
-        database::start_postgres,
         namespaces::{setup_ns, Namespace, NamespaceInfo, NodeType, PriceId, RouteHop},
         rita::thread_spawner,
     },
     utils::{
-        get_default_settings, get_node_id_from_ip, register_all_namespaces_to_exit,
-        test_all_internet_connectivity, test_reach_all, test_routes,
+        deploy_contracts, get_default_settings, get_node_id_from_ip, populate_routers_eth,
+        register_all_namespaces_to_exit, test_all_internet_connectivity, test_reach_all,
+        test_routes,
     },
 };
 use althea_kernel_interface::KI;
@@ -37,18 +38,29 @@ pub async fn run_multi_exit_test() {
     let namespaces = node_configs.0;
     let expected_routes = node_configs.1;
 
+    info!("Waiting to deploy contracts");
+    let db_addr = deploy_contracts().await;
+
+    info!("Starting registration server");
+    start_registration_server(db_addr);
+
     let (rita_client_settings, rita_exit_settings) =
         get_default_settings("test".to_string(), namespaces.clone());
 
     namespaces.validate();
-    start_postgres();
 
     let res = setup_ns(namespaces.clone());
 
-    let _rita_identities =
-        thread_spawner(namespaces.clone(), rita_client_settings, rita_exit_settings)
-            .expect("Could not spawn Rita threads");
+    let rita_identities = thread_spawner(
+        namespaces.clone(),
+        rita_client_settings,
+        rita_exit_settings,
+        db_addr,
+    )
+    .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
+
+    populate_routers_eth(rita_identities).await;
 
     // Test for network convergence
     test_reach_all(namespaces.clone());
@@ -58,9 +70,11 @@ pub async fn run_multi_exit_test() {
     info!("Registering routers to the exit");
     register_all_namespaces_to_exit(namespaces.clone()).await;
 
-    thread::sleep(Duration::from_secs(5));
+    thread::sleep(Duration::from_secs(10));
 
     test_all_internet_connectivity(namespaces.clone());
+
+    info!("All clients successfully registered!");
 
     let current_exit = get_current_exit(namespaces.names[0].clone(), namespaces.clone());
     info!(

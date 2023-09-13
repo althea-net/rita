@@ -363,7 +363,6 @@ async fn send_exit_setup_request(
     ident: ExitClientIdentity,
 ) -> Result<ExitState, RitaClientError> {
     let endpoint = format!("http://[{}]:{}/secure_setup", to.ip(), to.port());
-    error!("Trying to hit endpoint: {:?}", endpoint);
 
     let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
 
