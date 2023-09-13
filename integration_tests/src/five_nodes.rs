@@ -1,14 +1,16 @@
+use crate::payments_eth::{ONE_ETH, WEB3_TIMEOUT};
 use crate::setup_utils::database::start_postgres;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    get_default_settings, register_all_namespaces_to_exit, test_all_internet_connectivity,
-    test_reach_all, test_routes,
+    get_default_settings, register_all_namespaces_to_exit, send_eth_bulk,
+    test_all_internet_connectivity, test_reach_all, test_routes,
 };
 use log::info;
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
+use web30::client::Web3;
 
 /// Runs a five node fixed network map test scenario, this does basic network setup and tests reachability to
 /// all destinations
@@ -27,7 +29,7 @@ pub async fn run_five_node_test_scenario() {
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let _ = thread_spawner(namespaces.clone(), client_settings, exit_settings)
+    let rita_identities = thread_spawner(namespaces.clone(), client_settings, exit_settings)
         .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
@@ -38,11 +40,26 @@ pub async fn run_five_node_test_scenario() {
 
     test_routes(namespaces.clone(), expected_routes);
 
+    // Exits need to have funds to request a registered client list, which is needed for proper setup
+    info!("Topup exits with funds");
+    let web3 = Web3::new("http://localhost:8545", WEB3_TIMEOUT);
+    let mut to_top_up = Vec::new();
+    for c in rita_identities.client_identities {
+        to_top_up.push(c.eth_address);
+    }
+    for e in rita_identities.exit_identities {
+        to_top_up.push(e.eth_address)
+    }
+
+    info!("Sending 50 eth to all routers");
+    send_eth_bulk((ONE_ETH * 50).into(), &to_top_up, &web3).await;
+
     info!("Registering routers to the exit");
     register_all_namespaces_to_exit(namespaces.clone()).await;
 
+    thread::sleep(Duration::from_secs(10));
+
     info!("Checking for wg_exit tunnel setup");
-    thread::sleep(Duration::from_secs(5));
     test_all_internet_connectivity(namespaces.clone());
 }
 

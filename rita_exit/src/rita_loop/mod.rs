@@ -40,6 +40,8 @@ use rita_common::KI;
 pub const EXIT_LOOP_SPEED: u64 = 5;
 pub const EXIT_LOOP_SPEED_DURATION: Duration = Duration::from_secs(EXIT_LOOP_SPEED);
 pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
+/// Retry getting all clients for 5 mins before crashing
+pub const GET_CLIENT_RETRY: Duration = Duration::from_secs(300);
 
 /// Name of the legacy exit interface
 pub const LEGACY_INTERFACE: &str = "wg_exit";
@@ -126,23 +128,37 @@ async fn rita_exit_loop(rita_exit_cache: RitaExitCache, usage_history: ExitLock)
     let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
 
     let get_clients_benchmark = Instant::now();
-    let reg_clients_list = match get_all_regsitered_clients(&contact, our_addr, contract_addr).await
-    {
-        Ok(a) => a,
-        Err(e) => {
-            // Getting all clients is core functionality, we panic if fails
-            let message = format!(
-                "Failed to get all registered users with {}. Web3 url: {}, contract_addr: {}",
+
+    // We retry getting users for 5 mins before we crash. Getting registered users is core functionality
+    let reg_clients_list;
+    let retry_start = Instant::now();
+    loop {
+        match get_all_regsitered_clients(&contact, our_addr, contract_addr).await {
+            Ok(a) => {
+                reg_clients_list = a;
+                break;
+            }
+            Err(e) => {
+                // Getting all clients is core functionality, we panic if fails
+                let message = format!(
+                "Failed to get all registered users with {}. Web3 url: {}, contract_addr: {}. This is required for exit to funciton correctly",
                 e,
                 get_web3_server(),
                 contract_addr
             );
-            error!("{}", message);
-            let sys = AsyncSystem::current();
-            sys.stop();
-            panic!("{}", message);
-        }
-    };
+                error!("{}", message);
+                thread::sleep(Duration::from_secs(10));
+                if Instant::now() - retry_start > GET_CLIENT_RETRY {
+                    let sys = AsyncSystem::current();
+                    sys.stop();
+                    panic!("{}", message);
+                }
+            }
+        };
+    }
+
+    error!("received reg clients: {:?}", reg_clients_list);
+
     info!(
         "Finished Rita get clients, got {:?} clients in {}ms",
         reg_clients_list.len(),
