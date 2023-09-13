@@ -17,7 +17,7 @@ use althea_proto::{
 use althea_types::{ContactType, Denom, Identity, SystemChain, WgKey};
 use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
-use clarity::{Transaction, Uint256};
+use clarity::{Address, Transaction, Uint256};
 use deep_space::{Address as AltheaAddress, Coin, Contact, CosmosPrivateKey, PrivateKey};
 use futures::future::join_all;
 use ipnetwork::IpNetwork;
@@ -36,6 +36,7 @@ use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
 use std::{
     collections::{HashMap, HashSet},
     net::Ipv6Addr,
+    process::Command,
     str::from_utf8,
     sync::{Arc, RwLock},
     thread,
@@ -63,6 +64,9 @@ pub const STAKING_TOKEN: &str = "aalthea";
 pub const MIN_GLOBAL_FEE_AMOUNT: u128 = 10;
 pub const TOTAL_TIMEOUT: Duration = Duration::from_secs(300);
 pub const DEBT_ACCURACY_THRES: u8 = 15;
+pub const ETH_NODE: &str = "http://localhost:8545";
+pub const MINER_PRIVATE_KEY: &str =
+    "0x34d97aaf58b1a81d3ed3068a870d8093c6341cf5d1ef7e6efa03fe7f7fc2c3a8";
 
 lazy_static! {
     pub static ref TEST_EXIT_DETAILS: HashMap<String, ExitInfo> = {
@@ -129,6 +133,40 @@ pub fn get_althea_grpc() -> String {
 
 pub fn get_eth_node() -> String {
     format!("http://{}:8545", NODE_IP)
+}
+
+pub fn get_altheadb_contract_addr() -> Address {
+    "0xb9b674D720F96995ca033ec347df080d500c2230"
+        .parse()
+        .unwrap()
+}
+
+pub fn get_test_runner_magic_phone() -> String {
+    "+17040000000".to_string()
+}
+
+pub async fn deploy_contracts() {
+    let contact = Contact::new(
+        &get_althea_grpc(),
+        ALTHEA_CONTACT_TIMEOUT,
+        ALTHEA_CHAIN_PREFIX,
+    )
+    .unwrap();
+    // prevents the node deployer from failing (rarely) when the chain has not
+    // yet produced the next block after submitting each eth address
+    contact.wait_for_next_block(TOTAL_TIMEOUT).await.unwrap();
+
+    let res = Command::new("npx")
+        .args([
+            "ts-node",
+            "/althea_rs/solidity/contract-deployer.ts",
+            &format!("--eth-privkey={}", MINER_PRIVATE_KEY),
+            &format!("--eth-node={}", ETH_NODE),
+        ])
+        .output()
+        .expect("Failed to deploy contracts!");
+
+    info!("Contract deploy returned {:?}", from_utf8(&res.stdout));
 }
 
 /// Test pingability waiting and failing if it is not successful
@@ -349,9 +387,10 @@ pub fn get_default_settings(
     let mut exit = exit.clone();
     let mut client = client.clone();
     exit.network.mesh_ip = Some(cluster.root_ip);
+    exit.exit_network.cluster_exits = cluster_exits;
     client.exit_client.contact_info = Some(
         ContactType::Both {
-            number: "+11111111".parse().unwrap(),
+            number: get_test_runner_magic_phone().parse().unwrap(),
             email: "fake@fake.com".parse().unwrap(),
             sequence_number: Some(0),
         }
@@ -422,7 +461,7 @@ pub async fn register_to_exit(namespace_name: String, exit_name: String) -> Stat
             let client = awc::Client::default();
             let req = client
                 .post(format!(
-                    "http://localhost:4877/exits/{}/register",
+                    "http://localhost:4877/exits/{}/verify/1111",
                     exit_network.exit_name
                 ))
                 .send()
@@ -1025,7 +1064,7 @@ pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
                     break;
                 }
                 if Instant::now() - start > register_timeout {
-                    panic!("Failed to register {} to exit", r.get_name());
+                    panic!("Failed to register {} to exit with {}", r.get_name(), res);
                 }
                 warn!("Failed {} registration to exit, trying again", r.get_name());
                 thread::sleep(Duration::from_secs(1));

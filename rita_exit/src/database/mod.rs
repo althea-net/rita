@@ -118,14 +118,18 @@ pub async fn forward_client_signup_request(exit_client: ExitClientIdentity) -> E
     let url: &str;
     let reg_url = get_rita_exit().client_registration_url;
     if cfg!(feature = "dev_env") {
-        url = "http://0.0.0.0:8080/register_router";
+        url = "http://7.7.7.1:40400/register_router";
     } else if cfg!(feature = "operator_debug") {
-        url = "http://192.168.10.2:8080/register_router";
+        url = "http://192.168.10.2:40400/register_router";
     } else {
         url = &reg_url;
     }
 
     info!(
+        "About to request client {} registration with {}",
+        exit_client.global, url
+    );
+    error!(
         "About to request client {} registration with {}",
         exit_client.global, url
     );

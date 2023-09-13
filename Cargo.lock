@@ -1608,6 +1608,7 @@ version = "0.1.0"
 dependencies = [
  "actix",
  "actix-rt",
+ "actix-web",
  "althea_kernel_interface",
  "althea_proto",
  "althea_types",
@@ -1630,6 +1631,7 @@ dependencies = [
  "num256",
  "petgraph",
  "rita_client",
+ "rita_client_registration",
  "rita_common",
  "rita_exit",
  "settings",
@@ -2672,9 +2674,11 @@ dependencies = [
 name = "rita_client_registration"
 version = "0.1.0"
 dependencies = [
+ "actix",
  "althea_types",
  "awc",
  "clarity",
+ "futures 0.3.28",
  "lazy_static",
  "log",
  "phonenumber",

@@ -1,20 +1,30 @@
 #![deny(unused_crate_dependencies)]
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
-    time::Duration,
+    thread,
+    time::{Duration, Instant},
 };
 
-use althea_types::{ExitClientIdentity, WgKey};
-use clarity::{Address, PrivateKey};
+use actix::System;
+use althea_types::{ExitClientIdentity, Identity, WgKey};
+use clarity::{
+    abi::{encode_call, AbiToken},
+    Address, PrivateKey, Uint256,
+};
+use futures::future::join_all;
 use phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use tokio::join;
-use web30::client::Web3;
+use web30::{
+    client::Web3,
+    jsonrpc::error::Web3Error,
+    types::{SendTxOption, TransactionResponse},
+};
 
 use crate::client_db::{
-    add_client_to_registered_list, get_registered_client_using_ethkey,
-    get_registered_client_using_meship, get_registered_client_using_wgkey,
+    get_registered_client_using_ethkey, get_registered_client_using_meship,
+    get_registered_client_using_wgkey,
 };
 
 #[macro_use]
@@ -27,7 +37,12 @@ pub mod client_db;
 lazy_static! {
     /// A map that stores number of texts sent to a client during registration
     static ref TEXTS_SENT: Arc<RwLock<HashMap<WgKey, u8>>> = Arc::new(RwLock::new(HashMap::new()));
+    static ref TX_BATCH: Arc<RwLock<HashSet<Identity>>> = Arc::new(RwLock::new(HashSet::new()));
 }
+
+const REGISTRATION_LOOP_SPEED: Duration = Duration::from_secs(10);
+const WEB3_TIMEOUT: Duration = Duration::from_secs(15);
+pub const TX_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Return struct from check_text and Send Text. Verified indicates status from api http req,
 /// bad phone number is an error parsing clients phone number
@@ -62,6 +77,18 @@ fn reset_texts_sent(key: WgKey) {
 
 fn get_texts_sent(key: WgKey) -> u8 {
     *TEXTS_SENT.read().unwrap().get(&key).unwrap_or(&0u8)
+}
+
+fn add_client_to_reg_batch(id: Identity) {
+    TX_BATCH.write().unwrap().insert(id);
+}
+
+fn remove_client_from_reg_batch(id: Identity) {
+    TX_BATCH.write().unwrap().remove(&id);
+}
+
+fn get_reg_batch() -> Vec<Identity> {
+    TX_BATCH.read().unwrap().clone().into_iter().collect()
 }
 
 #[derive(Serialize)]
@@ -132,7 +159,7 @@ async fn client_exists(
     match c_id {
         Ok(a) => client.global == a,
         Err(e) => {
-            error!(
+            warn!(
                 "Error retrieving an identity with wg key {} with {}",
                 client.global.wg_public_key, e
             );
@@ -146,12 +173,12 @@ pub async fn handle_sms_registration(
     client: ExitClientIdentity,
     api_key: String,
     magic_number: Option<String>,
-    contact: &Web3,
-    contract_addr: Address,
-    our_private_key: PrivateKey,
-    wait_timeout: Option<Duration>,
 ) -> ExitSignupReturn {
     info!(
+        "Handling phone registration for {}",
+        client.global.wg_public_key
+    );
+    error!(
         "Handling phone registration for {}",
         client.global.wg_public_key
     );
@@ -171,25 +198,19 @@ pub async fn handle_sms_registration(
         (Some(number), Some(code), true) => {
             let is_magic =
                 magic_phone_number.is_some() && magic_phone_number.unwrap() == number.clone();
-            let check_text = match check_text(number.clone(), code, api_key).await {
-                Ok(a) => a,
-                Err(e) => return return_api_error(e),
+            let result = is_magic || {
+                match check_text(number.clone(), code, api_key).await {
+                    Ok(a) => a,
+                    Err(e) => return return_api_error(e),
+                }
             };
-            let result = is_magic || check_text;
             if result {
                 info!(
                     "Phone registration complete for {}",
                     client.global.wg_public_key
                 );
-                let _ = add_client_to_registered_list(
-                    contact,
-                    client.global,
-                    contract_addr,
-                    our_private_key,
-                    wait_timeout,
-                    vec![],
-                )
-                .await;
+
+                add_client_to_reg_batch(client.global);
                 reset_texts_sent(client.global.wg_public_key);
                 ExitSignupReturn::RegistrationOk
             } else {
@@ -210,27 +231,20 @@ pub async fn handle_sms_registration(
         (Some(number), Some(code), false) => {
             let is_magic =
                 magic_phone_number.is_some() && magic_phone_number.unwrap() == number.clone();
-            let check_text = match check_text(number.clone(), code, api_key).await {
-                Ok(a) => a,
-                Err(e) => return return_api_error(e),
-            };
 
-            let result = is_magic | check_text;
+            let result = is_magic || {
+                match check_text(number.clone(), code, api_key).await {
+                    Ok(a) => a,
+                    Err(e) => return return_api_error(e),
+                }
+            };
             trace!("Check text returned {}", result);
             if result {
                 info!(
                     "Phone registration complete for {}",
                     client.global.wg_public_key
                 );
-                let _ = add_client_to_registered_list(
-                    contact,
-                    client.global,
-                    contract_addr,
-                    our_private_key,
-                    wait_timeout,
-                    vec![],
-                )
-                .await;
+                add_client_to_reg_batch(client.global);
                 reset_texts_sent(client.global.wg_public_key);
                 ExitSignupReturn::RegistrationOk
             } else {
@@ -318,4 +332,147 @@ async fn send_text(number: String, api_key: String) -> Result<(), TextApiError> 
             })
         }
     }
+}
+
+pub fn register_client_batch_loop(
+    web3_url: String,
+    contract_addr: Address,
+    our_private_key: PrivateKey,
+) {
+    let mut last_restart = Instant::now();
+    thread::spawn(move || {
+        // this will always be an error, so it's really just a loop statement
+        // with some fancy destructuring
+        while let Err(e) = {
+            let web3 = web3_url.clone();
+            thread::spawn(move || {
+                // Our Exit state variabl
+                let runner = System::new();
+
+                runner.block_on(async move {
+                    loop {
+                        let start = Instant::now();
+                        info!("Registration Loop tick");
+
+                        let reg_clients = get_reg_batch();
+                        let contact = Web3::new(&web3, WEB3_TIMEOUT);
+                        let mut nonce_retries = 0;
+                        let mut nonce;
+                        loop {
+                            match contact
+                                .eth_get_transaction_count(our_private_key.to_address())
+                                .await
+                            {
+                                Ok(a) => {
+                                    nonce = a;
+                                    break;
+                                }
+                                Err(e) => {
+                                    error!("Unable to get nonce to register routers: {}", e);
+                                    if nonce_retries > 10 {
+                                        error!("Cant register routers, panicing!");
+                                        let sys = System::current();
+                                        sys.stop();
+                                        panic!(
+                                            "{}",
+                                            format!(
+                                                "Unable to get nonce to register routers: {}",
+                                                e
+                                            )
+                                        );
+                                    }
+                                    nonce_retries += 1;
+                                    thread::sleep(Duration::from_secs(5));
+                                    continue;
+                                }
+                            }
+                        }
+
+                        let mut batch = vec![];
+                        for id in reg_clients {
+                            error!("This batch has {}", id.mesh_ip);
+                            match contact
+                                .send_transaction(
+                                    contract_addr,
+                                    match encode_call(
+                                        "add_registered_user((string,string,address))",
+                                        &[AbiToken::Struct(vec![
+                                            AbiToken::String(id.mesh_ip.to_string()),
+                                            AbiToken::String(id.wg_public_key.to_string()),
+                                            AbiToken::Address(id.eth_address),
+                                        ])],
+                                    ) {
+                                        Ok(a) => a,
+                                        Err(e) => {
+                                            error!(
+                                            "REGISTRATION ERROR: Why cant we encode this call? {}",
+                                            e
+                                        );
+                                            continue;
+                                        }
+                                    },
+                                    0u32.into(),
+                                    our_private_key,
+                                    vec![SendTxOption::Nonce(nonce)],
+                                )
+                                .await
+                            {
+                                Ok(tx_id) => {
+                                    //increment nonce for next tx
+                                    nonce += 1u64.into();
+                                    remove_client_from_reg_batch(id);
+                                    batch.push(tx_id);
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Failed registration for {} with {}",
+                                        id.wg_public_key, e
+                                    );
+                                }
+                            }
+                        }
+
+                        // Join on txs
+                        let res = wait_for_txids(batch, &contact).await;
+                        trace!("Received Transactions: {:?}", res);
+
+                        info!("Registration loop elapsed in = {:?}", start.elapsed());
+                        if start.elapsed() < REGISTRATION_LOOP_SPEED {
+                            info!(
+                                "Registration Loop sleeping for {:?}",
+                                REGISTRATION_LOOP_SPEED - start.elapsed()
+                            );
+                            thread::sleep(REGISTRATION_LOOP_SPEED - start.elapsed());
+                        }
+                        info!("Registration loop sleeping Done!");
+                    }
+                });
+            })
+            .join()
+        } {
+            error!(
+                "Rita client Exit Manager loop thread paniced! Respawning {:?}",
+                e
+            );
+            if Instant::now() - last_restart < Duration::from_secs(60) {
+                error!("Restarting too quickly, leaving it to auto rescue!");
+                let sys = System::current();
+                sys.stop_with_code(121);
+            }
+            last_restart = Instant::now();
+        }
+    });
+}
+
+/// utility function that waits for a large number of txids to enter a block
+async fn wait_for_txids(
+    txids: Vec<Uint256>,
+    web3: &Web3,
+) -> Vec<Result<TransactionResponse, Web3Error>> {
+    let mut wait_for_txid = Vec::new();
+    for txid in txids {
+        let wait = web3.wait_for_transaction(txid, TX_TIMEOUT, None);
+        wait_for_txid.push(wait);
+    }
+    join_all(wait_for_txid).await
 }

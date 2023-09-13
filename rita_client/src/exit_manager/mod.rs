@@ -363,6 +363,8 @@ async fn send_exit_setup_request(
     ident: ExitClientIdentity,
 ) -> Result<ExitState, RitaClientError> {
     let endpoint = format!("http://[{}]:{}/secure_setup", to.ip(), to.port());
+    error!("Trying to hit endpoint: {:?}", endpoint);
+
     let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
 
     let client = awc::Client::default();
@@ -556,6 +558,7 @@ pub async fn exit_setup_request(exit: String, code: Option<String>) -> Result<()
     );
 
     let exit_response = send_exit_setup_request(exit_pubkey, endpoint, ident).await?;
+
     let mut rita_client = settings::get_rita_client();
 
     let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {

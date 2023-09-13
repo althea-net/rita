@@ -21,6 +21,7 @@ settings = { path = "../settings" }
 rita_client = { path = "../rita_client", features = ["dev_env"] }
 rita_common = { path = "../rita_common", features = ["integration_test"] }
 rita_exit = { path = "../rita_exit", features = ["dev_env"] }
+rita_client_registration = { path = "../rita_client_registration" }
 ctrlc = { version = "3.2.1", features = ["termination"] }
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 diesel_migrations = { version = "1.4", features = ["postgres"] }
@@ -34,3 +35,6 @@ num256 = "0.5"
 num-traits = "0.2"
 web30 = "1.0"
 lazy_static = "1.4"
+actix-web = { version = "4.3", default_features = false, features = [
+    "openssl",
+] }

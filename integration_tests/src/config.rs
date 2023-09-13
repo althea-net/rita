@@ -51,6 +51,17 @@ pub fn generate_rita_config_file(path: String) -> Result<(), KernelInterfaceErro
         .to_string();
     lines.push(exit);
 
+    let contact_info = "
+    [exit_client.contact_info.number.national]\n
+    value = 7040000000\n
+    zeros = 0\n
+    [exit_client.contact_info.number.code]\n
+    source = \"plus\"\n
+    value = 1\n
+    "
+    .to_string();
+    lines.push(contact_info);
+
     let log = "
     [log]\n
     enabled = true\n"
@@ -64,6 +75,7 @@ pub fn generate_exit_config_file(path: String) -> Result<(), KernelInterfaceErro
     let mut lines: Vec<String> = Vec::new();
     let desc = "
     db_uri = \"postgres://postgres@localhost/test\"\n
+    client_registration_url = \"https://7.7.7.1:40400/register_router\"\n
     workers = 1\n
     description = \"just a normal althea exit\"\n"
         .to_string();
@@ -115,6 +127,7 @@ pub fn generate_exit_config_file(path: String) -> Result<(), KernelInterfaceErro
     wg_public_key = \"H/ABwzXk834OwGYU8CZGfFxNZOd+BAJEaVDHiEiWWhU=\"\n
     wg_private_key = \"ALxcZm2r58gY0sB4vIfnjShc86qBoVK3f32H9VrwqWU=\"\n
     wg_private_key_path = \"/tmp/exit-priv\"\n
+    registered_users_contract_addr = \"0xb9b674D720F96995ca033ec347df080d500c2230\"\n
     pass = \"Some pass here\"\n"
         .to_string();
     lines.push(exit_network);
