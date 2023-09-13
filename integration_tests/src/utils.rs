@@ -1,8 +1,11 @@
 use crate::{
     config::{CONFIG_FILE_PATH, EXIT_CONFIG_PATH},
     payments_althea::get_althea_evm_priv,
-    payments_eth::{eth_chain_id, get_miner_address, get_miner_key},
-    setup_utils::namespaces::{get_nsfd, Namespace, NamespaceInfo, NodeType, RouteHop},
+    payments_eth::{eth_chain_id, get_miner_address, get_miner_key, ONE_ETH, WEB3_TIMEOUT},
+    setup_utils::{
+        namespaces::{get_nsfd, Namespace, NamespaceInfo, NodeType, RouteHop},
+        rita::InstanceData,
+    },
 };
 use actix_rt::time::sleep;
 use actix_rt::System;
@@ -135,17 +138,11 @@ pub fn get_eth_node() -> String {
     format!("http://{}:8545", NODE_IP)
 }
 
-pub fn get_altheadb_contract_addr() -> Address {
-    "0xb9b674D720F96995ca033ec347df080d500c2230"
-        .parse()
-        .unwrap()
-}
-
 pub fn get_test_runner_magic_phone() -> String {
     "+17040000000".to_string()
 }
 
-pub async fn deploy_contracts() {
+pub async fn deploy_contracts() -> Address {
     let contact = Contact::new(
         &get_althea_grpc(),
         ALTHEA_CONTACT_TIMEOUT,
@@ -166,7 +163,15 @@ pub async fn deploy_contracts() {
         .output()
         .expect("Failed to deploy contracts!");
 
-    info!("Contract deploy returned {:?}", from_utf8(&res.stdout));
+    error!(
+        "Contract deploy stderr: {}",
+        from_utf8(&res.stderr).unwrap()
+    );
+    let contract_addr = from_utf8(&res.stdout).unwrap();
+    info!("Contract is: {}", contract_addr);
+    let mut res = contract_addr.split(' ').last().unwrap().to_string();
+    res.pop();
+    res.parse().unwrap()
 }
 
 /// Test pingability waiting and failing if it is not successful
@@ -277,25 +282,35 @@ pub fn test_routes_async(nsinfo: NamespaceInfo, expected: HashMap<Namespace, Rou
 
 pub fn test_all_internet_connectivity(namespaces: NamespaceInfo) {
     for ns in namespaces.names {
-        let out = KI
-            .run_command(
-                "ip",
-                &[
-                    "netns",
-                    "exec",
-                    &ns.get_name(),
-                    "ping",
-                    &NODE_IP.to_string(),
-                    "-c",
-                    "1",
-                ],
-            )
-            .unwrap();
-        if !String::from_utf8(out.stdout)
-            .unwrap()
-            .contains("1 received")
-        {
-            panic!("{} does not have internet connectivity", ns.get_name());
+        let start = Instant::now();
+        loop {
+            let out = KI
+                .run_command(
+                    "ip",
+                    &[
+                        "netns",
+                        "exec",
+                        &ns.get_name(),
+                        "ping",
+                        &NODE_IP.to_string(),
+                        "-c",
+                        "1",
+                    ],
+                )
+                .unwrap();
+            if String::from_utf8(out.stdout)
+                .unwrap()
+                .contains("1 received")
+            {
+                info!("Ping test passed for {}!", ns.get_name());
+                break;
+            } else {
+                if Instant::now() - start > Duration::from_secs(60) {
+                    panic!("{} does not have internet connectivity", ns.get_name());
+                }
+                error!("Ping failed for {}, trying again", ns.get_name());
+                thread::sleep(Duration::from_secs(5));
+            }
         }
     }
 }
@@ -1072,4 +1087,20 @@ pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
             info!("{} registered to exit {}", r.get_name(), cluster_name);
         }
     }
+}
+
+pub async fn populate_routers_eth(rita_identities: InstanceData) {
+    // Exits need to have funds to request a registered client list, which is needed for proper setup
+    info!("Topup exits with funds");
+    let web3 = Web3::new("http://localhost:8545", WEB3_TIMEOUT);
+    let mut to_top_up = Vec::new();
+    for c in rita_identities.client_identities {
+        to_top_up.push(c.eth_address);
+    }
+    for e in rita_identities.exit_identities {
+        to_top_up.push(e.eth_address)
+    }
+
+    info!("Sending 50 eth to all routers");
+    send_eth_bulk((ONE_ETH * 50).into(), &to_top_up, &web3).await;
 }

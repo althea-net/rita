@@ -3,13 +3,14 @@ use std::thread;
 use std::time::Duration;
 
 use crate::five_nodes::five_node_config;
-use crate::setup_utils::database::start_postgres;
+use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    generate_traffic, get_default_settings, get_ip_from_namespace, query_debts,
-    register_all_namespaces_to_exit, test_all_internet_connectivity, test_reach_all, test_routes,
-    DEBT_ACCURACY_THRES, TEST_EXIT_DETAILS,
+    deploy_contracts, generate_traffic, get_default_settings, get_ip_from_namespace,
+    populate_routers_eth, query_debts, register_all_namespaces_to_exit,
+    test_all_internet_connectivity, test_reach_all, test_routes, DEBT_ACCURACY_THRES,
+    TEST_EXIT_DETAILS,
 };
 use log::info;
 use num256::Int256;
@@ -44,6 +45,12 @@ pub async fn run_debts_test() {
     let namespaces = node_config.0;
     let expected_routes = node_config.1;
 
+    info!("Waiting to deploy contracts");
+    let db_addr = deploy_contracts().await;
+
+    info!("Starting registration server");
+    start_registration_server(db_addr);
+
     let (client_settings, exit_settings) =
         get_default_settings("test".to_string(), namespaces.clone());
 
@@ -51,14 +58,16 @@ pub async fn run_debts_test() {
     let exit_price = namespaces.get_namespace(4).unwrap().cost;
 
     namespaces.validate();
-    start_postgres();
 
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
-    let _rita_identities = thread_spawner(namespaces.clone(), client_settings, exit_settings)
-        .expect("Could not spawn Rita threads");
+    let rita_identities =
+        thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
+            .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
+
+    populate_routers_eth(rita_identities).await;
 
     // Test for network convergence
     test_reach_all(namespaces.clone());
@@ -69,7 +78,7 @@ pub async fn run_debts_test() {
     register_all_namespaces_to_exit(namespaces.clone()).await;
 
     // Let network stabalize
-    thread::sleep(Duration::from_secs(20));
+    thread::sleep(Duration::from_secs(10));
 
     test_all_internet_connectivity(namespaces.clone());
 

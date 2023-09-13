@@ -44,6 +44,7 @@ subnet = "fd00::1337/40"
 entry_timeout = 7776000
 wg_public_key = "H/ABwzXk834OwGYU8CZGfFxNZOd+BAJEaVDHiEiWWhU="
 wg_private_key = "ALxcZm2r58gY0sB4vIfnjShc86qBoVK3f32H9VrwqWU="
+registered_users_contract_addr = "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
 wg_private_key_path = "/tmp/exit-priv"
 pass = "Some pass here"
 

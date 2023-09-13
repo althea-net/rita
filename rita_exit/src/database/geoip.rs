@@ -5,15 +5,10 @@ use rita_common::utils::ip_increment::is_unicast_link_local;
 use rita_common::KI;
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use crate::database::RITA_EXIT_STATE;
 use crate::RitaExitError;
-
-lazy_static! {
-    static ref GEOIP_CACHE: Arc<RwLock<HashMap<IpAddr, String>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-}
 
 /// gets the gateway ip for a given mesh IP
 pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, Box<RitaExitError>> {
@@ -174,9 +169,10 @@ pub fn get_country(ip: IpAddr) -> Result<String, Box<RitaExitError>> {
 
     // we have to turn this option into a string in order to avoid
     // the borrow checker trying to keep this lock open for a long period
-    let cache_result = GEOIP_CACHE
+    let cache_result = RITA_EXIT_STATE
         .read()
         .unwrap()
+        .geoip_cache
         .get(&ip)
         .map(|val| val.to_string());
 
@@ -201,7 +197,11 @@ pub fn get_country(ip: IpAddr) -> Result<String, Box<RitaExitError>> {
                     let value: GeoIpRet = res;
                     let code = value.country.iso_code;
                     trace!("Adding GeoIP value {:?} to cache", code);
-                    GEOIP_CACHE.write().unwrap().insert(ip, code.clone());
+                    RITA_EXIT_STATE
+                        .write()
+                        .unwrap()
+                        .geoip_cache
+                        .insert(ip, code.clone());
                     trace!("Added to cache, returning");
                     Ok(code)
                 } else {

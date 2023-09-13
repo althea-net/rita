@@ -157,8 +157,6 @@ async fn rita_exit_loop(rita_exit_cache: RitaExitCache, usage_history: ExitLock)
         };
     }
 
-    error!("received reg clients: {:?}", reg_clients_list);
-
     info!(
         "Finished Rita get clients, got {:?} clients in {}ms",
         reg_clients_list.len(),

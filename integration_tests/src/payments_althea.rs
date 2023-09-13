@@ -3,12 +3,13 @@ use std::thread;
 use std::time::Duration;
 
 use crate::five_nodes::five_node_config;
-use crate::setup_utils::database::start_postgres;
+use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    generate_traffic, get_default_settings, print_althea_balances, register_all_namespaces_to_exit,
-    register_erc20_usdc_token, send_althea_tokens, test_reach_all, test_routes,
+    deploy_contracts, generate_traffic, get_default_settings, populate_routers_eth,
+    print_althea_balances, register_all_namespaces_to_exit, register_erc20_usdc_token,
+    send_althea_tokens, test_all_internet_connectivity, test_reach_all, test_routes,
     validate_debt_entry, TEST_PAY_THRESH,
 };
 use althea_types::{Denom, SystemChain, ALTHEA_PREFIX};
@@ -43,11 +44,16 @@ pub async fn run_althea_payments_test_scenario() {
     let namespaces = node_config.0;
     let expected_routes = node_config.1;
 
+    info!("Waiting to deploy contracts");
+    let db_addr = deploy_contracts().await;
+
+    info!("Starting registration server");
+    start_registration_server(db_addr);
+
     let (mut client_settings, mut exit_settings) =
         get_default_settings("test".to_string(), namespaces.clone());
 
     namespaces.validate();
-    start_postgres();
 
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
@@ -56,9 +62,12 @@ pub async fn run_althea_payments_test_scenario() {
     let (client_settings, exit_settings) =
         althea_payments_map(&mut client_settings, &mut exit_settings);
 
-    let rita_identities = thread_spawner(namespaces.clone(), client_settings, exit_settings)
-        .expect("Could not spawn Rita threads");
+    let rita_identities =
+        thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
+            .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
+
+    populate_routers_eth(rita_identities.clone()).await;
 
     // Test for network convergence
     test_reach_all(namespaces.clone());
@@ -69,6 +78,9 @@ pub async fn run_althea_payments_test_scenario() {
     register_all_namespaces_to_exit(namespaces.clone()).await;
 
     thread::sleep(Duration::from_secs(10));
+
+    test_all_internet_connectivity(namespaces.clone());
+    info!("Successfully registered all clients");
 
     let from_node: Option<Namespace> = namespaces.get_namespace(1);
     let forward_node: Option<Namespace> = namespaces.get_namespace(3);

@@ -4,15 +4,16 @@
 use crate::database::geoip::get_gateway_ip_bulk;
 use crate::database::geoip::get_gateway_ip_single;
 use crate::database::geoip::verify_ip;
-use crate::database::struct_tools::display_hashset;
-use crate::database::struct_tools::get_client_internal_ip;
-use crate::database::struct_tools::get_client_ipv6;
-use crate::database::struct_tools::to_exit_client;
+use crate::database::in_memory_database::display_hashset;
+use crate::database::in_memory_database::get_client_internal_ip;
+use crate::database::in_memory_database::get_client_ipv6;
+use crate::database::in_memory_database::to_exit_client;
+use crate::database::in_memory_database::DEFAULT_CLIENT_SUBNET_SIZE;
 use crate::rita_loop::EXIT_INTERFACE;
 use crate::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::rita_loop::LEGACY_INTERFACE;
+use crate::IpAssignmentMap;
 use crate::RitaExitError;
-use crate::DEFAULT_CLIENT_SUBNET_SIZE;
 use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
 use althea_types::WgKey;
@@ -28,14 +29,28 @@ use settings::get_rita_exit;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 use web30::client::Web3;
 
-pub mod database_tools;
 pub mod geoip;
-pub mod struct_tools;
+pub mod in_memory_database;
+
+#[derive(Clone, Debug, Default)]
+pub struct RitaExitState {
+    ip_assignment_map: IpAssignmentMap,
+    geoip_cache: HashMap<IpAddr, String>,
+}
+
+lazy_static! {
+    /// Keep track of geoip information as well as ip addrs assigned to clients and ensure collisions dont happen. In worst case
+    /// the exit restarts and loses all this data in which case those client they had collision may get new
+    /// ip addrs and would need to setup wg exit tunnel again
+    static ref RITA_EXIT_STATE: Arc<RwLock<RitaExitState>> = Arc::new(RwLock::new(RitaExitState::default()));
+}
 
 /// one day in seconds
 pub const ONE_DAY: i64 = 86400;
@@ -126,10 +141,6 @@ pub async fn forward_client_signup_request(exit_client: ExitClientIdentity) -> E
     }
 
     info!(
-        "About to request client {} registration with {}",
-        exit_client.global, url
-    );
-    error!(
         "About to request client {} registration with {}",
         exit_client.global, url
     );
@@ -318,7 +329,6 @@ pub fn setup_clients(
                 );
             }
         }
-        //key_to_client_map.insert(c.wg_public_key, c.clone());
     }
 
     for c in geoip_blacklist.iter() {

@@ -9,7 +9,6 @@ members = [
     "althea_kernel_interface",
     "settings",
     "clu",
-    "exit_db",
     "antenna_forwarding_client",
     "antenna_forwarding_protocol",
     "auto_bridge",

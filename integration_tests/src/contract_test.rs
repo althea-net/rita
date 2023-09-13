@@ -1,99 +1,55 @@
 use std::{thread, time::Duration};
 
-use althea_types::Identity;
+use clarity::{Address, PrivateKey};
+use log::info;
 use rita_client_registration::client_db::{
     add_client_to_registered_list, get_all_regsitered_clients, get_registered_client_using_ethkey,
     get_registered_client_using_meship, get_registered_client_using_wgkey,
 };
+use rita_common::usage_tracker::tests::test::random_identity;
 use web30::client::Web3;
 
 use crate::{
-    payments_eth::{ETH_MINER_KEY, WEB3_TIMEOUT},
-    utils::{get_altheadb_contract_addr, get_eth_node},
+    payments_eth::{get_miner_key, WEB3_TIMEOUT},
+    utils::{deploy_contracts, get_eth_node},
 };
 
 pub async fn run_altheadb_contract_test() {
-    // Try adding a dummy entry and validating that we can retrive them
-    validate_contract_functionality().await;
+    info!("Waiting to deploy contracts");
+    let althea_db_addr = deploy_contracts().await;
+    info!("DB addr is {}", althea_db_addr);
 
-    thread::sleep(Duration::from_secs(1000));
+    // Try adding a dummy entry and validating that we can retrive them
+    validate_contract_functionality(althea_db_addr).await;
 }
 
-pub async fn validate_contract_functionality() {
+pub async fn validate_contract_functionality(db_addr: Address) {
+    let miner_private_key: PrivateKey = get_miner_key();
+    let miner_pub_key = miner_private_key.to_address();
+
     let contact = Web3::new(&get_eth_node(), WEB3_TIMEOUT);
 
     // Define the users
-    let user = Identity {
-        mesh_ip: "fd00::1337".parse().unwrap(),
-        eth_address: "0x02ad6b480DFeD806C63a0839C6f1f3136c5fD515"
-            .parse()
-            .unwrap(),
-        wg_public_key: "sPtNGQbyPpCsqSKD6PbnflB1lIUCd259Vhd0mJfJeGo="
-            .parse()
-            .unwrap(),
-        nickname: None,
-    };
-
-    let user_2 = Identity {
-        mesh_ip: "fd00::1447:1447".parse().unwrap(),
-        eth_address: "0x1994A73F79F9648d4a8064D9C0F221fB1007Fd2F"
-            .parse()
-            .unwrap(),
-        wg_public_key: "Yhyj+CKZbyEKea/9hdIFje98yc5Cukt1Pbq0qWB4Aqw="
-            .parse()
-            .unwrap(),
-        nickname: None,
-    };
-
-    let user_3 = Identity {
-        mesh_ip: "fd00::3000:1117".parse().unwrap(),
-        eth_address: "0x9c33D0dFdc9E3f7cC73bE3A575C31cfe3059C76a"
-            .parse()
-            .unwrap(),
-        wg_public_key: "fzOUfEqYzRE0MwfR5o7XV+MKZKj/qEfELRzQTRTKAB8="
-            .parse()
-            .unwrap(),
-        nickname: None,
-    };
+    let user_1 = random_identity();
+    let user_2 = random_identity();
+    let user_3 = random_identity();
 
     // Try requests when there are no users present
-    let res = get_all_regsitered_clients(
-        &contact,
-        ETH_MINER_KEY
-            .parse::<clarity::PrivateKey>()
-            .unwrap()
-            .to_address(),
-        get_altheadb_contract_addr(),
-    )
-    .await
-    .unwrap();
+    let res = get_all_regsitered_clients(&contact, miner_pub_key, db_addr).await;
 
-    assert!(res.is_empty());
+    assert!(res.is_err());
 
-    let res = get_registered_client_using_wgkey(
-        user.wg_public_key,
-        ETH_MINER_KEY
-            .parse::<clarity::PrivateKey>()
-            .unwrap()
-            .to_address(),
-        get_altheadb_contract_addr(),
-        &contact,
-    )
-    .await;
+    let res =
+        get_registered_client_using_wgkey(user_1.wg_public_key, miner_pub_key, db_addr, &contact)
+            .await;
 
     assert!(res.is_err());
 
     // Add the first user
-    let _res = add_client_to_registered_list(
-        &contact,
-        user,
-        get_altheadb_contract_addr(),
-        ETH_MINER_KEY.parse().unwrap(),
-        None,
-        vec![],
-    )
-    .await
-    .unwrap();
+    let _res =
+        add_client_to_registered_list(&contact, user_1, db_addr, miner_private_key, None, vec![])
+            .await
+            .unwrap();
 
     thread::sleep(Duration::from_secs(5));
 
@@ -102,11 +58,8 @@ pub async fn validate_contract_functionality() {
         "0x3d261902a988d94599d7f0Bd4c2e4514D73BB329"
             .parse()
             .unwrap(),
-        ETH_MINER_KEY
-            .parse::<clarity::PrivateKey>()
-            .unwrap()
-            .to_address(),
-        get_altheadb_contract_addr(),
+        miner_pub_key,
+        db_addr,
         &contact,
     )
     .await;
@@ -114,83 +67,44 @@ pub async fn validate_contract_functionality() {
     assert!(res.is_err());
 
     // Add the second user
-    let _res = add_client_to_registered_list(
-        &contact,
-        user_2,
-        get_altheadb_contract_addr(),
-        ETH_MINER_KEY.parse().unwrap(),
-        None,
-        vec![],
-    )
-    .await
-    .unwrap();
+    let _res =
+        add_client_to_registered_list(&contact, user_2, db_addr, miner_private_key, None, vec![])
+            .await
+            .unwrap();
 
     thread::sleep(Duration::from_secs(5));
 
     // Add the third user
-    let _res = add_client_to_registered_list(
-        &contact,
-        user_3,
-        get_altheadb_contract_addr(),
-        ETH_MINER_KEY.parse().unwrap(),
-        None,
-        vec![],
-    )
-    .await
-    .unwrap();
+    let _res =
+        add_client_to_registered_list(&contact, user_3, db_addr, miner_private_key, None, vec![])
+            .await
+            .unwrap();
 
     thread::sleep(Duration::from_secs(10));
 
-    let res = get_all_regsitered_clients(
-        &contact,
-        ETH_MINER_KEY
-            .parse::<clarity::PrivateKey>()
-            .unwrap()
-            .to_address(),
-        get_altheadb_contract_addr(),
-    )
-    .await;
+    let res = get_all_regsitered_clients(&contact, miner_pub_key, db_addr).await;
 
-    println!("All users are : {:?}", res);
+    info!("All users are : {:?}", res);
 
     thread::sleep(Duration::from_secs(5));
 
-    let res = get_registered_client_using_wgkey(
-        user.wg_public_key,
-        ETH_MINER_KEY
-            .parse::<clarity::PrivateKey>()
-            .unwrap()
-            .to_address(),
-        get_altheadb_contract_addr(),
-        &contact,
-    )
-    .await
-    .unwrap();
-    assert_eq!(res, user);
+    info!("Trying to retrive user 1");
+    let res =
+        get_registered_client_using_wgkey(user_1.wg_public_key, miner_pub_key, db_addr, &contact)
+            .await
+            .unwrap();
+    assert_eq!(res, user_1);
 
-    let res = get_registered_client_using_ethkey(
-        user_2.eth_address,
-        ETH_MINER_KEY
-            .parse::<clarity::PrivateKey>()
-            .unwrap()
-            .to_address(),
-        get_altheadb_contract_addr(),
-        &contact,
-    )
-    .await
-    .unwrap();
+    info!("Trying to retrive user 2");
+    let res =
+        get_registered_client_using_ethkey(user_2.eth_address, miner_pub_key, db_addr, &contact)
+            .await
+            .unwrap();
     assert_eq!(res, user_2);
 
-    let res = get_registered_client_using_meship(
-        user_3.mesh_ip,
-        ETH_MINER_KEY
-            .parse::<clarity::PrivateKey>()
-            .unwrap()
-            .to_address(),
-        get_altheadb_contract_addr(),
-        &contact,
-    )
-    .await
-    .unwrap();
+    info!("Trying to retrive user 3");
+    let res = get_registered_client_using_meship(user_3.mesh_ip, miner_pub_key, db_addr, &contact)
+        .await
+        .unwrap();
     assert_eq!(res, user_3);
 }
