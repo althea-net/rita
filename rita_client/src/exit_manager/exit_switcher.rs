@@ -818,7 +818,8 @@ mod tests {
         // we use ipv6 addrs, but this should also work with ipv4
 
         // Testing for initial error code, when we just start tracking. No current or tracking
-        let best_exit = Some(IpAddr::V4(Ipv4Addr::new(1, 12, 12, 12)));
+        let best_exit_unwrapped = IpAddr::V4(Ipv4Addr::new(1, 12, 12, 12));
+        let best_exit = Some(best_exit_unwrapped);
         let mut tracking_exit: Option<IpAddr> = None;
         let mut current_exit = None;
 
@@ -831,7 +832,7 @@ mod tests {
                     u16::MAX,
                     tracking_exit,
                     u16::MAX,
-                    best_exit,
+                     best_exit,
                     400
                 ),
                 &mut vec,
@@ -877,7 +878,7 @@ mod tests {
         current_exit = Some(IpAddr::V4(Ipv4Addr::new(1, 120, 120, 120)));
         tracking_exit = current_exit;
 
-        exit_map.insert(best_exit.unwrap(), ExitTracker::new(0, 91030, 1));
+        exit_map.insert(best_exit_unwrapped, ExitTracker::new(0, 91030, 1));
 
         assert_eq!(
             ExitSwitchingCode::ContinueCurrent,
@@ -952,7 +953,7 @@ mod tests {
         append = vec![410, 410, 400, 400, 430, 430, 410, 410, 430, 400];
         vec.append(&mut append);
         assert_eq!(vec.len(), 10);
-        exit_map.insert(best_exit.unwrap(), ExitTracker::new(0, 10, 1));
+        exit_map.insert(best_exit_unwrapped, ExitTracker::new(0, 10, 1));
 
         assert_eq!(
             ExitSwitchingCode::ResetTracking,
