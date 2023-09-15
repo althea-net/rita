@@ -5,9 +5,9 @@
 use crate::debt_keeper::traffic_update;
 use crate::debt_keeper::Traffic;
 use crate::tunnel_manager::Neighbor;
+use crate::usage_tracker::structs::UsageType;
 use crate::usage_tracker::update_usage_data;
 use crate::usage_tracker::UpdateUsage;
-use crate::usage_tracker::UsageType;
 use crate::RitaCommonError;
 use crate::KI;
 use althea_kernel_interface::open_tunnel::is_link_local;

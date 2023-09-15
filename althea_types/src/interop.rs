@@ -1,5 +1,5 @@
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
-use crate::{ClientExtender, UsageTracker, WifiDevice};
+use crate::{ClientExtender, UsageTrackerFlat, UsageTrackerTransfer, WifiDevice};
 use arrayvec::ArrayString;
 use babel_monitor::structs::Neighbor;
 use babel_monitor::structs::Route;
@@ -335,7 +335,7 @@ pub struct LightClientLocalIdentity {
 /// This represents a generic payment that may be to or from us
 /// it contains a txid from a published transaction
 /// that should be validated against the blockchain
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
 pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
@@ -353,7 +353,7 @@ impl Hash for PaymentTx {
 
 /// This represents a generic payment that may be to or from us, it does not contain a txid meaning it is
 /// unpublished
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct UnpublishedPaymentTx {
     pub to: Identity,
     pub from: Identity,
@@ -747,11 +747,13 @@ pub struct OperatorCheckinMessage {
     /// This is a user set bandwidth limit value, it will cap the users download
     /// and upload to the provided value of their choosing. Denoted in mbps
     pub user_bandwidth_limit: Option<usize>,
+    /// Legacy bandwidth usage from pre beta 20 routers, one of the two will be None
+    pub user_bandwidth_usage: Option<UsageTrackerFlat>,
     /// Details of both the Client and Relay bandwidth usage over a given period determined
     /// by the ops_last_seen_usage_hour in OperatorUpdateMessage. When the device's last
     /// saved usage hour is the same as the ops last seen, we send no data here as we are up
     /// to date. Data sent through here gets added to a database entry for each device.
-    pub user_bandwidth_usage: Option<UsageTracker>,
+    pub user_bandwidth_usage_v2: Option<UsageTrackerTransfer>,
     /// This is to keep track of the rita client uptime for debugging purposes
     /// In the event something whacko happens, serde will magically derive def-
     /// fault value.

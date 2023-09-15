@@ -1,6 +1,6 @@
 use actix_web_async::{HttpRequest, HttpResponse};
 use rita_common::usage_tracker::get_usage_data;
-use rita_common::usage_tracker::UsageType;
+use rita_common::usage_tracker::structs::UsageType;
 
 pub async fn get_client_usage(_req: HttpRequest) -> HttpResponse {
     trace!("/usage/client hit");

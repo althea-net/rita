@@ -1,5 +1,4 @@
-use std::collections::VecDeque;
-use std::hash::{Hash, Hasher};
+use std::collections::{HashMap, VecDeque};
 use std::net::Ipv4Addr;
 use std::time::SystemTime;
 
@@ -64,33 +63,85 @@ pub struct InstallationDetails {
     pub install_date: Option<SystemTime>,
 }
 
-/// The main actor that holds the usage state for the duration of operations
-/// to be sent up to ops tools.
+/// The old storage method for usage tracker data that stores flat data
+/// in arrays and does not index the data via hashmap this format was abandoned
+/// as error prone but is still used so legacy routers can send data
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct UsageTracker {
+pub struct UsageTrackerFlat {
     pub last_save_hour: u64,
-    pub client_bandwidth: VecDeque<UsageHour>,
-    pub relay_bandwidth: VecDeque<UsageHour>,
+    pub client_bandwidth: VecDeque<IndexedUsageHour>,
+    pub relay_bandwidth: VecDeque<IndexedUsageHour>,
 }
 
 /// A struct for tracking each hour of usage, indexed by time in hours since
 /// the unix epoch.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct UsageHour {
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct IndexedUsageHour {
     pub index: u64,
     pub up: u64,
     pub down: u64,
     pub price: u32,
 }
 
-impl Hash for UsageHour {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.index.hash(state);
-    }
+/// A struct used to store data usage over an arbitrary period the length of time
+/// is implied by the code that is handling this struct. Do not transfer without considering
+/// that you may be changing units
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct Usage {
+    pub up: u64,
+    pub down: u64,
+    pub price: u32,
 }
-impl PartialEq for UsageHour {
-    fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
-    }
+
+/// The main actor that holds the usage state for the duration of operations
+/// to be sent up to ops tools.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UsageTrackerTransfer {
+    /// client bandwidth usage per hour indexd by unix timestamp in hours
+    pub client_bandwidth: HashMap<u64, Usage>,
+    /// relay bandwidth usage per hour indexd by unix timestamp in hours
+    pub relay_bandwidth: HashMap<u64, Usage>,
+    /// exit bandwidth usage per hour indexd by unix timestamp in hours
+    pub exit_bandwidth: HashMap<u64, Usage>,
 }
-impl Eq for UsageHour {}
+
+/// Used to convert between usage tracker storage formats
+pub fn convert_flat_to_map_usage_data(input: VecDeque<IndexedUsageHour>) -> HashMap<u64, Usage> {
+    let mut out = HashMap::new();
+    for hour in input {
+        match out.get_mut(&hour.index) {
+            // we have a duplicate entry which we must correct, pick the higher data usage and keep that
+            Some(to_edit) => {
+                let duplicate_usage: Usage = *to_edit;
+                to_edit.up = std::cmp::max(duplicate_usage.up, hour.up);
+                to_edit.down = std::cmp::max(duplicate_usage.down, hour.down);
+                to_edit.price = std::cmp::max(duplicate_usage.price, hour.price);
+            }
+            None => {
+                out.insert(
+                    hour.index,
+                    Usage {
+                        up: hour.up,
+                        down: hour.down,
+                        price: hour.price,
+                    },
+                );
+            }
+        }
+    }
+    out
+}
+
+/// Used to convert between usage tracker storage formats
+pub fn convert_map_to_flat_usage_data(input: HashMap<u64, Usage>) -> VecDeque<IndexedUsageHour> {
+    let mut out = VecDeque::new();
+    for (hour, usage) in input {
+        out.push_back(IndexedUsageHour {
+            index: hour,
+            up: usage.up,
+            down: usage.down,
+            price: usage.price,
+        })
+    }
+    out
+}

@@ -32,9 +32,9 @@ use num_traits::identities::Zero;
 use rita_common::debt_keeper::{
     traffic_replace, traffic_update, wgkey_insensitive_traffic_update, Traffic,
 };
+use rita_common::usage_tracker::structs::UsageType;
 use rita_common::usage_tracker::update_usage_data;
 use rita_common::usage_tracker::UpdateUsage;
-use rita_common::usage_tracker::UsageType;
 use rita_common::KI;
 use std::collections::HashMap;
 use std::net::IpAddr;

@@ -6,32 +6,32 @@
 
 use crate::rita_loop::write_to_disk::is_router_storage_small;
 use crate::RitaCommonError;
-use althea_types::Identity;
+use althea_types::convert_flat_to_map_usage_data;
+use althea_types::convert_map_to_flat_usage_data;
+use althea_types::user_info::Usage;
+use althea_types::IndexedUsageHour;
 use althea_types::PaymentTx;
 use bincode::Error as BincodeError;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use num256::Uint256;
-use serde::{Deserialize, Serialize};
-use serde_json::Error as JsonError;
-use settings::set_rita_common;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fs::File;
-use std::hash::Hash;
 use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 use std::usize;
+use structs::*;
 
+pub mod structs;
 pub mod tests;
 
 /// one year worth of usage storage
@@ -48,184 +48,77 @@ const MAX_TX_ENTRIES: usize = 5_000;
 pub const MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE: usize = 5;
 pub const MINIMUM_NUMBER_OF_TRANSACTIONS_SMALL_STORAGE: usize = 75;
 
+/// The maximum amount of usage data that may be unsaved before we save out to the disk
+pub const MAX_UNSAVED_USAGE: u64 = 10 * 1000u64.pow(3);
+
 lazy_static! {
-    static ref USAGE_TRACKER: Arc<RwLock<UsageTracker>> =
-        Arc::new(RwLock::new(UsageTracker::load_from_disk()));
-}
-
-/// In an effort to converge this module between the three possible bw tracking
-/// use cases this enum is used to identify which sort of usage we are tracking
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub enum UsageType {
-    Client,
-    Relay,
-    Exit,
-}
-
-/// A struct for tracking each hour of usage, indexed by time in hours since
-/// the unix epoch
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct UsageHour {
-    pub index: u64,
-    pub up: u64,
-    pub down: u64,
-    pub price: u32,
-}
-
-/// A version of payment tx with a string txid so that the formatting is correct
-/// for display to users.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
-pub struct FormattedPaymentTx {
-    pub to: Identity,
-    pub from: Identity,
-    pub amount: Uint256,
-    // should always be populated in this case
-    pub txid: String,
-    // TODO add "payment_type" here which will allow the frontend
-    // to easily tell what this payment is for and prevent the need
-    // for hacky classification
-}
-
-fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
-    let txid = input.txid;
-    FormattedPaymentTx {
-        to: input.to,
-        from: input.from,
-        amount: input.amount,
-        txid: format!("{txid:#066x}"),
-    }
-}
-
-/// A struct for tracking each hours of payments indexed in hours since unix epoch
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PaymentHour {
-    index: u64,
-    payments: Vec<FormattedPaymentTx>,
-}
-
-/// The main actor that holds the usage state for the duration of operations
-/// at some point loading and saving will be defined in service started
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct UsageTracker {
-    pub last_save_hour: u64,
-    // at least one of these will be left unused
-    pub client_bandwidth: VecDeque<UsageHour>,
-    pub relay_bandwidth: VecDeque<UsageHour>,
-    pub exit_bandwidth: VecDeque<UsageHour>,
-    /// A history of payments
-    pub payments: VecDeque<PaymentHour>,
-}
-
-impl UsageTracker {
-    /// This function is run on startup and removes duplicate entries from usage history
-    /// This function is run on startup and removes duplicate entries from usage history
-    pub fn remove_duplicate_and_invalid_payment_entires(mut self) -> UsageTracker {
-        let mut duplicate_list = HashSet::new();
-        let mut payments = self.payments.clone();
-        for hour in payments.iter_mut() {
-            let mut payments = Vec::new();
-            for p in hour.payments.iter() {
-                let txid: Uint256 = match p.txid.parse() {
-                    Ok(tx) => tx,
-                    Err(_) => {
-                        warn!("Removed invalid payment! {}", p.txid);
-                        // found an error, removing
-                        continue;
-                    }
-                };
-                if duplicate_list.contains(&txid) {
-                    // found a duplicate, removing
-                } else {
-                    duplicate_list.insert(txid);
-                    payments.push(p.clone())
-                }
-            }
-            // insert filtered payments list
-            hour.payments = payments;
-        }
-        self.payments = payments;
-        self
-    }
-
-    pub fn get_txids(&self) -> HashSet<Uint256> {
-        let mut set = HashSet::new();
-        for hour in &self.payments {
-            for p in &hour.payments {
-                let txid: Uint256 = match p.txid.parse() {
-                    Ok(t) => t,
-                    Err(_) => {
-                        error!("Invalid tx id in usage tracker {}", p.txid);
-                        continue;
-                    }
-                };
-                set.insert(txid);
-            }
-        }
-        set
-    }
-}
-
-/// This function checks to see how many bytes were used
-/// and if the amount used is not greater than 10gb than
-/// it will return false. Essentially, it's checking to make
-/// sure that there is usage within the router.
-fn check_usage_hour(input: &VecDeque<UsageHour>, last_save_hour: u64) -> bool {
-    let mut input = input.clone();
-    let number_of_bytes = 10000;
-    let mut total_used_bytes = 0;
-    while !input.is_empty() {
-        match input.pop_front() {
-            Some(val) => {
-                total_used_bytes += val.up;
-                if val.index < last_save_hour {
-                    return total_used_bytes < number_of_bytes;
-                }
-            }
-            None => break,
-        }
-    }
-    false
-}
-
-fn at_least_two(a: bool, b: bool, c: bool) -> bool {
-    if a {
-        b || c
-    } else {
-        b && c
-    }
+    static ref USAGE_TRACKER_STORAGE: Arc<RwLock<UsageTrackerStorage>> =
+        Arc::new(RwLock::new(UsageTrackerStorage::load_from_disk()));
 }
 
 /// Utility function that grabs usage tracker from it's lock and
 /// saves it out. Should be called when we want to save anywhere outside this file
 pub fn save_usage_to_disk() {
-    match USAGE_TRACKER.write().unwrap().save() {
+    match USAGE_TRACKER_STORAGE.write().unwrap().save() {
         Ok(_val) => info!("Saved usage tracker successfully"),
         Err(e) => warn!("Unable to save usage tracker {:}", e),
     };
 }
 
-impl UsageTracker {
+/// Helps determine how often we write out to the disk on different devices by setting a device specific mininum
+/// number of transactions before saving
+pub fn get_minimum_number_of_transactions_to_store() -> usize {
+    let settings = settings::get_rita_common();
+    if is_router_storage_small(
+        &settings
+            .network
+            .device
+            .unwrap_or_else(|| "x86_64".to_string()),
+    ) {
+        MINIMUM_NUMBER_OF_TRANSACTIONS_SMALL_STORAGE
+    } else {
+        MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE
+    }
+}
+
+impl UsageTrackerStorage {
+    /// This function checks to see how many bytes were used
+    /// and if the amount used is not greater than 10gb than
+    /// it will return false. Essentially, it's checking to make
+    /// sure that there is enough usage to be worth saving
+    pub fn check_unsaved_usage(&self) -> bool {
+        let mut total_unsaved_bytes = 0;
+        let v = vec![
+            &self.client_bandwidth,
+            &self.relay_bandwidth,
+            &self.exit_bandwidth,
+        ];
+        for i in v {
+            for (index, usage) in i {
+                if *index > self.last_save_hour {
+                    total_unsaved_bytes += usage.up;
+                    total_unsaved_bytes += usage.down;
+                }
+            }
+        }
+        total_unsaved_bytes > MAX_UNSAVED_USAGE
+    }
+
+    /// Returns true if the numberof unsaved payments is greater than the mininum number of transactions to store
+    pub fn check_unsaved_payments(&self) -> bool {
+        let mut total_num_unsaved_payments = 0;
+        for p in self.payments.iter() {
+            if p.index > self.last_save_hour {
+                total_num_unsaved_payments += 1;
+            }
+        }
+        total_num_unsaved_payments > get_minimum_number_of_transactions_to_store()
+    }
+
     pub fn save(&mut self) -> Result<(), RitaCommonError> {
         let settings = settings::get_rita_common();
-        let minimum_number_of_transactions = if is_router_storage_small(
-            &settings
-                .network
-                .device
-                .unwrap_or_else(|| "x86_64".to_string()),
-        ) {
-            MINIMUM_NUMBER_OF_TRANSACTIONS_SMALL_STORAGE
-        } else {
-            MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE
-        };
-        if self.payments.len() < minimum_number_of_transactions
-            || at_least_two(
-                check_usage_hour(&self.client_bandwidth, self.last_save_hour),
-                check_usage_hour(&self.exit_bandwidth, self.last_save_hour),
-                check_usage_hour(&self.relay_bandwidth, self.last_save_hour),
-            )
-        {
+
+        if self.check_unsaved_payments() || self.check_unsaved_usage() {
             return Err(RitaCommonError::StdError(IOError::new(
                 ErrorKind::Other,
                 "Too little data for writing",
@@ -257,7 +150,9 @@ impl UsageTracker {
                     // 500 tx min. Payment data is trimmed if out of space as it is larger than usage data
                     if newsize >= 1000 {
                         newsize /= 2;
-                        trim_payments(newsize, &mut self.payments);
+                        while self.payments.len() > newsize {
+                            self.remove_oldest_payment_history_entry()
+                        }
                         let serialized = bincode::serialize(self)?;
                         compressed_bytes = match compress_serialized(serialized) {
                             Ok(bytes) => bytes,
@@ -277,14 +172,14 @@ impl UsageTracker {
     /// struct will be returned so data can be successfully collected from the present moment forward.
     ///
     /// TODO remove in beta 21 migration code migrates json serialized data to bincode
-    fn load_from_disk() -> UsageTracker {
+    fn load_from_disk() -> UsageTrackerStorage {
         // if the loading process goes wrong for any reason, we just start again
-        let blank_usage_tracker = UsageTracker {
+        let blank_usage_tracker = UsageTrackerStorage {
+            client_bandwidth: HashMap::new(),
+            relay_bandwidth: HashMap::new(),
+            exit_bandwidth: HashMap::new(),
+            payments: HashSet::new(),
             last_save_hour: 0,
-            client_bandwidth: VecDeque::new(),
-            relay_bandwidth: VecDeque::new(),
-            exit_bandwidth: VecDeque::new(),
-            payments: VecDeque::new(),
         };
 
         let file_path = settings::get_rita_common().network.usage_tracker_file;
@@ -304,49 +199,43 @@ impl UsageTracker {
             Err(_e) => return blank_usage_tracker,
         };
 
-        let res = match (
+        match (
             file_exists,
-            try_bincode(&unzipped_bytes),
-            try_json(&unzipped_bytes),
+            try_bincode_new(&unzipped_bytes),
+            try_bincode_old(&unzipped_bytes),
         ) {
-            // file exists and bincode deserialization was successful, in the case that somehow json deserialization of the same
-            // data was also successful just ignore it and use bincode
+            // file exists and bincode deserialization was successful, ignore all other possibilities
             (true, Ok(bincode_tracker), _) => bincode_tracker,
-            //file exists, but bincode deserialization failed -> load using serde (old), update settings and save file
-            (true, Err(_e), Ok(mut json_tracker)) => {
-                let mut settings = settings::get_rita_common();
-                // save with bincode regardless of result of serde deserialization in order to end reliance on json
-                let old_path = PathBuf::from(settings.network.usage_tracker_file);
-
-                let mut new_path = old_path.clone();
-                new_path.set_extension("bincode");
-
-                settings.network.usage_tracker_file =
-                    new_path.clone().into_os_string().into_string().unwrap();
-                set_rita_common(settings);
-
-                match json_tracker.save() {
-                    Ok(()) => {
-                        // delete the old file after successfully migrating, this may cause problems on routers with
-                        // low available storage space since we want to take up space for both the new and old file
-                        if !(old_path.eq(&new_path)) {
-                            // check that we would not be deleting the file just saved to
-                            let _r = std::fs::remove_file(old_path);
-                        } else {
-                            error!(
-                                "We are trying to save over {:?} with {:?}, how are they same?",
-                                old_path, new_path
-                            )
+            // file exists, up to date encoding failed, beta 20 encoding succeeded
+            (true, Err(_), Ok(bincode_tracker)) => UsageTrackerStorage {
+                last_save_hour: bincode_tracker.last_save_hour,
+                client_bandwidth: convert_flat_to_map_usage_data(bincode_tracker.client_bandwidth),
+                relay_bandwidth: convert_flat_to_map_usage_data(bincode_tracker.relay_bandwidth),
+                exit_bandwidth: convert_flat_to_map_usage_data(bincode_tracker.exit_bandwidth),
+                payments: {
+                    let mut out = HashSet::new();
+                    for ph in bincode_tracker.payments {
+                        for p in ph.payments {
+                            match p.txid.parse() {
+                                Ok(txid) => {
+                                    out.insert(UsageTrackerPayment {
+                                        to: p.to,
+                                        from: p.from,
+                                        amount: p.amount,
+                                        txid,
+                                        index: ph.index,
+                                    });
+                                }
+                                Err(e) => error!(
+                                    "Failed to convert payment with txid {:?} discarding!",
+                                    e
+                                ),
+                            }
                         }
-                        json_tracker
                     }
-                    Err(e) => {
-                        error!("Failed to save UsageTracker to bincode {:?}", e);
-                        json_tracker
-                    }
-                }
-            }
-
+                    out
+                },
+            },
             // file does not exist; no data to load, this is probably a new router
             // and we'll just generate a new file
             (false, _, _) => blank_usage_tracker,
@@ -360,8 +249,7 @@ impl UsageTracker {
                 );
                 blank_usage_tracker
             }
-        };
-        res.remove_duplicate_and_invalid_payment_entires()
+        }
     }
 }
 
@@ -385,14 +273,14 @@ fn decompressed(mut file: File) -> Result<Vec<u8>, RitaCommonError> {
 }
 
 /// Attempts to deserialize the provided array of bytes as a bincode encoded UsageTracker struct
-fn try_bincode(bytes: &[u8]) -> Result<UsageTracker, BincodeError> {
-    let deserialized: Result<UsageTracker, _> = bincode::deserialize(bytes);
+fn try_bincode_new(bytes: &[u8]) -> Result<UsageTrackerStorage, BincodeError> {
+    let deserialized: Result<UsageTrackerStorage, _> = bincode::deserialize(bytes);
     deserialized
 }
 
-/// Attempts to deserialize the provided array of bytes as a json encoded UsageTracker struct
-fn try_json(bytes: &[u8]) -> Result<UsageTracker, JsonError> {
-    let deserialized: Result<UsageTracker, _> = serde_json::from_slice(bytes);
+/// Attempts to deserialize the provided array of bytes as a bincode encoded UsageTracker struct
+fn try_bincode_old(bytes: &[u8]) -> Result<UsageTrackerStorageOld, BincodeError> {
+    let deserialized: Result<UsageTrackerStorageOld, _> = bincode::deserialize(bytes);
     deserialized
 }
 
@@ -430,53 +318,49 @@ pub fn update_usage_data(msg: UpdateUsage) {
         }
     };
 
-    process_usage_update(curr_hour, msg, &mut (USAGE_TRACKER.write().unwrap()));
+    let mut usage_tracker = USAGE_TRACKER_STORAGE.write().unwrap();
+
+    usage_tracker.process_usage_update(curr_hour, msg);
 }
 
-fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTracker) {
-    // history contains a reference to whatever the correct storage array is
-    let history = match msg.kind {
-        UsageType::Client => &mut data.client_bandwidth,
-        UsageType::Relay => &mut data.relay_bandwidth,
-        UsageType::Exit => &mut data.exit_bandwidth,
-    };
-    // we grab the front entry from the VecDeque, if there is an entry one we check if it's
-    // up to date, if it is we add to it, if it's not or there is no entry we create one.
-    // note that price is only sampled once per hour.
-    match history.front_mut() {
-        None => history.push_front(UsageHour {
-            index: current_hour,
-            up: msg.up,
-            down: msg.down,
-            price: msg.price,
-        }),
-        Some(entry) => {
-            if entry.index == current_hour {
+impl UsageTrackerStorage {
+    fn process_usage_update(&mut self, current_hour: u64, msg: UpdateUsage) {
+        // history contains a reference to whatever the correct storage array is
+        let history = match msg.kind {
+            UsageType::Client => &mut self.client_bandwidth,
+            UsageType::Relay => &mut self.relay_bandwidth,
+            UsageType::Exit => &mut self.exit_bandwidth,
+        };
+        // we grab the front entry from the VecDeque, if there is an entry one we check if it's
+        // up to date, if it is we add to it, if it's not or there is no entry we create one.
+        // note that price is only sampled once per hour.
+        match history.get_mut(&current_hour) {
+            None => {
+                history.insert(
+                    current_hour,
+                    Usage {
+                        up: msg.up,
+                        down: msg.down,
+                        price: msg.price,
+                    },
+                );
+            }
+            Some(entry) => {
                 entry.up += msg.up;
                 entry.down += msg.down;
-            } else {
-                history.push_front(UsageHour {
-                    index: current_hour,
-                    up: msg.up,
-                    down: msg.down,
-                    price: msg.price,
-                })
             }
         }
-    }
-    while history.len() > MAX_USAGE_ENTRIES {
-        let _discarded_entry = history.pop_back();
-    }
-}
-
-fn trim_payments(size: usize, history: &mut VecDeque<PaymentHour>) {
-    while history.len() > size {
-        let _discarded_entry = history.pop_back();
+        while history.len() > MAX_USAGE_ENTRIES {
+            let smallest_key = history.keys().min_by(|a, b| a.cmp(b)).cloned();
+            if let Some(smallest_key) = smallest_key {
+                history.remove(&smallest_key);
+            }
+        }
     }
 }
 
 pub fn update_payments(payment: PaymentTx) {
-    let history = &mut (USAGE_TRACKER.write().unwrap());
+    let history = &mut (USAGE_TRACKER_STORAGE.write().unwrap());
 
     // This handles the following edge case:
     // Router A is paying router B. Router B reboots and loses all data in
@@ -489,44 +373,45 @@ pub fn update_payments(payment: PaymentTx) {
         return;
     }
 
-    handle_payments(history, &payment);
+    history.handle_payments(&payment);
 }
 
-/// Internal handler function that deals with adding a payment to the list
-/// and saving if required
-fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) {
-    let current_hour = match get_current_hour() {
-        Ok(hour) => hour,
-        Err(e) => {
-            error!("System time is set earlier than unix epoch! {:?}", e);
-            return;
-        }
-    };
-    let formatted_payment = to_formatted_payment_tx(payment.clone());
-    match history.payments.front_mut() {
-        None => history.payments.push_front(PaymentHour {
-            index: current_hour,
-            payments: vec![formatted_payment],
-        }),
-        Some(entry) => {
-            if entry.index == current_hour {
-                entry.payments.push(formatted_payment);
-            } else {
-                history.payments.push_front(PaymentHour {
-                    index: current_hour,
-                    payments: vec![formatted_payment],
-                })
+impl UsageTrackerStorage {
+    /// Internal handler function that deals with adding a payment to the list
+    /// and saving if required
+    fn handle_payments(&mut self, payment: &PaymentTx) {
+        let current_hour = match get_current_hour() {
+            Ok(hour) => hour,
+            Err(e) => {
+                error!("System time is set earlier than unix epoch! {:?}", e);
+                return;
             }
+        };
+        let formatted_payment = UsageTrackerPayment::from_payment_tx(*payment, current_hour);
+        self.payments.insert(formatted_payment);
+
+        while self.payments.len() > MAX_TX_ENTRIES {
+            self.remove_oldest_payment_history_entry()
         }
     }
-    while history.payments.len() > MAX_TX_ENTRIES {
-        let _discarded_entry = history.payments.pop_back();
+
+    /// Removes a single tx from the payment history entry, oldest first
+    fn remove_oldest_payment_history_entry(&mut self) {
+        let oldest = self
+            .payments
+            .iter()
+            .min_by(|a, b| a.index.cmp(&b.index))
+            .cloned();
+        if let Some(oldest) = oldest {
+            self.payments.remove(&oldest);
+        }
     }
 }
 
 /// Gets usage data for this router, stored on the local disk at periodic intervals
-pub fn get_usage_data(kind: UsageType) -> VecDeque<UsageHour> {
-    let usage_tracker_var = &*(USAGE_TRACKER.write().unwrap());
+pub fn get_usage_data_map(kind: UsageType) -> HashMap<u64, Usage> {
+    let usage_tracker_var = &*(USAGE_TRACKER_STORAGE.write().unwrap());
+
     match kind {
         UsageType::Client => usage_tracker_var.client_bandwidth.clone(),
         UsageType::Relay => usage_tracker_var.relay_bandwidth.clone(),
@@ -534,16 +419,27 @@ pub fn get_usage_data(kind: UsageType) -> VecDeque<UsageHour> {
     }
 }
 
+/// Gets usage data for this router, stored on the local disk at periodic intervals
+pub fn get_usage_data(kind: UsageType) -> VecDeque<IndexedUsageHour> {
+    let usage_tracker_var = &*(USAGE_TRACKER_STORAGE.write().unwrap());
+    let data = match kind {
+        UsageType::Client => usage_tracker_var.client_bandwidth.clone(),
+        UsageType::Relay => usage_tracker_var.relay_bandwidth.clone(),
+        UsageType::Exit => usage_tracker_var.exit_bandwidth.clone(),
+    };
+    convert_map_to_flat_usage_data(data)
+}
+
 /// Gets the last saved usage hour from the existing usage tracker
 pub fn get_last_saved_usage_hour() -> u64 {
-    let usage_tracker = &*(USAGE_TRACKER.read().unwrap());
+    let usage_tracker = &*(USAGE_TRACKER_STORAGE.read().unwrap());
     usage_tracker.last_save_hour
 }
 
 /// Gets payment data for this router, stored on the local disk at periodic intervals
 pub fn get_payments_data() -> VecDeque<PaymentHour> {
-    let usage_tracker_var = &*(USAGE_TRACKER.read().unwrap());
-    usage_tracker_var.payments.clone()
+    let usage_tracker_var = &*(USAGE_TRACKER_STORAGE.read().unwrap());
+    convert_payment_set_to_payment_hour(usage_tracker_var.payments.clone())
 }
 
 /// On an interupt (SIGTERM), saving USAGE_TRACKER before exiting, this is essentially

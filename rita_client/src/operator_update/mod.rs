@@ -8,21 +8,20 @@ use crate::exit_manager::{get_client_pub_ipv6, get_selected_exit_ip};
 use crate::rita_loop::is_gateway_client;
 use crate::{
     extend_hardware_info, reset_wifi_pass, set_router_update_instruction, set_wifi_multi_internal,
+    RitaClientError,
 };
 use althea_kernel_interface::hardware_info::get_hardware_info;
-use althea_types::get_sequence_num;
+use althea_types::{get_sequence_num, UsageTrackerTransfer};
 use althea_types::{
     AuthorizedKeys, BillingDetails, ContactStorage, ContactType, CurExitInfo, ExitConnection,
-    HardwareInfo, OperatorAction, OperatorCheckinMessage, OperatorUpdateMessage, UsageHour,
-    UsageTracker,
+    HardwareInfo, OperatorAction, OperatorCheckinMessage, OperatorUpdateMessage,
 };
 use num256::Uint256;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
-use rita_common::usage_tracker::UsageHour as RCUsageHour;
-use rita_common::usage_tracker::UsageType::{Client, Relay};
-use rita_common::usage_tracker::{get_current_hour, get_usage_data};
+use rita_common::usage_tracker::structs::UsageType::{Client, Relay};
+use rita_common::usage_tracker::{get_current_hour, get_usage_data_map};
 use rita_common::utils::option_convert;
 use rita_common::DROPBEAR_AUTHORIZED_KEYS;
 use rita_common::KI;
@@ -31,7 +30,7 @@ use serde_json::Value;
 use settings::client::RitaClientSettings;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::fs::{remove_file, rename, File};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -64,7 +63,7 @@ const UPDATE_FREQUENCY_CAP: Duration = Duration::from_secs(3600);
 pub async fn operator_update(
     ops_last_seen_usage_hour: Option<u64>,
     timeout: Duration,
-) -> Result<u64, ()> {
+) -> Result<u64, RitaClientError> {
     let url: &str;
     if cfg!(feature = "dev_env") {
         url = "http://7.7.7.7:8080/checkin";
@@ -139,30 +138,6 @@ pub async fn operator_update(
         },
     });
 
-    let current_hour = match get_current_hour() {
-        Ok(hour) => hour,
-        Err(e) => {
-            error!("System time is set earlier than unix epoch {:?}", e);
-            return Err(());
-        }
-    };
-    let last_seen_hour = ops_last_seen_usage_hour.unwrap_or(0);
-    // We check that the difference is >1 because we leave a 1 hour buffer to prevent from sending over an incomplete current hour
-    let send_hours = current_hour - last_seen_hour > 1;
-    let mut usage_tracker_data: Option<UsageTracker> = None;
-    // if ops_last_seen_usage_hour is a None the thread has restarted and we are waiting for ops to tell us how much data we need to send,
-    // which will be populated with the next checkin cycle. we only send 1 month at a time if ops is requesting the full usage history.
-    if send_hours && ops_last_seen_usage_hour.is_some() {
-        let usage_data_client = get_usage_data(Client);
-        let usage_data_relay = get_usage_data(Relay);
-        usage_tracker_data = process_usage_data(
-            usage_data_client,
-            usage_data_relay,
-            last_seen_hour,
-            current_hour,
-        )
-    }
-
     let exit_con = Some(ExitConnection {
         cur_exit,
         client_pub_ipv6: get_client_pub_ipv6(),
@@ -184,7 +159,8 @@ pub async fn operator_update(
             hardware_info,
             user_bandwidth_limit,
             rita_uptime: RITA_UPTIME.elapsed(),
-            user_bandwidth_usage: usage_tracker_data,
+            user_bandwidth_usage: None,
+            user_bandwidth_usage_v2: prepare_usage_data_for_upload(ops_last_seen_usage_hour)?,
         })
         .await;
 
@@ -196,7 +172,7 @@ pub async fn operator_update(
         }
         Err(e) => {
             error!("Failed to perform operator checkin with {:?}", e);
-            return Err(());
+            return Err(e.into());
         }
     };
 
@@ -204,7 +180,7 @@ pub async fn operator_update(
         Ok(a) => a,
         Err(e) => {
             error!("Failed to perform operator checkin with {:?}", e);
-            return Err(());
+            return Err(e.into());
         }
     };
 
@@ -260,13 +236,7 @@ pub async fn operator_update(
     };
     set_router_update_instruction(update_instructions);
     perform_operator_update(new_settings.clone(), rita_client, network);
-    // update our count of ops last seen if we have confirmation ops is up to date on usage data
-    if new_settings.ops_last_seen_usage_hour == current_hour {
-        info!("Confirmed ops has taken usage update for hour {current_hour}");
-        Ok(current_hour)
-    } else {
-        Ok(new_settings.ops_last_seen_usage_hour)
-    }
+    Ok(new_settings.ops_last_seen_usage_hour)
 }
 
 /// logs some hardware info that may help debug this router
@@ -626,65 +596,39 @@ fn contains_forbidden_key(map: Map<String, Value>, forbidden_values: &[&str]) ->
     false
 }
 
-/// Given a vecdeque of usage hours, add up to a month's worth of hours to a returned vecdeque
-pub fn iterate_month_usage_data(mut data: VecDeque<RCUsageHour>) -> VecDeque<UsageHour> {
-    // one month in hours
-    let max_hour_iterations: u32 = 730;
-    let mut client_iter = 0;
-    let mut res = VecDeque::new();
-    while let Some(hour) = data.pop_front() {
-        // either we hit max iterations or we are on the second to last entry.
-        res.push_back(UsageHour {
-            up: hour.up,
-            down: hour.down,
-            price: hour.price,
-            index: hour.index,
-        });
-        if client_iter >= max_hour_iterations || data.len() == 1 {
-            break;
+/// This function handles preparing usage data for upload to operator tools
+fn prepare_usage_data_for_upload(
+    ops_last_seen_hour: Option<u64>,
+) -> Result<Option<UsageTrackerTransfer>, RitaClientError> {
+    // if this is none we will not send usage data to ops
+    // as it indicates we don't yet know what data ops has
+    match ops_last_seen_hour {
+        Some(ops_last_seen_hour) => {
+            let current_hour = get_current_hour()?;
+            let usage_data_client = get_usage_data_map(Client);
+            let usage_data_relay = get_usage_data_map(Relay);
+            // We check that the difference is >1 because we leave a 1 hour buffer to prevent from sending over an incomplete current hour
+            let min_send_hour = ops_last_seen_hour;
+            let mut client_bandwidth = HashMap::new();
+            let mut relay_bandwidth = HashMap::new();
+            for (index, usage) in usage_data_client {
+                if index > min_send_hour && index < current_hour {
+                    client_bandwidth.insert(index, usage);
+                }
+            }
+            for (index, usage) in usage_data_relay {
+                if index > min_send_hour && index < current_hour {
+                    relay_bandwidth.insert(index, usage);
+                }
+            }
+            Ok(Some(UsageTrackerTransfer {
+                client_bandwidth,
+                relay_bandwidth,
+                // this function processes client usage data so this is always true
+                // in the future this value will be set by exits uploading data
+                exit_bandwidth: HashMap::new(),
+            }))
         }
-        client_iter += 1;
+        None => Ok(None),
     }
-    res
-}
-
-/// Given our saved usage data and our last seen value, process the vecdeques so that we only
-/// send to ops new data since last seen.
-pub fn process_usage_data(
-    mut usage_data_client: VecDeque<RCUsageHour>,
-    mut usage_data_relay: VecDeque<RCUsageHour>,
-    last_seen_hour: u64,
-    current_hour: u64,
-) -> Option<UsageTracker> {
-    // sort client and relay data in case they have come out of order somehow. This sorts by index increasing so newest data at back
-    usage_data_relay
-        .make_contiguous()
-        .sort_by(|a, b| a.index.cmp(&b.index));
-    usage_data_client
-        .make_contiguous()
-        .sort_by(|a, b| a.index.cmp(&b.index));
-
-    // so this spits out the index for where last seen is, or the index of the next highest hour(returned in an error).
-    // we take the result -1 just in case, limit 0, since it's possible we might get back an index out of bounds at the back.
-    let client_last_seen_index =
-        match usage_data_client.binary_search_by(|x| x.index.cmp(&last_seen_hour)) {
-            Ok(p) => p,
-            Err(p) => p.saturating_sub(1),
-        };
-    let relay_last_seen_index =
-        match usage_data_relay.binary_search_by(|x| x.index.cmp(&last_seen_hour)) {
-            Ok(p) => p,
-            Err(p) => p.saturating_sub(1),
-        };
-    // remove all data before the last seen index
-    usage_data_client.drain(0..client_last_seen_index);
-    usage_data_relay.drain(0..relay_last_seen_index);
-    let new_client_data = iterate_month_usage_data(usage_data_client);
-    let new_relay_data = iterate_month_usage_data(usage_data_relay);
-
-    Some(UsageTracker {
-        last_save_hour: current_hour,
-        client_bandwidth: new_client_data,
-        relay_bandwidth: new_relay_data,
-    })
 }

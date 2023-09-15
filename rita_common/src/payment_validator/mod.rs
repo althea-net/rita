@@ -290,7 +290,7 @@ fn remove(msg: Remove) {
     // store successful transactions so that they can't be played back to us, at least
     // during this session
     if msg.success {
-        add_successful_tx(msg.tx.payment.clone());
+        add_successful_tx(msg.tx.payment);
     }
     if was_present {
         info!("Transaction {} was removed", msg.tx);
@@ -615,7 +615,7 @@ fn handle_tx_messaging_xdai(
 ) {
     let from_address = ts.payment.from.eth_address;
     let amount = ts.payment.amount;
-    let pmt = ts.payment.clone();
+    let pmt = ts.payment;
     let our_address = settings::get_rita_common()
         .payment
         .eth_address
@@ -709,7 +709,7 @@ fn handle_tx_messaging_xdai(
             );
 
             // update the usage tracker with the details of this payment
-            update_payments(pmt.clone());
+            update_payments(pmt);
 
             // Store this payment as a receipt to send in the future if this receiver doesnt see the payment
             store_payment(pmt);
@@ -737,7 +737,7 @@ fn handle_tx_messaging_xdai(
 /// Handles the tx response from the full node and it's various cases
 /// pulled out of validate_transaction purely for cosmetic reasons
 fn handle_tx_messaging_althea(transaction: TransactionDetails, ts: ToValidate) {
-    let pmt = ts.payment.clone();
+    let pmt = ts.payment;
 
     // txid is for eth chain and txhash is for althea chain, only one of these should be
     // Some(..). This was verified before
@@ -838,7 +838,7 @@ fn handle_tx_messaging_althea(transaction: TransactionDetails, ts: ToValidate) {
                 denom.expect("How did this happen when we already verified existence"),
             );
             // update the usage tracker with the details of this payment
-            update_payments(pmt.clone());
+            update_payments(pmt);
 
             // Store this payment as a receipt to send in the future if this receiver doesnt see the payment
             store_payment(pmt);
@@ -970,8 +970,8 @@ mod tests {
             txid: 1u8.into(),
         };
 
-        store_payment(pmt1.clone());
-        sent_hashset.insert(pmt1.clone());
+        store_payment(pmt1);
+        sent_hashset.insert(pmt1);
         assert_eq!(get_payment_txids(pmt1.to), sent_hashset);
 
         let pmt2 = PaymentTx {
@@ -980,9 +980,9 @@ mod tests {
             amount: 100u8.into(),
             txid: 2u8.into(),
         };
-        store_payment(pmt2.clone());
+        store_payment(pmt2);
 
-        sent_hashset.insert(pmt2.clone());
+        sent_hashset.insert(pmt2);
         assert_eq!(get_payment_txids(pmt2.to), sent_hashset);
 
         let pmt3 = PaymentTx {
@@ -992,7 +992,7 @@ mod tests {
             txid: 2u8.into(),
         };
 
-        store_payment(pmt3.clone());
+        store_payment(pmt3);
 
         assert_eq!(get_payment_txids(pmt3.to), sent_hashset);
     }

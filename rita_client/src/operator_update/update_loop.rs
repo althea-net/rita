@@ -43,7 +43,8 @@ pub fn start_operator_update_loop() {
                                 wait_unti_next_update =
                                     max(wait_unti_next_update / 2, TARGET_UPDATE_FREQUENCY);
                             }
-                            Err(()) => {
+                            Err(e) => {
+                                error!("Ops checkin failed with {:?}!", e);
                                 // failed checkin, backoff with a random multiplier the goal of random backoff
                                 // is to prevent collisions
                                 wait_unti_next_update = min(

@@ -1,17 +1,13 @@
 #[cfg(test)]
 mod test {
-    use rand::seq::SliceRandom;
-    use rita_common::usage_tracker::get_current_hour;
-    use rita_common::usage_tracker::tests::test::generate_dummy_usage_tracker;
+    use crate::operator_update::contains_forbidden_key;
+    use crate::operator_update::prepare_usage_data_for_upload;
+    use crate::operator_update::update_authorized_keys;
     use serde_json::json;
     use serde_json::Value;
     use std::fs::File;
     use std::io::{BufRead, BufReader, Write};
     use std::{fs, io::Error, path::Path};
-
-    use crate::operator_update::contains_forbidden_key;
-    use crate::operator_update::process_usage_data;
-    use crate::operator_update::update_authorized_keys;
 
     const FORBIDDEN_MERGE_VALUES: [&str; 2] = ["test_key", "other_test_key"];
 
@@ -136,90 +132,7 @@ mod test {
         assert!(Path::new(key_file).exists());
     }
     #[test]
-    fn test_usage_data_processing() {
-        // this tests the flow used in rita client's operator update loop used to process usage data sent up to ops
-        let dummy_usage_tracker = generate_dummy_usage_tracker();
-        let mut usage_data_client = dummy_usage_tracker.client_bandwidth.clone();
-        let mut usage_data_relay = dummy_usage_tracker.relay_bandwidth;
-        let mut unshuffled_client = usage_data_client.clone();
-        let mut unshuffled_relay = usage_data_relay.clone();
-
-        // Test the sort function first:
-        // shuffle the data because it's currently ordered
-        usage_data_client
-            .make_contiguous()
-            .shuffle(&mut rand::thread_rng());
-        println!(
-            "Sample of current shuffle is {} {} {}",
-            usage_data_client.get(0).unwrap().index,
-            usage_data_client.get(1).unwrap().index,
-            usage_data_client.get(2).unwrap().index
-        );
-        usage_data_relay
-            .make_contiguous()
-            .shuffle(&mut rand::thread_rng());
-        // The processing function sorts these lowest index to highest. Note that usage hours are stored to disk as
-        // the opposite order where newest are added to the front, so this is inefficient.
-        // Options here to optimize are either a/write my own binary sort again which will compare for the existing structure
-        // where the saved vecdeque is highest index to lowest index, b/rework usage tracker so that we save data lowest index
-        // to highest index, or c/the current solution(inefficient, as we will be fully reversing the whole vecdeque of each
-        // client and relay at least once per hour on rollover): sort the entire list in reverse order to use with the builtin
-        // bin search from vecdeque
-
-        // for this purpose our last seen will be start hour - 10.
-        let current_hour = get_current_hour().unwrap();
-        let last_seen_hour = current_hour - 10;
-        let res_usage = process_usage_data(
-            usage_data_client.clone(),
-            usage_data_relay.clone(),
-            last_seen_hour,
-            current_hour,
-        )
-        .unwrap();
-        let res_usage_client = res_usage.client_bandwidth;
-        let res_usage_relay = res_usage.relay_bandwidth;
-
-        // check that the sorting in process_usage_data is correct after shuffling and sending it through
-        assert!(
-            res_usage_relay.get(0).unwrap().index < res_usage_relay.get(1).unwrap().index
-                && res_usage_relay.get(1).unwrap().index < res_usage_relay.get(2).unwrap().index
-        );
-        assert!(
-            res_usage_client.get(0).unwrap().index < res_usage_client.get(1).unwrap().index
-                && res_usage_client.get(1).unwrap().index < res_usage_client.get(2).unwrap().index
-        );
-        // check that the binary searching is correct: we did not remove any entries from usage client; so we should have started exactly
-        // from the last seen hour. we removed the last seen from usage relay, so we should expect to see our earliest hour as one fewer
-        assert!(res_usage_client.get(0).unwrap().index == last_seen_hour);
-        assert!(res_usage_relay.get(0).unwrap().index == last_seen_hour);
-
-        // now check that same thing, but in case we have a gap in the data. we'll remove the entry for the last_seen_hour from usage_data_relay
-        // to make sure we are successfully returning the next earliest hour (in our case, the last seen -1). we use res_usage client and relay
-        // because to remove the correct entry it needs to be presorted (if we've gotten here it's guaranteed.)
-        // we successfully search for the entry or return the next one down.
-        unshuffled_client.remove(unshuffled_client.len() - 11);
-        unshuffled_relay.remove(unshuffled_relay.len() - 11);
-        // so the index of our last seen hour if we say last seen is current - 10... will be at len - 11.
-        let res_usage = process_usage_data(
-            unshuffled_client,
-            unshuffled_relay,
-            last_seen_hour,
-            current_hour,
-        )
-        .unwrap();
-        let res_usage_client = res_usage.client_bandwidth;
-        let res_usage_relay = res_usage.relay_bandwidth;
-        // after processing we should start at last seen - 1.
-        println!(
-            "{:?} last seen {:?}",
-            res_usage_relay.get(0).unwrap().index,
-            last_seen_hour
-        );
-        assert!(res_usage_relay.get(0).unwrap().index == last_seen_hour - 1);
-        assert!(res_usage_client.get(0).unwrap().index == last_seen_hour - 1);
-
-        // check that our iteration function does indeed stop at a month of data:
-        assert!(res_usage_client.len() <= 730);
-        assert!(res_usage_relay.len() <= 730);
+    fn test_prepare_usage_data_for_upload() {
+        assert_eq!(prepare_usage_data_for_upload(None).unwrap(), None);
     }
 }

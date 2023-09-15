@@ -37,7 +37,7 @@ pub async fn make_payments_v2(item: Json<HashSet<PaymentTx>>) -> HttpResponse {
     let mut build_err = String::new();
     for pmt in pmt_list {
         let ts = ToValidate {
-            payment: pmt.clone(),
+            payment: pmt,
             received: Instant::now(),
             checked: false,
         };

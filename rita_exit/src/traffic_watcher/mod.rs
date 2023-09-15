@@ -21,9 +21,9 @@ use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;
 use rita_common::debt_keeper::traffic_update;
 use rita_common::debt_keeper::Traffic;
+use rita_common::usage_tracker::structs::UsageType;
 use rita_common::usage_tracker::update_usage_data;
 use rita_common::usage_tracker::UpdateUsage;
-use rita_common::usage_tracker::UsageType;
 use std::collections::HashMap;
 use std::net::IpAddr;
 

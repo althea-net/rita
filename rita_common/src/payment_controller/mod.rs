@@ -311,7 +311,7 @@ async fn make_althea_payment(
     // setup tx hash
     let pmt = pmt.publish(Uint256::from_str_radix(&transaction.txhash, 16).unwrap());
 
-    send_make_payment_endpoints(pmt.clone(), network_settings, None, Some(cosmos_node_grpc)).await;
+    send_make_payment_endpoints(pmt, network_settings, None, Some(cosmos_node_grpc)).await;
 
     // place this payment in the validation queue to handle later.
     let ts = ToValidate {
@@ -390,7 +390,7 @@ async fn make_xdai_payment(
     // add published txid to submission
     let pmt = pmt.publish(tx_id);
 
-    send_make_payment_endpoints(pmt.clone(), network_settings, Some(full_node), None).await;
+    send_make_payment_endpoints(pmt, network_settings, Some(full_node), None).await;
 
     // place this payment in the validation queue to handle later.
     let ts = ToValidate {
@@ -470,7 +470,7 @@ async fn send_make_payment_endpoints(
     // Get all txids to this client. Temporary add new payment to a copy of a list to send up to endpoint
     // this pmt is actually recorded in memory after validator confirms it
     let mut txid_history = get_payment_txids(pmt.to);
-    txid_history.insert(pmt.clone());
+    txid_history.insert(pmt);
 
     let actix_client = awc::Client::new();
     let neigh_ack = actix_client
@@ -485,7 +485,7 @@ async fn send_make_payment_endpoints(
 
     let resend_info = ResendInfo {
         neigh_url: neighbor_url.clone(),
-        pmt: pmt.clone(),
+        pmt,
         attempt: 0u8,
     };
 

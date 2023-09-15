@@ -832,7 +832,7 @@ mod tests {
                     u16::MAX,
                     tracking_exit,
                     u16::MAX,
-                     best_exit,
+                    best_exit,
                     400
                 ),
                 &mut vec,
