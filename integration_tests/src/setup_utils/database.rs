@@ -13,8 +13,8 @@ use std::{
 /// Starts the exit postgres instance in the native system namespace, TODO insert plumbing so that exits can reach it
 pub fn start_postgres() {
     const POSTGRES_USER: &str = "postgres";
-    const POSTGRES_BIN: &str = "/usr/lib/postgresql/15/bin/postgres";
-    const INITDB_BIN: &str = "/usr/lib/postgresql/15/bin/initdb";
+    const POSTGRES_BIN: &str = "/usr/lib/postgresql/16/bin/postgres";
+    const INITDB_BIN: &str = "/usr/lib/postgresql/16/bin/initdb";
     // for this test script
     const DB_URL_LOCAL: &str = "postgres://postgres@127.0.0.1/test";
     // for the rita exit instances

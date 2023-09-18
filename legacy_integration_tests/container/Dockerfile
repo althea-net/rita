@@ -5,8 +5,8 @@ RUN apt-get install -y python3-termcolor python3-toml python3-networkx python3-m
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 RUN PATH=$PATH:$HOME/.cargo/bin cargo install diesel_cli --force
 ENV POSTGRES_USER=postgres
-ENV POSTGRES_BIN=/usr/lib/postgresql/15/bin/postgres
-ENV INITDB_BIN=/usr/lib/postgresql/15/bin/initdb
+ENV POSTGRES_BIN=/usr/lib/postgresql/16/bin/postgres
+ENV INITDB_BIN=/usr/lib/postgresql/16/bin/initdb
 ARG NODES
 ENV SPEEDTEST_THROUGHPUT=$SPEEDTEST_THROUGHPUT
 ENV SPEEDTEST_DURATION=$SPEEDTEST_DURATION
