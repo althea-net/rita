@@ -622,7 +622,7 @@ pub struct OperatorUpdateMessage {
     pub operator_action: Option<OperatorAction>,
     /// String that holds the download link to the latest firmware release
     /// When a user hits 'update router', it updates to this version
-    /// to be removed once all routesr are updated to >= beta 19 rc9
+    /// to be removed once all routers are updated to >= beta 19 rc9
     pub local_update_instruction: Option<UpdateTypeLegacy>,
     /// String that holds the download link to the latest firmware release
     /// When a user hits 'update router', it updates to this version
@@ -754,6 +754,12 @@ pub struct OperatorCheckinMessage {
     /// saved usage hour is the same as the ops last seen, we send no data here as we are up
     /// to date. Data sent through here gets added to a database entry for each device.
     pub user_bandwidth_usage_v2: Option<UsageTrackerTransfer>,
+    /// Current client data usage in mbps computed as the last input to the usage tracker
+    /// so an average of around 5-10 seconds
+    pub client_mbps: Option<u64>,
+    /// Curent relay data usage in mbps, coputed as the last input to the usage tracker
+    /// so an average of around 5-10 seconds
+    pub relay_mbps: Option<u64>,
     /// This is to keep track of the rita client uptime for debugging purposes
     /// In the event something whacko happens, serde will magically derive def-
     /// fault value.

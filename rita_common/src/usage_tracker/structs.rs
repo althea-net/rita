@@ -2,6 +2,25 @@ use althea_types::{Identity, IndexedUsageHour, PaymentTx, Usage};
 use num256::Uint256;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;
+use std::time::{Duration, Instant};
+
+/// This struct is used to estimate the current throughput of a given router, it is not saved out to the disk
+#[derive(Clone, Copy, Default)]
+pub struct ThroughputTracker {
+    pub client: ThroughputData,
+    pub relay: ThroughputData,
+    pub exit: ThroughputData,
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct ThroughputData {
+    /// When the current data in this struct was last updated
+    pub last_sample_time: Option<Instant>,
+    /// the duration between the previous and current value of last_sample_time
+    /// used to convert the bytes used above into a rate per second
+    pub duration_of_this_sample: Duration,
+    pub bytes_used: u64,
+}
 
 /// A struct for tracking each hours of payments indexed in hours since unix epoch
 /// used to send to the frontend

@@ -26,6 +26,7 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 use std::usize;
@@ -51,15 +52,37 @@ pub const MINIMUM_NUMBER_OF_TRANSACTIONS_SMALL_STORAGE: usize = 75;
 /// The maximum amount of usage data that may be unsaved before we save out to the disk
 pub const MAX_UNSAVED_USAGE: u64 = 10 * 1000u64.pow(3);
 
+/// Just a storage wrapper for the usage tracker lazy static, to wrap the persisted data
+/// (usage tracker) and the non persistated data (throughput tracker) without using raw tuple
+pub struct UsageTrackerWrapper {
+    usage_tracker: UsageTrackerStorage,
+    throughtput_tracker: ThroughputTracker,
+}
+
+impl Default for UsageTrackerWrapper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl UsageTrackerWrapper {
+    pub fn new() -> UsageTrackerWrapper {
+        UsageTrackerWrapper {
+            usage_tracker: UsageTrackerStorage::load_from_disk(),
+            throughtput_tracker: ThroughputTracker::default(),
+        }
+    }
+}
+
 lazy_static! {
-    static ref USAGE_TRACKER_STORAGE: Arc<RwLock<UsageTrackerStorage>> =
-        Arc::new(RwLock::new(UsageTrackerStorage::load_from_disk()));
+    static ref USAGE_TRACKER_STORAGE: Arc<RwLock<UsageTrackerWrapper>> =
+        Arc::new(RwLock::new(UsageTrackerWrapper::new()));
 }
 
 /// Utility function that grabs usage tracker from it's lock and
 /// saves it out. Should be called when we want to save anywhere outside this file
 pub fn save_usage_to_disk() {
-    match USAGE_TRACKER_STORAGE.write().unwrap().save() {
+    match USAGE_TRACKER_STORAGE.write().unwrap().usage_tracker.save() {
         Ok(_val) => info!("Saved usage tracker successfully"),
         Err(e) => warn!("Unable to save usage tracker {:}", e),
     };
@@ -320,7 +343,34 @@ pub fn update_usage_data(msg: UpdateUsage) {
 
     let mut usage_tracker = USAGE_TRACKER_STORAGE.write().unwrap();
 
-    usage_tracker.process_usage_update(curr_hour, msg);
+    usage_tracker
+        .usage_tracker
+        .process_usage_update(curr_hour, msg);
+    usage_tracker.throughtput_tracker.process_usage_update(msg);
+}
+
+impl ThroughputTracker {
+    fn process_usage_update(&mut self, msg: UpdateUsage) {
+        let data = match msg.kind {
+            UsageType::Client => &mut self.client,
+            UsageType::Relay => &mut self.relay,
+            UsageType::Exit => &mut self.exit,
+        };
+        if let Some(last_sample_time) = data.last_sample_time {
+            // make sure we don't panic if the clock goes backwards
+            if Instant::now() > last_sample_time {
+                data.duration_of_this_sample = Instant::now() - last_sample_time
+            }
+        }
+        data.last_sample_time = Some(Instant::now());
+        // for clients all traffic is measured for relays the up and down values
+        // will always be double the actual throughput since we're pulling in and forwarding
+        // the same data at once.
+        match msg.kind {
+            UsageType::Client => data.bytes_used = msg.up + msg.down,
+            UsageType::Relay | UsageType::Exit => data.bytes_used = msg.up,
+        }
+    }
 }
 
 impl UsageTrackerStorage {
@@ -360,7 +410,7 @@ impl UsageTrackerStorage {
 }
 
 pub fn update_payments(payment: PaymentTx) {
-    let history = &mut (USAGE_TRACKER_STORAGE.write().unwrap());
+    let mut history = USAGE_TRACKER_STORAGE.write().unwrap();
 
     // This handles the following edge case:
     // Router A is paying router B. Router B reboots and loses all data in
@@ -368,12 +418,12 @@ pub fn update_payments(payment: PaymentTx) {
     // already been accounted for get counted twice.
     // This checks the usage history to see if this tx exists
     // thereby preventing the above case.
-    if history.get_txids().contains(&payment.txid) {
+    if history.usage_tracker.get_txids().contains(&payment.txid) {
         error!("Tried to insert duplicate txid into usage tracker!");
         return;
     }
 
-    history.handle_payments(&payment);
+    history.usage_tracker.handle_payments(&payment);
 }
 
 impl UsageTrackerStorage {
@@ -408,38 +458,54 @@ impl UsageTrackerStorage {
     }
 }
 
+/// Returns current throughput in bytes per second, or none if it is not yet available
+pub fn get_current_throughput(kind: UsageType) -> Option<u64> {
+    let usage_tracker_var = USAGE_TRACKER_STORAGE.read().unwrap();
+    let data = match kind {
+        UsageType::Client => usage_tracker_var.throughtput_tracker.client,
+        UsageType::Relay => usage_tracker_var.throughtput_tracker.relay,
+        UsageType::Exit => usage_tracker_var.throughtput_tracker.exit,
+    };
+    if data.last_sample_time.is_some() && data.duration_of_this_sample.as_secs() > 0 {
+        Some(data.bytes_used / data.duration_of_this_sample.as_secs())
+    } else {
+        // no data yet
+        None
+    }
+}
+
 /// Gets usage data for this router, stored on the local disk at periodic intervals
 pub fn get_usage_data_map(kind: UsageType) -> HashMap<u64, Usage> {
-    let usage_tracker_var = &*(USAGE_TRACKER_STORAGE.write().unwrap());
+    let usage_tracker_var = USAGE_TRACKER_STORAGE.read().unwrap();
 
     match kind {
-        UsageType::Client => usage_tracker_var.client_bandwidth.clone(),
-        UsageType::Relay => usage_tracker_var.relay_bandwidth.clone(),
-        UsageType::Exit => usage_tracker_var.exit_bandwidth.clone(),
+        UsageType::Client => usage_tracker_var.usage_tracker.client_bandwidth.clone(),
+        UsageType::Relay => usage_tracker_var.usage_tracker.relay_bandwidth.clone(),
+        UsageType::Exit => usage_tracker_var.usage_tracker.exit_bandwidth.clone(),
     }
 }
 
 /// Gets usage data for this router, stored on the local disk at periodic intervals
 pub fn get_usage_data(kind: UsageType) -> VecDeque<IndexedUsageHour> {
-    let usage_tracker_var = &*(USAGE_TRACKER_STORAGE.write().unwrap());
+    let usage_tracker_var = USAGE_TRACKER_STORAGE.read().unwrap();
     let data = match kind {
-        UsageType::Client => usage_tracker_var.client_bandwidth.clone(),
-        UsageType::Relay => usage_tracker_var.relay_bandwidth.clone(),
-        UsageType::Exit => usage_tracker_var.exit_bandwidth.clone(),
+        UsageType::Client => usage_tracker_var.usage_tracker.client_bandwidth.clone(),
+        UsageType::Relay => usage_tracker_var.usage_tracker.relay_bandwidth.clone(),
+        UsageType::Exit => usage_tracker_var.usage_tracker.exit_bandwidth.clone(),
     };
     convert_map_to_flat_usage_data(data)
 }
 
 /// Gets the last saved usage hour from the existing usage tracker
 pub fn get_last_saved_usage_hour() -> u64 {
-    let usage_tracker = &*(USAGE_TRACKER_STORAGE.read().unwrap());
-    usage_tracker.last_save_hour
+    let usage_tracker = USAGE_TRACKER_STORAGE.read().unwrap();
+    usage_tracker.usage_tracker.last_save_hour
 }
 
 /// Gets payment data for this router, stored on the local disk at periodic intervals
 pub fn get_payments_data() -> VecDeque<PaymentHour> {
-    let usage_tracker_var = &*(USAGE_TRACKER_STORAGE.read().unwrap());
-    convert_payment_set_to_payment_hour(usage_tracker_var.payments.clone())
+    let usage_tracker_var = USAGE_TRACKER_STORAGE.read().unwrap();
+    convert_payment_set_to_payment_hour(usage_tracker_var.usage_tracker.payments.clone())
 }
 
 /// On an interupt (SIGTERM), saving USAGE_TRACKER before exiting, this is essentially

@@ -20,8 +20,8 @@ use num256::Uint256;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
-use rita_common::usage_tracker::structs::UsageType::{Client, Relay};
-use rita_common::usage_tracker::{get_current_hour, get_usage_data_map};
+use rita_common::usage_tracker::structs::UsageType::{self, Client, Relay};
+use rita_common::usage_tracker::{get_current_hour, get_current_throughput, get_usage_data_map};
 use rita_common::utils::option_convert;
 use rita_common::DROPBEAR_AUTHORIZED_KEYS;
 use rita_common::KI;
@@ -161,6 +161,8 @@ pub async fn operator_update(
             rita_uptime: RITA_UPTIME.elapsed(),
             user_bandwidth_usage: None,
             user_bandwidth_usage_v2: prepare_usage_data_for_upload(ops_last_seen_usage_hour)?,
+            client_mbps: get_current_throughput(UsageType::Client),
+            relay_mbps: get_current_throughput(UsageType::Relay),
         })
         .await;
 
