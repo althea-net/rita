@@ -10,7 +10,10 @@ pub mod test {
         MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE,
     };
     use crate::RitaCommonError;
-    use althea_types::{convert_map_to_flat_usage_data, Identity, UnpublishedPaymentTx};
+    use althea_types::{
+        convert_map_to_flat_usage_data, Identity, IndexedUsageHour, UnpublishedPaymentTx,
+        UsageTrackerTransfer,
+    };
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
     use rand::{thread_rng, Rng};
@@ -93,6 +96,21 @@ pub mod test {
         assert!(dummy_usage_tracker == res2);
         assert!(res2 == res4);
     }
+
+    /// tests that the flat conversion comes out in the right order (decreasing usage hours)
+    #[test]
+    fn check_flat_conversion() {
+        let tracker = generate_dummy_usage_tracker();
+        let flat = convert_map_to_flat_usage_data(tracker.client_bandwidth);
+        let mut last: Option<IndexedUsageHour> = None;
+        for i in flat {
+            if let Some(last) = last {
+                assert!(i.index < last.index)
+            }
+            last = Some(i)
+        }
+    }
+
     // generates a nontrivial usage tracker struct for testing
     pub fn generate_dummy_usage_tracker() -> UsageTrackerStorage {
         let current_hour = get_current_hour().unwrap();

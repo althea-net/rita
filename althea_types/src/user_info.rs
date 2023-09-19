@@ -105,6 +105,35 @@ pub struct UsageTrackerTransfer {
     pub exit_bandwidth: HashMap<u64, Usage>,
 }
 
+impl UsageTrackerTransfer {
+    /// gets the greatest index currently stored in this struct which represents
+    /// the last saved usage hour
+    pub fn last_save_hour(&self) -> u64 {
+        let mut highest = 0;
+        let iter = vec![
+            &self.client_bandwidth,
+            &self.relay_bandwidth,
+            &self.exit_bandwidth,
+        ];
+        for data in iter {
+            for i in data.keys() {
+                highest = highest.max(*i);
+            }
+        }
+        highest
+    }
+}
+
+impl From<UsageTrackerFlat> for UsageTrackerTransfer {
+    fn from(value: UsageTrackerFlat) -> Self {
+        UsageTrackerTransfer {
+            client_bandwidth: convert_flat_to_map_usage_data(value.client_bandwidth),
+            relay_bandwidth: convert_flat_to_map_usage_data(value.relay_bandwidth),
+            exit_bandwidth: HashMap::new(),
+        }
+    }
+}
+
 /// Used to convert between usage tracker storage formats
 pub fn convert_flat_to_map_usage_data(input: VecDeque<IndexedUsageHour>) -> HashMap<u64, Usage> {
     let mut out = HashMap::new();
@@ -143,5 +172,7 @@ pub fn convert_map_to_flat_usage_data(input: HashMap<u64, Usage>) -> VecDeque<In
             price: usage.price,
         })
     }
+    // we want this sorted from greatest to least so we do the cmp in reverse order
+    out.make_contiguous().sort_by(|a, b| b.index.cmp(&a.index));
     out
 }
