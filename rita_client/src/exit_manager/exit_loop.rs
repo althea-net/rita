@@ -78,16 +78,22 @@ pub fn start_exit_manager_loop() {
                                     }
                                 };
 
-                                // Run this ping test every PING_TEST_SPEED seconds
-                                if Instant::now() - em_state.last_connection_time > PING_TEST_SPEED {
-                                    if run_ping_test() {
-                                        em_state.last_connection_time = Instant::now();
-                                    } else {
-                                         // If this router has been in a bad state for >10 mins, reboot
-                                         if (Instant::now() - em_state.last_connection_time) > REBOOT_TIMEOUT {
-                                            let _res = KI.run_command("reboot", &[]);
+                                // Run ping test only when we are registered to prevent constant reboots
+                                if let ExitState::Registered { .. } = exit.info {
+                                    // Run this ping test every PING_TEST_SPEED seconds
+                                    if Instant::now() - em_state.last_connection_time > PING_TEST_SPEED {
+                                        if run_ping_test() {
+                                            em_state.last_connection_time = Instant::now();
+                                        } else {
+                                             // If this router has been in a bad state for >10 mins, reboot
+                                             if (Instant::now() - em_state.last_connection_time) > REBOOT_TIMEOUT {
+                                                let _res = KI.run_command("reboot", &[]);
+                                            }
                                         }
                                     }
+                                } else {
+                                    // reset our reboot timer every tick if not registered
+                                    em_state.last_connection_time = Instant::now();
                                 }
 
                                 // Get cluster exit list. This is saved locally and updated every tick depending on what exit we connect to.
