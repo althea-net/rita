@@ -17,6 +17,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::process::Command;
 use std::process::Stdio;
+use std::str::from_utf8;
 use std::time::Duration;
 use std::u64;
 
@@ -401,19 +402,46 @@ fn get_conntrack_info() -> Option<ConntrackInfo> {
     Some(ret)
 }
 
+/// Device names are in the form wlan0, wlan1 etc
 fn parse_wifi_device_names() -> Result<Vec<String>, Error> {
-    let mut ret = Vec::new();
-    let path = "/proc/net/wireless";
-    let lines = get_lines(path)?;
-    for line in lines {
-        if line.contains(':') {
-            let name: Vec<&str> = line.split(':').collect();
-            let name = name[0];
-            let name = name.replace(' ', "");
-            ret.push(name.to_string());
+    // We parse /etc/config/wireless which is an openwrt config. We return an error if not openwrt
+    if KI.is_openwrt() {
+        let mut ret = Vec::new();
+
+        let lines = KI.run_command("uci", &["show", "wireless"])?;
+        let lines: Vec<&str> = from_utf8(&lines.stdout)?.lines().collect();
+
+        // trying to get lines 'wireless.default_radio1.ifname='wlan1''
+        for line in lines {
+            if line.contains("wireless.default_radio") && line.contains("ifname") {
+                let name = match line.split('=').collect::<Vec<&str>>().last() {
+                    Some(a) => *a,
+                    None => {
+                        error!("Cannot parse wifi string {}", line);
+                        continue;
+                    }
+                };
+                let name = name.replace('\'', "");
+                ret.push(name)
+            }
         }
+        Ok(ret)
+    } else {
+        // Fallback to /proc/ parsing if no openwrt
+        let mut ret = Vec::new();
+        let path = "/proc/net/wireless";
+        let lines = get_lines(path)?;
+        for line in lines {
+            if line.contains(':') {
+                let name: Vec<&str> = line.split(':').collect();
+                let name = name[0];
+                let name = name.replace(' ', "");
+                ret.push(name.to_string());
+            }
+        }
+
+        Ok(ret)
     }
-    Ok(ret)
 }
 
 fn get_wifi_survey_info(dev: &str) -> Vec<WifiSurveyData> {
