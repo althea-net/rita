@@ -14,15 +14,21 @@ name = "rita"
 path = "src/client.rs"
 
 [[bin]]
+name = "rita_db_migration"
+path = "src/database_migration.rs"
+
+[[bin]]
 name = "rita_extender"
 path = "src/extender.rs"
 
 [dependencies]
 althea_kernel_interface = { path = "../althea_kernel_interface" }
-althea_types = { path = "../althea_types"}
+althea_types = { path = "../althea_types" }
 clu = { path = "../clu" }
-actix-async = {package="actix", version = "0.13"}
-actix-web-async = {package="actix-web", version = "4.3", default_features = false, features= ["openssl"] }
+actix-async = { package = "actix", version = "0.13" }
+actix-web-async = { package = "actix-web", version = "4.3", default_features = false, features = [
+    "openssl",
+] }
 docopt = "1.1"
 compressed_log = "0.5"
 settings = { path = "../settings" }
@@ -30,27 +36,31 @@ diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 log = { version = "0.4", features = ["release_max_level_info"] }
 serde = "1.0"
 serde_json = "1.0"
-arrayvec = {version= "0.7", features = ["serde"]}
+arrayvec = { version = "0.7", features = ["serde"] }
 hex-literal = "0.3"
 openssl-probe = "0.1"
 env_logger = "0.10"
 lazy_static = "1.4"
 phonenumber = "0.3"
 r2d2 = "0.8"
-ctrlc = {version = "3.2.1", features = ["termination"]}
+ctrlc = { version = "3.2.1", features = ["termination"] }
 rita_common = { path = "../rita_common", default-features = false }
-rita_client = { path = "../rita_client",  default-features = false }
+rita_client = { path = "../rita_client", default-features = false }
+rita_client_registration = { path = "../rita_client_registration", default-features = false }
+rita_db_migration = { path = "../rita_db_migration", default-features = false }
 rita_exit = { path = "../rita_exit", default-features = false }
-rita_extender = { path = "../rita_extender", default-features =  false}
-flate2 = { version = "1.0", features = ["rust_backend"], default-features = false }
+rita_extender = { path = "../rita_extender", default-features = false }
+flate2 = { version = "1.0", features = [
+    "rust_backend",
+], default-features = false }
 reqwest = { version = "0.11", features = ["blocking", "json"] }
-jemallocator = {version = "0.5", optional = true}
+jemallocator = { version = "0.5", optional = true }
 # we don't call or us OpenSSL directly in this codebase, but by adding
 # this dependency with this feature we can enforce that openssl is compiled
 # in 'vendored' mode all the way down the tree. What this means is that we use
 # an openssl implementation from the crate and not from the system, simplifying
 # our build process for a lot of cross-compile situations
-openssl = {version = "0.10", features = ["vendored"]}
+openssl = { version = "0.10", features = ["vendored"] }
 ipnetwork = "0.20"
 actix-rt = "2"
 
@@ -63,7 +73,15 @@ dash_debug = []
 # changes operator urls
 operator_debug = []
 dev_env = []
-legacy_integration_test = ["development", "althea_kernel_interface/integration_test", "rita_common/legacy_integration_test"]
-development = ["rita_common/dash_debug","rita_client/operator_debug", "rita_exit/operator_debug"]
+legacy_integration_test = [
+    "development",
+    "althea_kernel_interface/integration_test",
+    "rita_common/legacy_integration_test",
+]
+development = [
+    "rita_common/dash_debug",
+    "rita_client/operator_debug",
+    "rita_exit/operator_debug",
+]
 # Op tools dev environement
 optools_dev_env = ["rita_client/dev_env", "rita_exit/dev_env"]
