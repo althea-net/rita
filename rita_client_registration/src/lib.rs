@@ -70,7 +70,7 @@ fn get_texts_sent(key: WgKey) -> u8 {
     *TEXTS_SENT.read().unwrap().get(&key).unwrap_or(&0u8)
 }
 
-fn add_client_to_reg_batch(id: Identity) {
+pub fn add_client_to_reg_batch(id: Identity) {
     TX_BATCH.write().unwrap().insert(id);
 }
 

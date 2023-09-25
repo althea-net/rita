@@ -16,6 +16,7 @@ members = [
     "rita_exit",
     "rita_client",
     "rita_client_registration",
+    "rita_db_migration",
     "rita_bin",
     "test_runner",
     "integration_tests",

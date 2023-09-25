@@ -1048,6 +1048,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
+
+[[package]]
 name = "ed25519"
 version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2608,7 +2614,9 @@ dependencies = [
  "r2d2",
  "reqwest",
  "rita_client",
+ "rita_client_registration",
  "rita_common",
+ "rita_db_migration",
  "rita_exit",
  "rita_extender",
  "serde",
@@ -2707,6 +2715,21 @@ dependencies = [
  "serde_json",
  "settings",
  "web30",
+]
+
+[[package]]
+name = "rita_db_migration"
+version = "0.1.0"
+dependencies = [
+ "althea_types",
+ "diesel",
+ "dotenv",
+ "log",
+ "r2d2",
+ "rita_client_registration",
+ "serde",
+ "serde_derive",
+ "serde_json",
 ]
 
 [[package]]
