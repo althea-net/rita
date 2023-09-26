@@ -136,3 +136,12 @@ jobs:
         run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
       - name: Run integration test
         run: bash scripts/integration_tests/all-up-test.sh CONTRACT_TEST
+  integration-test-db-migration:
+    needs: integration-test-five-nodes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Wireguard
+        run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
+      - name: Run integration test
+        run: bash scripts/integration_tests/all-up-test.sh MIGRATION_TEST

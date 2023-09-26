@@ -2,6 +2,7 @@ use integration_tests::config::{
     generate_exit_config_file, generate_rita_config_file, CONFIG_FILE_PATH, EXIT_CONFIG_PATH,
 };
 use integration_tests::contract_test::run_altheadb_contract_test;
+use integration_tests::db_migration_test::run_db_migration_test;
 use integration_tests::debts::run_debts_test;
 /// Binary crate for actually running the integration tests
 use integration_tests::five_nodes::run_five_node_test_scenario;
@@ -55,6 +56,8 @@ async fn main() {
             run_multi_exit_test().await
         } else if test_type == "CONTRACT_TEST" {
             run_altheadb_contract_test().await
+        } else if test_type == "MIGRATION_TEST" {
+            run_db_migration_test().await
         } else {
             panic!("Error unknown test type {}!", test_type);
         }
