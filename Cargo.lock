@@ -1621,6 +1621,7 @@ dependencies = [
  "rita_client",
  "rita_client_registration",
  "rita_common",
+ "rita_db_migration",
  "rita_exit",
  "settings",
  "web30",

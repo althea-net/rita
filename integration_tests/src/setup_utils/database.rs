@@ -19,7 +19,7 @@ pub fn start_postgres() {
     const DB_URL_LOCAL: &str = "postgres://postgres@127.0.0.1/test";
     // for the rita exit instances
     const POSTGRES_DATABASE_LOCATION: &str = "/var/lib/postgresql/data";
-    let migration_directory = Path::new("/althea_rs/exit_db/migrations/");
+    let migration_directory = Path::new("/althea_rs/integration_tests/src/setup_utils/migrations/");
     let postgres_pid_path: String = format!("{}/postmaster.pid", POSTGRES_DATABASE_LOCATION);
 
     // only init and launch if postgres has not already been started
