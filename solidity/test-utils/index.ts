@@ -17,7 +17,7 @@ export async function deployContracts(signer?: Signer | undefined) {
   const testERC20C = (await TestERC20C.deploy()) as TestERC20C;
 
   const AltheaDB = await ethers.getContractFactory("AltheaDB", signer);
-  const althea_db = (await AltheaDB.deploy()) as AltheaDB;
+  const althea_db = (await AltheaDB.deploy(signer?.getAddress())) as AltheaDB;
 
   return { testERC20A, testERC20B, testERC20C, althea_db };
 }
