@@ -81,7 +81,7 @@ contract AltheaDB {
     }
 
     function is_exit_admin(address potential_admin) public view returns (bool) {
-        for (uint256 i = 0; i < state_UserAdmins.length; i++) {
+        for (uint256 i = 0; i < state_ExitAdmins.length; i++) {
             if (potential_admin == state_ExitAdmins[i]) {
                 return true;
             }
