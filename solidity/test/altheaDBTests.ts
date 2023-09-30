@@ -43,7 +43,8 @@ async function addUser(opts: {
     mesh_ip: "0xfd001338",
     wg_key: "0xAFEDB",
     eth_addr: "0x154CB202089D58efB56a2B11ce812Ae3882fE1f3",
-    allowed_regions: []
+    allowed_regions: [],
+    payment_types: []
   };
   let nullUser = {
     mesh_ip: "0x0",
@@ -112,25 +113,29 @@ async function addExit(opts: {
     mesh_ip: "0xfd001337",
     wg_key: "0xAFEDB",
     eth_addr: "0x054CA202089D58efB56a2B11ce812Ae3882fE1f3",
-    allowed_regions: [1, 3]
+    allowed_regions: [1, 3],
+    payment_types: [5, 6],
   };
   let user1ButDifferentRegions = {
     mesh_ip: "0xfd001337",
     wg_key: "0xAFEDB",
     eth_addr: "0x054CA202089D58efB56a2B11ce812Ae3882fE1f3",
-    allowed_regions: [16, 25]
+    allowed_regions: [16, 25],
+    payment_types: [8, 9],
   };
   let user2 = {
     mesh_ip: "0xfd001329",
     wg_key: "0xAFEDD",
     eth_addr: "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD",
-    allowed_regions: []
+    allowed_regions: [],
+    payment_types: []
   };
   let partialDup = {
     mesh_ip: "0xfd001338",
     wg_key: "0xAFEDB",
     eth_addr: "0x154CB202089D58efB56a2B11ce812Ae3882fE1f3",
-    allowed_regions: []
+    allowed_regions: [],
+    payment_types: []
   };
   let crossDup = {
     mesh_ip: "0xfd001338",
@@ -141,7 +146,8 @@ async function addExit(opts: {
     mesh_ip: "0x0",
     wg_key: "0x0",
     eth_addr: "0x0000000000000000000000000000000000000000",
-    allowed_regions: []
+    allowed_regions: [],
+    payment_types: []
   };
   const { althea_db } = await deployContracts(sender);
   if (opts.with_admin) {
