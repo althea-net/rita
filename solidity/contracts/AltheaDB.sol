@@ -11,11 +11,14 @@ struct Identity {
 /// Identity struct for an exit, including a list of allowed region codes
 /// This is to protect a user from connecting to an exit that does not allow
 /// their region despite providing the best connection metrics otherwise
+/// The payment types specification prevents clients from moving to exits
+/// that do not accept their tokens as payment
 struct ExitIdentity {
     uint128 mesh_ip;
     uint256 wg_key;
     address eth_addr;
     uint256[] allowed_regions;
+    uint256[] payment_types;
 }
 
 /// Thrown when the caller is not authorized to register users
@@ -69,7 +72,7 @@ contract AltheaDB {
 
     function get_null_exit_identity() public pure returns (ExitIdentity memory) {
         uint256[] memory empty_array;
-        return ExitIdentity({mesh_ip: 0, wg_key: 0, eth_addr: address(0), allowed_regions: empty_array});
+        return ExitIdentity({mesh_ip: 0, wg_key: 0, eth_addr: address(0), allowed_regions: empty_array, payment_types: empty_array});
     }
 
     function is_null_identity(
