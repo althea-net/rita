@@ -8,6 +8,16 @@ struct Identity {
     address eth_addr;
 }
 
+/// Identity struct for an exit, including a list of allowed region codes
+/// This is to protect a user from connecting to an exit that does not allow
+/// their region despite providing the best connection metrics otherwise
+struct ExitIdentity {
+    uint128 mesh_ip;
+    uint256 wg_key;
+    address eth_addr;
+    uint256[] allowed_regions;
+}
+
 /// Thrown when the caller is not authorized to register users
 error UnathorizedCaller();
 error DuplicateUser();
@@ -28,12 +38,12 @@ contract AltheaDB {
     // Mappings to regsitered clients
     Identity[] public state_registeredUsers;
     // Mappings to regsitered exits
-    Identity[] public state_registeredExits;
+    ExitIdentity[] public state_registeredExits;
 
     event UserRegisteredEvent(Identity indexed _user);
     event UserRemovedEvent(Identity indexed _user);
-    event ExitRegisteredEvent(Identity indexed _user);
-    event ExitRemovedEvent(Identity indexed _user);
+    event ExitRegisteredEvent(ExitIdentity indexed _user);
+    event ExitRemovedEvent(ExitIdentity indexed _user);
     event UserAdminAddedEvent(address indexed _admin);
     event UserAdminRemovedEvent(address indexed _admin);
     event ExitAdminAddedEvent(address indexed _admin);
@@ -45,8 +55,21 @@ contract AltheaDB {
 
     // start utility function 
 
+    // Used to convert an exit identity struct to an identity struct essentially just dropping the
+    // region codes component. This is mostly used for comparison and duplicate checking as we want
+    // to ignore the region codes when adding and removing an exit to avoid having identical exits
+    // with different region codes.
+    function exit_id_to_id(ExitIdentity memory input) public pure returns (Identity memory) {
+        return Identity({mesh_ip: input.mesh_ip, wg_key: input.wg_key, eth_addr: input.eth_addr});
+    }
+
     function get_null_identity() public pure returns (Identity memory) {
         return Identity({mesh_ip: 0, wg_key: 0, eth_addr: address(0)});
+    }
+
+    function get_null_exit_identity() public pure returns (ExitIdentity memory) {
+        uint256[] memory empty_array;
+        return ExitIdentity({mesh_ip: 0, wg_key: 0, eth_addr: address(0), allowed_regions: empty_array});
     }
 
     function is_null_identity(
@@ -103,6 +126,19 @@ contract AltheaDB {
     }
 
     /// Deletes an entry of the provided array
+    function delete_array_entry(uint index, ExitIdentity[] storage array) private {
+        require(index < array.length);
+        // copy the last element into the index that we want to delete
+        // in the case that we want to delete the last element, just skip this
+        if (index != array.length -1) {
+            array[index] = array[array.length - 1];
+        }
+        // drop the new duplicated end element effectively deleting the originally
+        // specified index
+        array.pop();
+    }
+
+    /// Deletes an entry of the provided array
     function delete_array_entry(uint index, address[] storage array) private {
         require(index < array.length);
         // copy the last element into the index that we want to delete
@@ -124,6 +160,15 @@ contract AltheaDB {
         revert IdentityNotFound();
     }
 
+    function get_index_of_id(ExitIdentity memory id, ExitIdentity[] memory array) private pure returns (uint256) {
+        for (uint256 i = 0; i < array.length; i++) {
+            if (identities_are_equal(exit_id_to_id(array[i]), exit_id_to_id(id))) {
+                return i;
+            }
+        }
+        revert IdentityNotFound();
+    }
+
     function get_index_of_admin(address admin, address[] memory array) private pure returns (uint256) {
         for (uint256 i = 0; i < array.length; i++) {
             if (admin == array[i]) {
@@ -136,11 +181,11 @@ contract AltheaDB {
     /// Checks both the exit and the client lists for any entry with any
     /// sort of duplicate ID component
     function check_for_any_duplicates(
-        Identity calldata entry
+        Identity memory entry
     ) public view returns (bool) {
         if (
             !identities_are_equal(
-                get_registered_exit_with_eth_addr(entry.eth_addr),
+                exit_id_to_id(get_registered_exit_with_eth_addr(entry.eth_addr)),
                 get_null_identity()
             )
         ) {
@@ -148,7 +193,7 @@ contract AltheaDB {
         }
         if (
             !identities_are_equal(
-                get_registered_exit_with_mesh_ip(entry.mesh_ip),
+                exit_id_to_id(get_registered_exit_with_mesh_ip(entry.mesh_ip)),
                 get_null_identity()
             )
         ) {
@@ -156,7 +201,7 @@ contract AltheaDB {
         }
         if (
             !identities_are_equal(
-                get_registered_exit_with_wg_key(entry.wg_key),
+                exit_id_to_id(get_registered_exit_with_wg_key(entry.wg_key)),
                 get_null_identity()
             )
         ) {
@@ -220,11 +265,11 @@ contract AltheaDB {
     }
 
     // Add a new registered exit
-    function add_registered_exit(Identity calldata entry) public {
+    function add_registered_exit(ExitIdentity calldata entry) public {
         if (is_exit_admin(msg.sender)) {
             // if any client or exit currently registered has overlapping data, do not allow the
             // registration to continue
-            if (check_for_any_duplicates(entry)) {
+            if (check_for_any_duplicates(exit_id_to_id(entry))) {
                 revert DuplicateUser();
             }
 
@@ -236,7 +281,7 @@ contract AltheaDB {
     }
 
     // Remove a new registered exit
-    function remove_registered_exit(Identity calldata entry) public {
+    function remove_registered_exit(ExitIdentity calldata entry) public {
         if (is_exit_admin(msg.sender)) {
             uint256 index = get_index_of_id(entry, state_registeredExits);
             delete_array_entry(index, state_registeredExits);
@@ -284,35 +329,35 @@ contract AltheaDB {
 
     function get_registered_exit_with_wg_key(
         uint256 wg_key
-    ) public view returns (Identity memory) {
+    ) public view returns (ExitIdentity memory) {
         for (uint256 i = 0; i < state_registeredExits.length; i++) {
             if (state_registeredExits[i].wg_key == wg_key) {
                 return state_registeredExits[i];
             }
         }
-        return get_null_identity();
+        return get_null_exit_identity();
     }
 
     function get_registered_exit_with_mesh_ip(
         uint128 mesh_ip
-    ) public view returns (Identity memory) {
+    ) public view returns (ExitIdentity memory) {
         for (uint256 i = 0; i < state_registeredExits.length; i++) {
             if (state_registeredExits[i].mesh_ip == mesh_ip) {
                 return state_registeredExits[i];
             }
         }
-        return get_null_identity();
+        return get_null_exit_identity();
     }
 
     function get_registered_exit_with_eth_addr(
         address eth_addr
-    ) public view returns (Identity memory) {
+    ) public view returns (ExitIdentity memory) {
         for (uint256 i = 0; i < state_registeredExits.length; i++) {
             if (state_registeredExits[i].eth_addr == eth_addr) {
                 return state_registeredExits[i];
             }
         }
-        return get_null_identity();
+        return get_null_exit_identity();
     }
 
     // start admin management functions
