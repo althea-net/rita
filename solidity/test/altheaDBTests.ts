@@ -18,6 +18,9 @@ async function addUser(opts: {
   with_admin: boolean,
   try_duplicate: boolean,
   try_partial_dup: boolean,
+  remove_admin: boolean,
+  cross_dup: boolean,
+  dup_admin: boolean,
 }) {
   const signers = await ethers.getSigners();
   const sender = signers[0];
@@ -36,6 +39,12 @@ async function addUser(opts: {
     wg_key: "0xAFEDB",
     eth_addr: "0x154CB202089D58efB56a2B11ce812Ae3882fE1f3",
   };
+  let crossDup = {
+    mesh_ip: "0xfd001338",
+    wg_key: "0xAFEDB",
+    eth_addr: "0x154CB202089D58efB56a2B11ce812Ae3882fE1f3",
+    allowed_regions: []
+  };
   let nullUser = {
     mesh_ip: "0x0",
     wg_key: "0x0",
@@ -44,7 +53,16 @@ async function addUser(opts: {
   const { althea_db } = await deployContracts(sender);
   if (opts.with_admin) {
     await althea_db.add_user_admin(await sender?.getAddress());
+
+    if (opts.dup_admin) {
+      await althea_db.add_user_admin(await sender?.getAddress());
+    }
   }
+  // add a bunch of admins to make sure we delete the right one
+  await althea_db.add_user_admin(await signers[1].getAddress());
+  await althea_db.add_user_admin(await signers[2].getAddress());
+  await althea_db.add_user_admin(await signers[3].getAddress());
+
   await althea_db.add_registered_user(user1)
   expectId(await althea_db.get_registered_client_with_eth_addr(user1.eth_addr), user1)
   expectId(await althea_db.get_registered_client_with_wg_key(user1.wg_key), user1)
@@ -60,6 +78,16 @@ async function addUser(opts: {
   if (opts.try_partial_dup) {
     await althea_db.add_registered_user(partialDup)
   }
+  if (opts.remove_admin) {
+    await althea_db.remove_user_admin(await sender?.getAddress());
+
+    // make sure the other admins are still there
+    assert(await althea_db.is_user_admin(await signers[1].getAddress()));
+  }
+  if (opts.cross_dup) {
+    await althea_db.add_exit_admin(await sender?.getAddress());
+    await althea_db.add_registered_exit(crossDup)
+  }
 
   await althea_db.remove_registered_user(user1)
   expectId(await althea_db.get_registered_client_with_eth_addr(user1.eth_addr), nullUser)
@@ -74,6 +102,9 @@ async function addExit(opts: {
   with_admin: boolean,
   try_duplicate: boolean,
   try_partial_dup: boolean,
+  remove_admin: boolean,
+  cross_dup: boolean,
+  dup_admin: boolean
 }) {
   const signers = await ethers.getSigners();
   const sender = signers[0];
@@ -101,6 +132,11 @@ async function addExit(opts: {
     eth_addr: "0x154CB202089D58efB56a2B11ce812Ae3882fE1f3",
     allowed_regions: []
   };
+  let crossDup = {
+    mesh_ip: "0xfd001338",
+    wg_key: "0xAFEDB",
+    eth_addr: "0x154CB202089D58efB56a2B11ce812Ae3882fE1f3",
+  };
   let nullUser = {
     mesh_ip: "0x0",
     wg_key: "0x0",
@@ -110,7 +146,15 @@ async function addExit(opts: {
   const { althea_db } = await deployContracts(sender);
   if (opts.with_admin) {
     await althea_db.add_exit_admin(await sender?.getAddress());
+
+    if (opts.dup_admin) {
+      await althea_db.add_exit_admin(await sender?.getAddress());
+    }
   }
+  await althea_db.add_exit_admin(await signers[1].getAddress());
+  await althea_db.add_exit_admin(await signers[2].getAddress());
+  await althea_db.add_exit_admin(await signers[3].getAddress());
+
   await althea_db.add_registered_exit(user1)
   expectId(await althea_db.get_registered_exit_with_eth_addr(user1.eth_addr), user1)
   expectId(await althea_db.get_registered_exit_with_wg_key(user1.wg_key), user1)
@@ -126,6 +170,16 @@ async function addExit(opts: {
   if (opts.try_partial_dup) {
     await althea_db.add_registered_exit(partialDup)
   }
+  if (opts.remove_admin) {
+    await althea_db.remove_exit_admin(await sender?.getAddress());
+
+    // make sure the other admins are still there
+    assert(await althea_db.is_exit_admin(await signers[1].getAddress()));
+  }
+  if (opts.cross_dup) {
+    await althea_db.add_user_admin(await sender?.getAddress());
+    await althea_db.add_registered_user(crossDup)
+  }
 
   await althea_db.remove_registered_exit(user1ButDifferentRegions)
   expectId(await althea_db.get_registered_exit_with_eth_addr(user1.eth_addr), nullUser)
@@ -139,44 +193,80 @@ async function addExit(opts: {
 
 
 describe("Althea exit DB tests", function () {
-  it("throws on unauthorized caller", async function () {
-    await expect(addUser({ with_admin: false, try_duplicate: false, try_partial_dup: false })
+  it("throws on Client unauthorized caller", async function () {
+    await expect(addUser({ with_admin: false, try_duplicate: false, try_partial_dup: false, remove_admin: false, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
       "UnathorizedCaller()"
     );
   });
+  it("throws on Client admin removed", async function () {
+    await expect(addUser({ with_admin: true, try_duplicate: false, try_partial_dup: false, remove_admin: true, cross_dup: false, dup_admin: false })
+    ).to.be.revertedWith(
+      "UnathorizedCaller()"
+    );
+  });
+  it("throws on Dup Client admin", async function () {
+    await expect(addUser({ with_admin: true, try_duplicate: false, try_partial_dup: false, remove_admin: true, cross_dup: false, dup_admin: true })
+    ).to.be.revertedWith(
+      "DuplicateAdmin()"
+    );
+  });
   it("User registration happy path", async function () {
-    addUser({ with_admin: true, try_duplicate: false, try_partial_dup: false })
+    addUser({ with_admin: true, try_duplicate: false, try_partial_dup: false, remove_admin: false, cross_dup: false, dup_admin: false })
   });
   it("throws on User duplicate", async function () {
-    await expect(addUser({ with_admin: true, try_duplicate: true, try_partial_dup: false })
+    await expect(addUser({ with_admin: true, try_duplicate: true, try_partial_dup: false, remove_admin: false, cross_dup: false, dup_admin: false })
+    ).to.be.revertedWith(
+      "DuplicateUser()"
+    );
+  });
+  it("throws on User cross duplicate", async function () {
+    await expect(addUser({ with_admin: true, try_duplicate: true, try_partial_dup: false, remove_admin: false, cross_dup: true, dup_admin: false })
     ).to.be.revertedWith(
       "DuplicateUser()"
     );
   });
   it("throws on User partial duplicate", async function () {
-    await expect(addUser({ with_admin: true, try_duplicate: true, try_partial_dup: true })
+    await expect(addUser({ with_admin: true, try_duplicate: true, try_partial_dup: true, remove_admin: false, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
       "DuplicateUser()"
     );
   });
-  it("throws on unauthorized caller", async function () {
-    await expect(addExit({ with_admin: false, try_duplicate: false, try_partial_dup: false })
+  it("throws on Exit unauthorized caller", async function () {
+    await expect(addExit({ with_admin: false, try_duplicate: false, try_partial_dup: false, remove_admin: false, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
       "UnathorizedCaller()"
     );
   });
+  it("throws on Exit admin removed", async function () {
+    await expect(addExit({ with_admin: true, try_duplicate: false, try_partial_dup: false, remove_admin: true, cross_dup: false, dup_admin: false })
+    ).to.be.revertedWith(
+      "UnathorizedCaller()"
+    );
+  });
+  it("throws on Dup Exit admin", async function () {
+    await expect(addExit({ with_admin: true, try_duplicate: false, try_partial_dup: false, remove_admin: true, cross_dup: false, dup_admin: true })
+    ).to.be.revertedWith(
+      "DuplicateAdmin()"
+    );
+  });
   it("Exit registration happy path", async function () {
-    addExit({ with_admin: true, try_duplicate: false, try_partial_dup: false })
+    addExit({ with_admin: true, try_duplicate: false, try_partial_dup: false, remove_admin: false, cross_dup: false, dup_admin: false })
   });
   it("throws on Exit duplicate", async function () {
-    await expect(addExit({ with_admin: true, try_duplicate: true, try_partial_dup: false })
+    await expect(addExit({ with_admin: true, try_duplicate: true, try_partial_dup: false, remove_admin: false, cross_dup: false, dup_admin: false })
+    ).to.be.revertedWith(
+      "DuplicateUser()"
+    );
+  });
+  it("throws on Exit cross duplicate", async function () {
+    await expect(addExit({ with_admin: true, try_duplicate: true, try_partial_dup: false, remove_admin: false, cross_dup: true, dup_admin: false })
     ).to.be.revertedWith(
       "DuplicateUser()"
     );
   });
   it("throws on Exit partial duplicate", async function () {
-    await expect(addExit({ with_admin: true, try_duplicate: true, try_partial_dup: true })
+    await expect(addExit({ with_admin: true, try_duplicate: true, try_partial_dup: true, remove_admin: false, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
       "DuplicateUser()"
     );
