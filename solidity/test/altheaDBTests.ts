@@ -81,21 +81,31 @@ async function addExit(opts: {
     mesh_ip: "0xfd001337",
     wg_key: "0xAFEDB",
     eth_addr: "0x054CA202089D58efB56a2B11ce812Ae3882fE1f3",
+    allowed_regions: [1, 3]
+  };
+  let user1ButDifferentRegions = {
+    mesh_ip: "0xfd001337",
+    wg_key: "0xAFEDB",
+    eth_addr: "0x054CA202089D58efB56a2B11ce812Ae3882fE1f3",
+    allowed_regions: [16, 25]
   };
   let user2 = {
     mesh_ip: "0xfd001329",
     wg_key: "0xAFEDD",
     eth_addr: "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD",
+    allowed_regions: []
   };
   let partialDup = {
     mesh_ip: "0xfd001338",
     wg_key: "0xAFEDB",
     eth_addr: "0x154CB202089D58efB56a2B11ce812Ae3882fE1f3",
+    allowed_regions: []
   };
   let nullUser = {
     mesh_ip: "0x0",
     wg_key: "0x0",
     eth_addr: "0x0000000000000000000000000000000000000000",
+    allowed_regions: []
   };
   const { althea_db } = await deployContracts(sender);
   if (opts.with_admin) {
@@ -117,7 +127,7 @@ async function addExit(opts: {
     await althea_db.add_registered_exit(partialDup)
   }
 
-  await althea_db.remove_registered_exit(user1)
+  await althea_db.remove_registered_exit(user1ButDifferentRegions)
   expectId(await althea_db.get_registered_exit_with_eth_addr(user1.eth_addr), nullUser)
   expectId(await althea_db.get_registered_exit_with_wg_key(user1.wg_key), nullUser)
   expectId(await althea_db.get_registered_exit_with_mesh_ip(user1.mesh_ip), nullUser)
