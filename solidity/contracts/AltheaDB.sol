@@ -56,23 +56,41 @@ contract AltheaDB {
         state_admin = _admin;
     }
 
-    // start utility function 
+    // start utility function
 
     // Used to convert an exit identity struct to an identity struct essentially just dropping the
     // region codes component. This is mostly used for comparison and duplicate checking as we want
     // to ignore the region codes when adding and removing an exit to avoid having identical exits
     // with different region codes.
-    function exit_id_to_id(ExitIdentity memory input) public pure returns (Identity memory) {
-        return Identity({mesh_ip: input.mesh_ip, wg_key: input.wg_key, eth_addr: input.eth_addr});
+    function exit_id_to_id(
+        ExitIdentity memory input
+    ) public pure returns (Identity memory) {
+        return
+            Identity({
+                mesh_ip: input.mesh_ip,
+                wg_key: input.wg_key,
+                eth_addr: input.eth_addr
+            });
     }
 
     function get_null_identity() public pure returns (Identity memory) {
         return Identity({mesh_ip: 0, wg_key: 0, eth_addr: address(0)});
     }
 
-    function get_null_exit_identity() public pure returns (ExitIdentity memory) {
+    function get_null_exit_identity()
+        public
+        pure
+        returns (ExitIdentity memory)
+    {
         uint256[] memory empty_array;
-        return ExitIdentity({mesh_ip: 0, wg_key: 0, eth_addr: address(0), allowed_regions: empty_array, payment_types: empty_array});
+        return
+            ExitIdentity({
+                mesh_ip: 0,
+                wg_key: 0,
+                eth_addr: address(0),
+                allowed_regions: empty_array,
+                payment_types: empty_array
+            });
     }
 
     function is_null_identity(
@@ -120,7 +138,7 @@ contract AltheaDB {
         require(index < array.length);
         // copy the last element into the index that we want to delete
         // in the case that we want to delete the last element, just skip this
-        if (index != array.length -1) {
+        if (index != array.length - 1) {
             array[index] = array[array.length - 1];
         }
         // drop the new duplicated end element effectively deleting the originally
@@ -129,11 +147,14 @@ contract AltheaDB {
     }
 
     /// Deletes an entry of the provided array
-    function delete_array_entry(uint index, ExitIdentity[] storage array) private {
+    function delete_array_entry(
+        uint index,
+        ExitIdentity[] storage array
+    ) private {
         require(index < array.length);
         // copy the last element into the index that we want to delete
         // in the case that we want to delete the last element, just skip this
-        if (index != array.length -1) {
+        if (index != array.length - 1) {
             array[index] = array[array.length - 1];
         }
         // drop the new duplicated end element effectively deleting the originally
@@ -146,7 +167,7 @@ contract AltheaDB {
         require(index < array.length);
         // copy the last element into the index that we want to delete
         // in the case that we want to delete the last element, just skip this
-        if (index != array.length -1) {
+        if (index != array.length - 1) {
             array[index] = array[array.length - 1];
         }
         // drop the new duplicated end element effectively deleting the originally
@@ -154,7 +175,10 @@ contract AltheaDB {
         array.pop();
     }
 
-    function get_index_of_id(Identity memory id, Identity[] memory array) private pure returns (uint256) {
+    function get_index_of_id(
+        Identity memory id,
+        Identity[] memory array
+    ) private pure returns (uint256) {
         for (uint256 i = 0; i < array.length; i++) {
             if (identities_are_equal(array[i], id)) {
                 return i;
@@ -163,16 +187,24 @@ contract AltheaDB {
         revert IdentityNotFound();
     }
 
-    function get_index_of_id(ExitIdentity memory id, ExitIdentity[] memory array) private pure returns (uint256) {
+    function get_index_of_id(
+        ExitIdentity memory id,
+        ExitIdentity[] memory array
+    ) private pure returns (uint256) {
         for (uint256 i = 0; i < array.length; i++) {
-            if (identities_are_equal(exit_id_to_id(array[i]), exit_id_to_id(id))) {
+            if (
+                identities_are_equal(exit_id_to_id(array[i]), exit_id_to_id(id))
+            ) {
                 return i;
             }
         }
         revert IdentityNotFound();
     }
 
-    function get_index_of_admin(address admin, address[] memory array) private pure returns (uint256) {
+    function get_index_of_admin(
+        address admin,
+        address[] memory array
+    ) private pure returns (uint256) {
         for (uint256 i = 0; i < array.length; i++) {
             if (admin == array[i]) {
                 return i;
@@ -188,7 +220,9 @@ contract AltheaDB {
     ) public view returns (bool) {
         if (
             !identities_are_equal(
-                exit_id_to_id(get_registered_exit_with_eth_addr(entry.eth_addr)),
+                exit_id_to_id(
+                    get_registered_exit_with_eth_addr(entry.eth_addr)
+                ),
                 get_null_identity()
             )
         ) {
@@ -296,6 +330,21 @@ contract AltheaDB {
 
     // start user query functions
 
+    function get_all_registered_users()
+        public
+        view
+        returns (Identity[] memory)
+    {
+        return state_registeredUsers;
+    }
+
+    function get_all_registered_exits()
+        public
+        view
+        returns (ExitIdentity[] memory)
+    {
+        return state_registeredExits;
+    }
 
     function get_registered_client_with_wg_key(
         uint256 wg_key

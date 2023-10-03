@@ -205,6 +205,13 @@ pub fn spawn_rita_exit(
     let router_identity_ref: Arc<RwLock<Option<Identity>>> = Arc::new(RwLock::new(None));
     let router_identity_ref_local = router_identity_ref.clone();
 
+    let instance = TEST_EXIT_DETAILS
+        .get("test")
+        .unwrap()
+        .instances
+        .get(&instance_name)
+        .expect("Why is there no instance?");
+
     let _rita_handler = thread::spawn(move || {
         // set the host of this thread to the ns
         let nsfd = get_nsfd(ns.clone());
@@ -226,12 +233,7 @@ pub fn spawn_rita_exit(
             0,
             id.try_into().unwrap(),
         )));
-        let instance = TEST_EXIT_DETAILS
-            .get("test")
-            .unwrap()
-            .instances
-            .get(&instance_name)
-            .expect("Why is there no instance?");
+
         resettings.exit_network.subnet = Some(IpNetwork::V6(
             Ipv6Network::new(instance.subnet, 40).unwrap(),
         ));
@@ -241,6 +243,7 @@ pub fn spawn_rita_exit(
         resettings.network.wg_private_key_path = wg_keypath;
         resettings.network.peer_interfaces = veth_interfaces;
         resettings.payment.local_fee = local_fee;
+        resettings.payment.eth_private_key = Some(instance.eth_private_key);
         resettings.exit_network.exit_price = exit_fee;
         let veth_exit_to_native = format!("vout-{}-o", ns);
         resettings.network.external_nic = Some(veth_exit_to_native);
@@ -280,6 +283,9 @@ pub fn spawn_rita_exit(
         info!("Waiting for Rita Exit instance {} to generate keys", ns_dup);
         thread::sleep(Duration::from_millis(100));
     }
-    let val = router_identity_ref_local.read().unwrap().unwrap();
+    let mut val = router_identity_ref_local.read().unwrap().unwrap();
+
+    // Return the identity with new mesh_ip_v2, instead of shared, mesh_ip
+    val.mesh_ip = instance.mesh_ip_v2;
     val
 }

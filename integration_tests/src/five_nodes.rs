@@ -2,13 +2,10 @@ use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    deploy_contracts, get_default_settings, populate_routers_eth, register_all_namespaces_to_exit,
-    test_all_internet_connectivity, test_reach_all, test_routes,
+    add_exits_contract_exit_list, deploy_contracts, get_default_settings, populate_routers_eth,
+    register_all_namespaces_to_exit, test_all_internet_connectivity, test_reach_all, test_routes,
 };
-use log::info;
 use std::collections::HashMap;
-use std::thread;
-use std::time::Duration;
 
 /// Runs a five node fixed network map test scenario, this does basic network setup and tests reachability to
 /// all destinations
@@ -22,7 +19,7 @@ pub async fn run_five_node_test_scenario() {
     let db_addr = deploy_contracts().await;
 
     info!("Starting registration server");
-    start_registration_server(db_addr);
+    start_registration_server(db_addr).await;
 
     let (client_settings, exit_settings) =
         get_default_settings("test".to_string(), namespaces.clone());
@@ -37,6 +34,9 @@ pub async fn run_five_node_test_scenario() {
             .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
+    // Add exits to the contract exit list so clients get the propers exits they can migrate to
+    add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
+
     // this sleep is for debugging so that the container can be accessed to poke around in
     //thread::sleep(SETUP_WAIT * 500);
 
@@ -49,8 +49,6 @@ pub async fn run_five_node_test_scenario() {
 
     info!("Registering routers to the exit");
     register_all_namespaces_to_exit(namespaces.clone()).await;
-
-    thread::sleep(Duration::from_secs(10));
 
     info!("Checking for wg_exit tunnel setup");
     test_all_internet_connectivity(namespaces.clone());

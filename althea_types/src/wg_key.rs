@@ -1,4 +1,5 @@
 use crate::error::AltheaTypesError;
+use num256::Uint256;
 /// This file under Apache 2.0
 use serde::de::{Deserialize, Error, Unexpected, Visitor};
 use serde::ser::{Serialize, Serializer};
@@ -41,6 +42,18 @@ impl From<WgKey> for PublicKey {
 impl From<[u8; 32]> for WgKey {
     fn from(val: [u8; 32]) -> WgKey {
         WgKey(val)
+    }
+}
+
+impl From<Uint256> for WgKey {
+    fn from(val: Uint256) -> WgKey {
+        WgKey(val.to_be_bytes())
+    }
+}
+
+impl From<WgKey> for Uint256 {
+    fn from(val: WgKey) -> Uint256 {
+        Uint256::from_be_bytes(&val.0)
     }
 }
 
@@ -147,5 +160,13 @@ mod tests {
     #[should_panic]
     fn test_wgkey_panic_from_short_string() {
         WgKey::from_str("ABCDE").unwrap();
+    }
+
+    #[test]
+    fn test_wgkey_to_from_uint256() {
+        let key = WgKey::from_str("8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=").unwrap();
+        let uint: Uint256 = key.into();
+        let converted_key: WgKey = uint.into();
+        assert_eq!(converted_key, key);
     }
 }

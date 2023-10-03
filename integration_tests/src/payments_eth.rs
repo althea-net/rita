@@ -3,6 +3,7 @@ use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::setup_ns;
 use crate::setup_utils::namespaces::Namespace;
 use crate::setup_utils::rita::thread_spawner;
+use crate::utils::add_exits_contract_exit_list;
 use crate::utils::deploy_contracts;
 use crate::utils::populate_routers_eth;
 use crate::utils::test_all_internet_connectivity;
@@ -10,7 +11,6 @@ use crate::utils::{generate_traffic, register_all_namespaces_to_exit, validate_d
 use crate::utils::{get_default_settings, test_reach_all, test_routes, TEST_PAY_THRESH};
 use clarity::Address as EthAddress;
 use clarity::{PrivateKey as EthPrivateKey, Uint256};
-use log::info;
 use rita_common::debt_keeper::GetDebtsResult;
 use settings::client::RitaClientSettings;
 use settings::exit::RitaExitSettingsStruct;
@@ -20,12 +20,12 @@ use std::time::Duration;
 /// Key with funds in the EVM that can be sent to routers
 const ETH_MINER_KEY: &str = "0xb1bab011e03a9862664706fc3bbaa1b16651528e5f0e7fbfcbfdd8be302a13e7";
 
-pub fn get_miner_key() -> EthPrivateKey {
+pub fn get_eth_miner_key() -> EthPrivateKey {
     ETH_MINER_KEY.parse().unwrap()
 }
 
 pub fn get_miner_address() -> EthAddress {
-    get_miner_key().to_address()
+    get_eth_miner_key().to_address()
 }
 
 /// The chain id of the ethereum testnet
@@ -47,7 +47,7 @@ pub async fn run_eth_payments_test_scenario() {
     let db_addr = deploy_contracts().await;
 
     info!("Starting registration server");
-    start_registration_server(db_addr);
+    start_registration_server(db_addr).await;
 
     let (mut client_settings, mut exit_settings) =
         get_default_settings("test".to_string(), namespaces.clone());
@@ -65,6 +65,9 @@ pub async fn run_eth_payments_test_scenario() {
         thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
             .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
+
+    // Add exits to the contract exit list so clients get the propers exits they can migrate to
+    add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
 
     populate_routers_eth(rita_identities).await;
 

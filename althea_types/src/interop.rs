@@ -119,6 +119,47 @@ pub struct Denom {
     pub decimal: u64,
 }
 
+/// An enum representation of the Regions supported by althea exits
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+pub enum Regions {
+    US,
+    Canada,
+    Ghana,
+    Nigeria,
+    Columbia,
+    Mexico,
+    UknownRegion,
+}
+
+/// Interal mapping of a region to an integer, used to store data in the db
+impl From<Regions> for u8 {
+    fn from(value: Regions) -> Self {
+        match value {
+            Regions::US => 1,
+            Regions::Canada => 2,
+            Regions::Ghana => 3,
+            Regions::Mexico => 4,
+            Regions::Nigeria => 5,
+            Regions::Columbia => 6,
+            Regions::UknownRegion => 0,
+        }
+    }
+}
+
+impl From<u8> for Regions {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => Regions::US,
+            2 => Regions::Canada,
+            3 => Regions::Ghana,
+            4 => Regions::Mexico,
+            5 => Regions::Nigeria,
+            6 => Regions::Columbia,
+            _ => Regions::UknownRegion,
+        }
+    }
+}
+
 #[derive(Default, Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
 pub enum SystemChain {
     Ethereum,
@@ -126,6 +167,31 @@ pub enum SystemChain {
     #[default]
     Xdai,
     Althea,
+}
+
+/// Interal mapping of a SystemChain to an integer, used to store data in the db
+impl From<SystemChain> for u8 {
+    fn from(value: SystemChain) -> Self {
+        match value {
+            SystemChain::Althea => 1,
+            SystemChain::Ethereum => 2,
+            SystemChain::Rinkeby => 3,
+            SystemChain::Xdai => 4,
+        }
+    }
+}
+
+impl From<u8> for SystemChain {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => SystemChain::Althea,
+            2 => SystemChain::Ethereum,
+            3 => SystemChain::Rinkeby,
+            4 => SystemChain::Xdai,
+            // Undefined, return Althea chain by default
+            _ => SystemChain::Althea,
+        }
+    }
 }
 
 impl Display for SystemChain {

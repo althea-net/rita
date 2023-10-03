@@ -7,13 +7,12 @@ use crate::{
         rita::thread_spawner,
     },
     utils::{
-        deploy_contracts, get_default_settings, get_node_id_from_ip, populate_routers_eth,
-        register_all_namespaces_to_exit, test_all_internet_connectivity, test_reach_all,
-        test_routes,
+        add_exits_contract_exit_list, deploy_contracts, get_default_settings, get_node_id_from_ip,
+        populate_routers_eth, register_all_namespaces_to_exit, test_all_internet_connectivity,
+        test_reach_all, test_routes,
     },
 };
 use althea_kernel_interface::KI;
-use log::info;
 
 /*
 Nodes are connected as such, 4 and 5 are exit:
@@ -42,7 +41,7 @@ pub async fn run_multi_exit_test() {
     let db_addr = deploy_contracts().await;
 
     info!("Starting registration server");
-    start_registration_server(db_addr);
+    start_registration_server(db_addr).await;
 
     let (rita_client_settings, rita_exit_settings) =
         get_default_settings("test".to_string(), namespaces.clone());
@@ -59,6 +58,9 @@ pub async fn run_multi_exit_test() {
     )
     .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
+
+    // Add exits to the contract exit list so clients get the propers exits they can migrate to
+    add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
 
     populate_routers_eth(rita_identities).await;
 

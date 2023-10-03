@@ -19,6 +19,7 @@ tunnel_timeout_seconds = 900
 peer_interfaces = []
 manual_peers = []
 default_route = []
+payment_chains = ["Ethereum", "Althea"]
 
 [dao]
 dao_enforcement = false

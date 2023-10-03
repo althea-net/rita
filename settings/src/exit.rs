@@ -34,8 +34,6 @@ pub struct ExitNetworkSettings {
     pub geoip_api_key: Option<String>,
     /// The our public key for the wg_exit tunnel
     pub wg_public_key: WgKey,
-    /// Lists of exit ip addrs in this cluster
-    pub cluster_exits: Vec<Identity>,
     /// Our private key for the wg_exit tunnel, not an option because it's better
     /// for exits to crash than to generate their own key
     pub wg_private_key: WgKey,
@@ -77,7 +75,6 @@ impl ExitNetworkSettings {
                 .unwrap(),
             wg_private_key_path: String::new(),
             pass: None,
-            cluster_exits: Vec::new(),
             enable_enforcement: true,
             registered_users_contract_addr: "0x9BAbFde52Fe18A5CD00a542b87b4D124a4879582"
                 .parse()

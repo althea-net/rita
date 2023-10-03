@@ -1,7 +1,4 @@
-use std::{
-    sync::{Arc, RwLock},
-    thread,
-};
+use std::thread;
 
 use actix_rt::System;
 use actix_web::{
@@ -9,44 +6,42 @@ use actix_web::{
     App, HttpResponse, HttpServer,
 };
 use althea_types::ExitClientIdentity;
-use clarity::Address;
+use clarity::{Address, PrivateKey};
 use rita_client_registration::{
-    client_conflict, handle_sms_registration, register_client_batch_loop,
+    client_db::add_user_admin, handle_sms_registration, register_client_batch_loop,
 };
 use web30::client::Web3;
 
-use crate::registration_server::register_client_batch_loop::register_client_batch_loop;
 use crate::{
-    payments_eth::{get_miner_address, get_miner_key, WEB3_TIMEOUT},
-    utils::{get_eth_node, get_test_runner_magic_phone},
+    payments_eth::WEB3_TIMEOUT,
+    utils::{get_eth_node, get_test_runner_magic_phone, TX_TIMEOUT},
 };
-use log::{error, info};
+use crate::{
+    registration_server::register_client_batch_loop::register_client_batch_loop,
+    utils::MINER_PRIVATE_KEY,
+};
 
 pub const REGISTRATION_PORT_SERVER: u16 = 40400;
 
-#[derive(Clone, Copy, Debug, Default)]
-struct RegistrationServerState {
-    pub db_contract_addr: Option<Address>,
-}
+pub async fn start_registration_server(db_addr: Address) {
+    let miner_private_key: PrivateKey = MINER_PRIVATE_KEY.parse().unwrap();
+    let miner_pub_key = miner_private_key.to_address();
+    let contact = Web3::new(&get_eth_node(), WEB3_TIMEOUT);
 
-lazy_static! {
-    static ref REGISTRATION_SERVER_STATE: Arc<RwLock<RegistrationServerState>> =
-        Arc::new(RwLock::new(RegistrationServerState::default()));
-}
+    add_user_admin(
+        &contact,
+        db_addr,
+        miner_pub_key,
+        miner_private_key,
+        Some(TX_TIMEOUT),
+        vec![],
+    )
+    .await
+    .unwrap();
 
-fn get_althea_db_addr() -> Option<Address> {
-    REGISTRATION_SERVER_STATE.read().unwrap().db_contract_addr
-}
-
-fn set_althea_db_addr(addr: Address) {
-    REGISTRATION_SERVER_STATE.write().unwrap().db_contract_addr = Some(addr)
-}
-
-pub fn start_registration_server(db_addr: Address) {
     // Start the register loop
-    register_client_batch_loop(get_eth_node(), db_addr, get_miner_key());
+    register_client_batch_loop(get_eth_node(), db_addr, miner_private_key);
 
-    set_althea_db_addr(db_addr);
     // Start endpoint listener
     thread::spawn(move || {
         let runner = System::new();
@@ -69,21 +64,6 @@ pub fn start_registration_server(db_addr: Address) {
 async fn register_router(client: Json<ExitClientIdentity>) -> HttpResponse {
     let client = client.into_inner();
     info!("Attempting to register client: {}", client.global.mesh_ip);
-    let contact = Web3::new(&get_eth_node(), WEB3_TIMEOUT);
-    let db_addr = get_althea_db_addr();
-
-    // Check for an existing client
-    if client_conflict(
-        &client,
-        &contact,
-        db_addr.expect("This should be set"),
-        get_miner_address(),
-    )
-    .await
-    {
-        error!("Found a client conflict! {}", client.global.mesh_ip);
-        return HttpResponse::Unauthorized().finish();
-    }
 
     HttpResponse::Ok().json(
         handle_sms_registration(

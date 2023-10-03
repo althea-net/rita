@@ -7,12 +7,11 @@ use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    deploy_contracts, generate_traffic, get_default_settings, get_ip_from_namespace,
-    populate_routers_eth, query_debts, register_all_namespaces_to_exit,
+    add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_default_settings,
+    get_ip_from_namespace, populate_routers_eth, query_debts, register_all_namespaces_to_exit,
     test_all_internet_connectivity, test_reach_all, test_routes, DEBT_ACCURACY_THRES,
     TEST_EXIT_DETAILS,
 };
-use log::info;
 use num256::Int256;
 use num_traits::Signed;
 use rita_common::debt_keeper::GetDebtsResult;
@@ -49,7 +48,7 @@ pub async fn run_debts_test() {
     let db_addr = deploy_contracts().await;
 
     info!("Starting registration server");
-    start_registration_server(db_addr);
+    start_registration_server(db_addr).await;
 
     let (client_settings, exit_settings) =
         get_default_settings("test".to_string(), namespaces.clone());
@@ -66,6 +65,9 @@ pub async fn run_debts_test() {
         thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
             .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
+
+    // Add exits to the contract exit list so clients get the propers exits they can migrate to
+    add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
 
     populate_routers_eth(rita_identities).await;
 

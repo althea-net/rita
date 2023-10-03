@@ -7,15 +7,14 @@ use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    deploy_contracts, generate_traffic, get_default_settings, populate_routers_eth,
-    print_althea_balances, register_all_namespaces_to_exit, register_erc20_usdc_token,
-    send_althea_tokens, test_all_internet_connectivity, test_reach_all, test_routes,
-    validate_debt_entry, TEST_PAY_THRESH,
+    add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_default_settings,
+    populate_routers_eth, print_althea_balances, register_all_namespaces_to_exit,
+    register_erc20_usdc_token, send_althea_tokens, test_all_internet_connectivity, test_reach_all,
+    test_routes, validate_debt_entry, TEST_PAY_THRESH,
 };
 use althea_types::{Denom, SystemChain, ALTHEA_PREFIX};
 use deep_space::Address as AltheaAddress;
 use deep_space::{EthermintPrivateKey, PrivateKey};
-use log::info;
 use rita_common::debt_keeper::GetDebtsResult;
 use settings::client::RitaClientSettings;
 use settings::exit::RitaExitSettingsStruct;
@@ -48,7 +47,7 @@ pub async fn run_althea_payments_test_scenario() {
     let db_addr = deploy_contracts().await;
 
     info!("Starting registration server");
-    start_registration_server(db_addr);
+    start_registration_server(db_addr).await;
 
     let (mut client_settings, mut exit_settings) =
         get_default_settings("test".to_string(), namespaces.clone());
@@ -66,6 +65,9 @@ pub async fn run_althea_payments_test_scenario() {
         thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
             .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
+
+    // Add exits to the contract exit list so clients get the propers exits they can migrate to
+    add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
 
     populate_routers_eth(rita_identities.clone()).await;
 

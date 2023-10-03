@@ -1,7 +1,7 @@
 use crate::{
     config::{CONFIG_FILE_PATH, EXIT_CONFIG_PATH},
     payments_althea::get_althea_evm_priv,
-    payments_eth::{eth_chain_id, get_miner_address, get_miner_key, ONE_ETH, WEB3_TIMEOUT},
+    payments_eth::{eth_chain_id, get_eth_miner_key, get_miner_address, ONE_ETH, WEB3_TIMEOUT},
     setup_utils::{
         namespaces::{get_nsfd, Namespace, NamespaceInfo, NodeType, RouteHop},
         rita::InstanceData,
@@ -17,7 +17,7 @@ use althea_proto::{
         query_client::QueryClient, Metadata, QueryDenomMetadataRequest,
     },
 };
-use althea_types::{ContactType, Denom, Identity, SystemChain, WgKey};
+use althea_types::{ContactType, Denom, Regions, SystemChain, WgKey};
 use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use clarity::{Address, Transaction, Uint256};
@@ -25,12 +25,12 @@ use deep_space::{Address as AltheaAddress, Coin, Contact, CosmosPrivateKey, Priv
 use futures::future::join_all;
 use ipnetwork::IpNetwork;
 use lazy_static;
-use log::{error, info, trace, warn};
 use nix::{
     fcntl::{open, OFlag},
     sched::{setns, CloneFlags},
     sys::stat::Mode,
 };
+use rita_client_registration::client_db::{add_exit_admin, add_exit_to_exit_list, ExitIdentity};
 use rita_common::{
     debt_keeper::GetDebtsResult,
     payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT},
@@ -50,7 +50,7 @@ use std::{
     io::{BufRead, BufReader},
     net::{IpAddr, Ipv4Addr},
 };
-use web30::{client::Web3, jsonrpc::error::Web3Error};
+use web30::{client::Web3, jsonrpc::error::Web3Error, types::SendTxOption};
 
 /// Wait this long for network convergence
 const REACHABILITY_TEST_TIMEOUT: Duration = Duration::from_secs(600);
@@ -84,6 +84,9 @@ lazy_static! {
             wg_pub_key: "bvM10HW73yePrxdtCQQ4U20W5ogogdiZtUihrPc/oGY="
                 .parse()
                 .unwrap(),
+            eth_private_key: "0xc615875cba92d1cc472b9cffae25d56ca800f728688fc7faab601652b636183d"
+                .parse()
+                .unwrap(),
         };
 
         let instance_5 = ExitInstances {
@@ -94,6 +97,9 @@ lazy_static! {
                 .parse()
                 .unwrap(),
             wg_pub_key: "R8F6IhDvy6PwcENEFQEBZXEY2fi6jEvmPTVvleR1IUw="
+                .parse()
+                .unwrap(),
+            eth_private_key: "0x09307a1687fe3ea745fb46f97612aa3d1ded864c4e7e7617f984fd7296d0f6fa"
                 .parse()
                 .unwrap(),
         };
@@ -128,6 +134,7 @@ pub struct ExitInstances {
     pub subnet: Ipv6Addr,
     pub wg_pub_key: WgKey,
     pub wg_priv_key: WgKey,
+    pub eth_private_key: clarity::PrivateKey,
 }
 
 pub fn get_althea_grpc() -> String {
@@ -364,24 +371,12 @@ pub fn get_default_settings(
         .get(&cluster_name)
         .expect("Please provide a valid cluster name");
 
-    let mut cluster_exits = Vec::new();
     let mut client_exit_servers = HashMap::new();
 
     let mut exit_mesh_ips = HashSet::new();
     for ns in namespaces.names {
         if let NodeType::Exit { instance_name: _ } = ns.node_type.clone() {
             exit_mesh_ips.insert(get_ip_from_namespace(ns));
-        }
-    }
-
-    for instance in cluster.instances.values() {
-        if exit_mesh_ips.contains(&instance.mesh_ip_v2.to_string()) {
-            cluster_exits.push(Identity {
-                mesh_ip: instance.mesh_ip_v2,
-                eth_address: exit.payment.eth_address.unwrap(),
-                wg_public_key: instance.wg_pub_key,
-                nickname: None,
-            });
         }
     }
 
@@ -402,7 +397,6 @@ pub fn get_default_settings(
     let mut exit = exit.clone();
     let mut client = client.clone();
     exit.network.mesh_ip = Some(cluster.root_ip);
-    exit.exit_network.cluster_exits = cluster_exits;
     client.exit_client.contact_info = Some(
         ContactType::Both {
             number: get_test_runner_magic_phone().parse().unwrap(),
@@ -1007,7 +1001,7 @@ pub async fn send_eth_bulk(amount: Uint256, destinations: &[clarity::Address], w
             signature: None,
             access_list: Vec::new(),
         };
-        let t = t.sign(&get_miner_key(), None);
+        let t = t.sign(&get_eth_miner_key(), None);
         transactions.push(t);
         nonce += 1u64.into();
     }
@@ -1023,7 +1017,7 @@ pub async fn send_eth_bulk(amount: Uint256, destinations: &[clarity::Address], w
 pub const TX_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// utility function that waits for a large number of txids to enter a block
-async fn wait_for_txids(txids: Vec<Result<Uint256, Web3Error>>, web3: &Web3) {
+pub async fn wait_for_txids(txids: Vec<Result<Uint256, Web3Error>>, web3: &Web3) {
     let mut wait_for_txid = Vec::new();
     for txid in txids {
         let wait = web3.wait_for_transaction(txid.unwrap(), TX_TIMEOUT, None);
@@ -1103,4 +1097,57 @@ pub async fn populate_routers_eth(rita_identities: InstanceData) {
 
     info!("Sending 50 eth to all routers");
     send_eth_bulk((ONE_ETH * 50).into(), &to_top_up, &web3).await;
+}
+
+pub async fn add_exits_contract_exit_list(db_addr: Address, rita_identities: InstanceData) {
+    let web3 = Web3::new("http://localhost:8545", WEB3_TIMEOUT);
+    let miner_private_key: clarity::PrivateKey = MINER_PRIVATE_KEY.parse().unwrap();
+    let miner_pub_key = miner_private_key.to_address();
+
+    add_exit_admin(
+        &web3,
+        db_addr,
+        miner_pub_key,
+        miner_private_key,
+        Some(TX_TIMEOUT),
+        vec![],
+    )
+    .await
+    .unwrap();
+
+    let nonce = web3.eth_get_transaction_count(miner_pub_key).await.unwrap();
+
+    for (i, id) in rita_identities.exit_identities.iter().enumerate() {
+        let exit_id = ExitIdentity {
+            mesh_ip: id.mesh_ip,
+            wg_key: id.wg_public_key,
+            eth_addr: id.eth_address,
+            allowed_regions: {
+                let mut ret = HashSet::new();
+                ret.insert(Regions::US);
+                ret
+            },
+            payment_types: {
+                let mut ret = HashSet::new();
+                ret.insert(SystemChain::Althea);
+                ret.insert(SystemChain::Ethereum);
+                ret
+            },
+        };
+
+        info!("Adding exit {:?} to contract exit list", exit_id);
+        add_exit_to_exit_list(
+            &web3,
+            exit_id,
+            db_addr,
+            miner_private_key,
+            None,
+            vec![
+                SendTxOption::GasLimitMultiplier(5.0),
+                SendTxOption::Nonce(nonce + i.into()),
+            ],
+        )
+        .await
+        .unwrap();
+    }
 }

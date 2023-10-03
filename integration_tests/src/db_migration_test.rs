@@ -5,20 +5,20 @@ use std::{
 
 use clarity::{Address, PrivateKey};
 use diesel::{PgConnection, RunQueryDsl};
-use log::{error, info};
 use rita_client_registration::{
     client_db::get_all_regsitered_clients, register_client_batch_loop::register_client_batch_loop,
 };
 use rita_common::usage_tracker::tests::test::random_identity;
 use rita_db_migration::{
-    get_database_connection, models::Client, schema::clients::dsl::clients, start_db_migration,
+    db_migration_user_admin, get_database_connection, models::Client,
+    schema::clients::dsl::clients, start_db_migration,
 };
 use web30::client::Web3;
 
 use crate::{
-    payments_eth::{get_miner_key, WEB3_TIMEOUT},
+    payments_eth::{get_eth_miner_key, WEB3_TIMEOUT},
     setup_utils::database::start_postgres,
-    utils::{deploy_contracts, get_eth_node},
+    utils::{deploy_contracts, get_eth_node, MINER_PRIVATE_KEY},
 };
 
 pub const DB_URI: &str = "postgres://postgres@localhost/test";
@@ -45,10 +45,22 @@ pub async fn run_db_migration_test() {
 
     info!("Run migration code");
 
-    let miner_private_key: PrivateKey = get_miner_key();
+    let miner_private_key: PrivateKey = get_eth_miner_key();
     // Start registration loop
+    info!("Registering user admin");
+    // This request needs to be made with the state admin's key
+    db_migration_user_admin(
+        get_eth_node(),
+        MINER_PRIVATE_KEY.parse().unwrap(),
+        miner_private_key.to_address(),
+        althea_db_addr,
+    )
+    .await;
+
+    info!("Starting registration loop");
     register_client_batch_loop(get_eth_node(), althea_db_addr, miner_private_key);
 
+    info!("Running user migration");
     match start_db_migration(DB_URI.to_string()) {
         Ok(_) => println!("Successfully migrated all clients!"),
         Err(e) => println!("Failed to migrate clients with {}", e),
