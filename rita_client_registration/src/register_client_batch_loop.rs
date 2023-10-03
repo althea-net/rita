@@ -1,4 +1,5 @@
 use std::{
+    net::IpAddr,
     thread,
     time::{Duration, Instant},
 };
@@ -75,62 +76,77 @@ pub fn register_client_batch_loop(
                             }
                         }
 
-                        let mut batch = vec![];
+                        let mut batch: Vec<Uint256> = vec![];
+                        trace!("Reg clients are: {:?}", reg_clients);
                         for id in reg_clients {
-                            match contact
-                                .prepare_transaction(
-                                    contract_addr,
-                                    match encode_call(
-                                        "add_registered_user((string,string,address))",
-                                        &[AbiToken::Struct(vec![
-                                            AbiToken::String(id.mesh_ip.to_string()),
-                                            AbiToken::String(id.wg_public_key.to_string()),
-                                            AbiToken::Address(id.eth_address),
-                                        ])],
-                                    ) {
-                                        Ok(a) => a,
-                                        Err(e) => {
-                                            error!(
+                            if let IpAddr::V6(mesh_ip_v6) = id.mesh_ip {
+                                match contact
+                                    .prepare_transaction(
+                                        contract_addr,
+                                        match encode_call(
+                                            "add_registered_user((uint128,uint256,address))",
+                                            &[AbiToken::Struct(vec![
+                                                AbiToken::Uint(u128::from(mesh_ip_v6).into()),
+                                                AbiToken::Uint(id.wg_public_key.into()),
+                                                AbiToken::Address(id.eth_address),
+                                            ])],
+                                        ) {
+                                            Ok(a) => a,
+                                            Err(e) => {
+                                                error!(
                                             "REGISTRATION ERROR: Why cant we encode this call? {}",
                                             e
                                         );
-                                            continue;
-                                        }
-                                    },
-                                    0u32.into(),
-                                    our_private_key,
-                                    vec![SendTxOption::Nonce(nonce)],
-                                )
-                                .await
-                            {
-                                Ok(tx) => {
-                                    match contact.send_prepared_transaction(tx).await {
-                                        Ok(txid) => {
-                                            //increment nonce for next tx
-                                            nonce += 1u64.into();
-                                            remove_client_from_reg_batch(id);
-                                            batch.push(txid);
-                                        }
-                                        Err(e) => {
-                                            error!(
-                                                "Failed registration for {} with {}",
-                                                id.wg_public_key, e
-                                            );
+                                                continue;
+                                            }
+                                        },
+                                        0u32.into(),
+                                        our_private_key,
+                                        vec![
+                                            SendTxOption::Nonce(nonce),
+                                            SendTxOption::GasLimitMultiplier(5.0),
+                                        ],
+                                    )
+                                    .await
+                                {
+                                    Ok(tx) => {
+                                        match contact.send_prepared_transaction(tx).await {
+                                            Ok(tx_id) => {
+                                                //increment nonce for next tx
+                                                nonce += 1u64.into();
+                                                remove_client_from_reg_batch(id);
+                                                trace!(
+                                                    "BATCH CLIENT: {} with txid {}",
+                                                    id.mesh_ip,
+                                                    tx_id
+                                                );
+                                                batch.push(tx_id);
+                                            }
+                                            Err(e) => {
+                                                error!(
+                                                    "Failed registration for {} with {}",
+                                                    id.wg_public_key, e
+                                                );
+                                            }
                                         }
                                     }
+                                    Err(e) => {
+                                        error!(
+                                            "Failed registration for {} with {}",
+                                            id.wg_public_key, e
+                                        );
+                                    }
                                 }
-                                Err(e) => {
-                                    error!(
-                                        "Failed registration for {} with {}",
-                                        id.wg_public_key, e
-                                    );
-                                }
+                            } else {
+                                error!("{} Doesnt have a v6 mesh ip??", id);
                             }
                         }
 
                         // Join on txs
                         let res = wait_for_txids(batch, &contact).await;
-                        trace!("Received Transactions: {:?}", res);
+                        for e in res {
+                            trace!("Tx is: {:?}", e);
+                        }
 
                         info!("Registration loop elapsed in = {:?}", start.elapsed());
                         if start.elapsed() < REGISTRATION_LOOP_SPEED {

@@ -2802,6 +2802,7 @@ name = "rita_db_migration"
 version = "0.1.0"
 dependencies = [
  "althea_types",
+ "clarity",
  "diesel",
  "dotenv",
  "log",
@@ -2810,6 +2811,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+ "web30",
 ]
 
 [[package]]

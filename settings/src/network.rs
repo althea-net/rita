@@ -1,5 +1,5 @@
 use althea_kernel_interface::DefaultRoute;
-use althea_types::ShaperSettings;
+use althea_types::{Regions, ShaperSettings, SystemChain};
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv6Addr};
 
@@ -25,6 +25,12 @@ fn default_shaper_settings() -> ShaperSettings {
         max_speed: 10000,
         min_speed: 50,
     }
+}
+
+fn default_allowed_countries() -> HashSet<Regions> {
+    let mut ret = HashSet::new();
+    ret.insert(Regions::US);
+    ret
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -104,6 +110,11 @@ pub struct NetworkSettings {
     /// in a symmetrical limit of the users choice. Specified in mbit/s
     #[serde(default)]
     pub user_bandwidth_limit: Option<usize>,
+    /// List of countries exits that this device can roam to
+    #[serde(default = "default_allowed_countries")]
+    pub allowed_countries: HashSet<Regions>,
+    /// Payment chains that this device can use
+    pub payment_chains: HashSet<SystemChain>,
 }
 
 impl Default for NetworkSettings {
@@ -133,6 +144,8 @@ impl Default for NetworkSettings {
             nickname: None,
             usage_tracker_file: default_usage_tracker_file(),
             user_bandwidth_limit: None,
+            allowed_countries: default_allowed_countries(),
+            payment_chains: HashSet::new(),
         }
     }
 }

@@ -6,16 +6,8 @@ use std::{
 };
 
 use althea_types::{ExitClientIdentity, Identity, WgKey};
-use clarity::Address;
 use phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
-use tokio::join;
-use web30::client::Web3;
-
-use crate::client_db::{
-    get_registered_client_using_ethkey, get_registered_client_using_meship,
-    get_registered_client_using_wgkey,
-};
 
 #[macro_use]
 extern crate log;
@@ -96,61 +88,6 @@ pub struct SmsRequest {
     via: String,
     phone_number: String,
     country_code: String,
-}
-
-/// True if there is any client with the same eth address, wg key, or ip address already registered
-pub async fn client_conflict(
-    client: &ExitClientIdentity,
-    contact: &Web3,
-    contract_addr: Address,
-    our_address: Address,
-) -> bool {
-    // we can't possibly have a conflict if we have exactly this client already
-    // since client exists checks all major details this is safe and will return false
-    // if it's not exactly the same client
-    if client_exists(client, our_address, contract_addr, contact).await {
-        return false;
-    }
-    trace!("Checking if client exists");
-    let ip = client.global.mesh_ip;
-    let wg = client.global.wg_public_key;
-    let key = client.global.eth_address;
-
-    let ip_exists = get_registered_client_using_meship(ip, our_address, contract_addr, contact);
-    let wg_exists = get_registered_client_using_wgkey(wg, our_address, contract_addr, contact);
-    let eth_exists = get_registered_client_using_ethkey(key, our_address, contract_addr, contact);
-
-    let (ip_exists, wg_exists, eth_exists) = join!(ip_exists, wg_exists, eth_exists);
-
-    let ip_exists = ip_exists.is_ok();
-    let wg_exists = wg_exists.is_ok();
-    let eth_exists = eth_exists.is_ok();
-
-    info!(
-        "Signup conflict ip {} eth {} wg {}",
-        ip_exists, eth_exists, wg_exists
-    );
-    ip_exists || eth_exists || wg_exists
-}
-
-async fn client_exists(
-    client: &ExitClientIdentity,
-    our_address: Address,
-    contract_addr: Address,
-    contact: &Web3,
-) -> bool {
-    trace!("Checking if client exists");
-    let c_id = get_registered_client_using_wgkey(
-        client.global.wg_public_key,
-        our_address,
-        contract_addr,
-        contact,
-    )
-    .await;
-    match c_id {
-        Ok(a) => client.global == a,
-        Err(_) => false,
-    }
 }
 
 /// Handles the minutia of phone registration states

@@ -13,12 +13,15 @@ use actix::SystemService;
 #[cfg(feature = "development")]
 use actix_web::AsyncResponder;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
+use althea_types::Regions;
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };
 use althea_types::{EncryptedExitList, Identity};
 use althea_types::{ExitList, WgKey};
 use num256::Int256;
+use rita_client_registration::client_db::get_client_exit_list;
+use rita_client_registration::client_db::ExitIdentity;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::payment_validator::calculate_unverified_payments;
@@ -259,8 +262,55 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
 
     let their_nacl_pubkey = request.pubkey.into();
 
+    let contact = Web3::new(&get_web3_server(), CLIENT_STATUS_TIMEOUT);
+    let rita_exit = get_rita_exit();
+    let our_addr = rita_exit
+        .payment
+        .eth_private_key
+        .expect("Why do we not have a private key?")
+        .to_address();
+    let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
+
     let ret: ExitList = ExitList {
-        exit_list: settings::get_rita_exit().exit_network.cluster_exits,
+        exit_list: match get_client_exit_list(&contact, our_addr, contract_addr).await {
+            Ok(a) => {
+                let exit_regions = rita_exit.network.allowed_countries;
+                let accepted_payments = rita_exit.network.payment_chains;
+                if exit_regions.is_empty() || accepted_payments.is_empty() {
+                    error!("Exit list not configured correctly. Please set up exit regions and accepted payment types in config");
+                    return HttpResponse::InternalServerError().finish();
+                }
+                let mut ret = vec![];
+                for exit in a {
+                    // Remove Exits that dont have proper regions defined
+                    let mut exit_allowed_regions = exit.allowed_regions.clone();
+                    if exit_allowed_regions.remove(&Regions::UknownRegion) {
+                        warn!("Found an uknown region in exit! {:?}", exit);
+                    }
+
+                    if exit_allowed_regions.is_empty() || exit.payment_types.is_empty() {
+                        error!(
+                            "Invalid configured exit, no allowed regions or payments setup! {:?}",
+                            exit
+                        );
+                        continue;
+                    }
+                    if exit_allowed_regions.is_subset(&exit_regions)
+                        && exit.payment_types.is_subset(&accepted_payments)
+                    {
+                        ret.push(exit_identity_to_id(exit))
+                    }
+                }
+                ret
+            }
+            Err(e) => {
+                error!(
+                    "Unable to retreive the exit list with {}, returning empty list",
+                    e
+                );
+                vec![]
+            }
+        },
         wg_exit_listen_port: settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
     };
 
@@ -273,6 +323,36 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
         nonce: nonce.0,
         exit_list: ciphertext,
     }))
+}
+
+/// Exit list v2, for newer router that do the fitering (region and payment type) themselves, this endpoint
+/// returns the entire list
+pub async fn get_exit_list_v2(_req: HttpRequest) -> HttpResponse {
+    let contact = Web3::new(&get_web3_server(), CLIENT_STATUS_TIMEOUT);
+    let rita_exit = get_rita_exit();
+    let our_addr = rita_exit
+        .payment
+        .eth_private_key
+        .expect("Why do we not have a private key?")
+        .to_address();
+    let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
+
+    match get_client_exit_list(&contact, our_addr, contract_addr).await {
+        Ok(a) => HttpResponse::Ok().json(a),
+        Err(e) => {
+            error!("Exit list retrieval failed with {}", e);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+pub fn exit_identity_to_id(exit_id: ExitIdentity) -> Identity {
+    Identity {
+        mesh_ip: exit_id.mesh_ip,
+        eth_address: exit_id.eth_addr,
+        wg_public_key: exit_id.wg_key,
+        nickname: None,
+    }
 }
 
 /// Used by clients to get their debt from the exits. While it is in theory possible for the

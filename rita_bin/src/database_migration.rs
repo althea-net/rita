@@ -9,7 +9,7 @@
 use docopt::Docopt;
 use log::{error, info};
 use rita_client_registration::register_client_batch_loop::register_client_batch_loop;
-use rita_db_migration::start_db_migration;
+use rita_db_migration::{db_migration_user_admin, start_db_migration};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -20,7 +20,8 @@ pub struct Args {
     pub private_key: String,
 }
 
-fn main() {
+#[actix_rt::main]
+async fn main() {
     let args: Args = Docopt::new(get_arg_usage())
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
@@ -37,6 +38,14 @@ fn main() {
         .expect("Please provide a valid eth private key with funds");
 
     let system = actix_async::System::new();
+
+    db_migration_user_admin(
+        web3_url.clone(),
+        private_key,
+        private_key.to_address(),
+        contract_addr,
+    )
+    .await;
 
     // Start registration loop
     register_client_batch_loop(web3_url, contract_addr, private_key);
@@ -58,7 +67,7 @@ Options:
     -u, --db_url=<db_url>           Postgresql db url
     -a, --address=<address>         Smart Contract address
     -w, --web3_url=<web3_url>       Web3 url
-    -p, --private_key=<private_key> Our Private key
+    -p, --private_key=<private_key> The contract state admin private key
 About: 
     Db migration binary".to_string()
 }

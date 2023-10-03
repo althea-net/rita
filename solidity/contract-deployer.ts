@@ -139,7 +139,7 @@ async function deploy() {
 
   const { abi: abi4, bytecode: bytecode4 } = getContractArtifacts(althea_db_path);
   const altheadbFactory1 = new ethers.ContractFactory(abi4, bytecode4, wallet);
-  const testAltheaDB = (await altheadbFactory1.deploy(overrides)) as AltheaDB;
+  const testAltheaDB = (await altheadbFactory1.deploy(wallet.address)) as AltheaDB;
   await testAltheaDB.deployed();
   const altheaDBTestAddress = testAltheaDB.address;
   console.log("Althea_DB_addr: ", altheaDBTestAddress);

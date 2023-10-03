@@ -31,6 +31,7 @@ pub fn generate_rita_config_file(path: String) -> Result<(), KernelInterfaceErro
     tunnel_timeout_seconds = 900\n
     peer_interfaces = []\n
     manual_peers = []\n
+    payment_chains = [\"Ethereum\", \"Althea\"]\n
     default_route = []\n"
         .to_string();
     lines.push(network);
@@ -109,6 +110,7 @@ pub fn generate_exit_config_file(path: String) -> Result<(), KernelInterfaceErro
     tunnel_timeout_seconds = 900\n
     manual_peers = []\n
     external_nic = \"veth-5-8\"\n
+    payment_chains = [\"Ethereum\", \"Althea\"]\n
     default_route = []\n"
         .to_string();
     lines.push(network);

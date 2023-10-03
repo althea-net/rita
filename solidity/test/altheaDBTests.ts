@@ -34,6 +34,21 @@ async function addUser(opts: {
     wg_key: "0xAFEDD",
     eth_addr: "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD",
   };
+  let user3 = {
+    mesh_ip: "0xfd001901",
+    wg_key: "0xEEEBD",
+    eth_addr: "0x640FF2f8bdFf5C5557EdE687CEe71f6afB187f89",
+  };
+  let user4 = {
+    mesh_ip: "0xfd001981",
+    wg_key: "0xAAABD",
+    eth_addr: "0xF7b6E038c24b9d71977Adc8334c296CaD3E5a4dC",
+  };
+  let user5 = {
+    mesh_ip: "0xfd001081",
+    wg_key: "0xAFFFD",
+    eth_addr: "0xa19F0E22B2A2A7756F3964D0018f70dbf9657c9f",
+  };
   let partialDup = {
     mesh_ip: "0xfd001338",
     wg_key: "0xAFEDB",
@@ -72,6 +87,20 @@ async function addUser(opts: {
   expectId(await althea_db.get_registered_client_with_eth_addr(user2.eth_addr), user2)
   expectId(await althea_db.get_registered_client_with_wg_key(user2.wg_key), user2)
   expectId(await althea_db.get_registered_client_with_mesh_ip(user2.mesh_ip), user2)
+  await althea_db.add_registered_user(user3)
+  expectId(await althea_db.get_registered_client_with_eth_addr(user3.eth_addr), user3)
+  expectId(await althea_db.get_registered_client_with_wg_key(user3.wg_key), user3)
+  expectId(await althea_db.get_registered_client_with_mesh_ip(user3.mesh_ip), user3)
+  await althea_db.add_registered_user(user4)
+  expectId(await althea_db.get_registered_client_with_eth_addr(user4.eth_addr), user4)
+  expectId(await althea_db.get_registered_client_with_wg_key(user4.wg_key), user4)
+  expectId(await althea_db.get_registered_client_with_mesh_ip(user4.mesh_ip), user4)
+  await althea_db.add_registered_user(user5)
+  expectId(await althea_db.get_registered_client_with_eth_addr(user5.eth_addr), user5)
+  expectId(await althea_db.get_registered_client_with_wg_key(user5.wg_key), user5)
+  expectId(await althea_db.get_registered_client_with_mesh_ip(user5.mesh_ip), user5)
+  expect((await althea_db.get_all_registered_users()).length).to.equal(5)
+
 
   if (opts.try_duplicate) {
     await althea_db.add_registered_user(user1)
