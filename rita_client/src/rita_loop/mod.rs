@@ -383,6 +383,9 @@ pub fn update_dns_conf() {
             (Err(e), _) => error!("Failed to get dns server list? {:?}", e),
             (_, Err(e)) => error!("Failed to get router internal ip {:?}", e),
         }
+
+        // check to make sure DHCP is using the correct resolv.conf file
+        ensure_dhcp_resolvfile();
     }
 }
 
@@ -406,6 +409,34 @@ fn overwrite_dns_server_and_restart_dhcp(key: &str, ips: Vec<IpAddr>) {
     let res = KI.openwrt_reset_dnsmasq();
     if let Err(e) = res {
         error!("Failed to restart dhcp config with {:?}", e);
+    }
+}
+
+/// Ensures that DHCP is using the correct resolv.conf file
+fn ensure_dhcp_resolvfile() {
+    const DHCP_RESOLV_FILE_KEY: &str = "dhcp.@dnsmasq[0].resolvfile";
+    const DHCP_RESOLV_FILE_VALUE: &str = "/etc/resolv.conf";
+
+    match KI.get_uci_var(DHCP_RESOLV_FILE_KEY) {
+        Ok(resolv_file) => {
+            if resolv_file != DHCP_RESOLV_FILE_VALUE {
+                let res = KI.set_uci_var(DHCP_RESOLV_FILE_KEY, DHCP_RESOLV_FILE_VALUE);
+                if let Err(e) = res {
+                    error!("Failed to set dhcp resolvfile {:?}", e);
+                    return;
+                }
+                let res = KI.uci_commit(DHCP_RESOLV_FILE_KEY);
+                if let Err(e) = res {
+                    error!("Failed to set dhcp resolvfile {:?}", e);
+                    return;
+                }
+                let res = KI.openwrt_reset_dnsmasq();
+                if let Err(e) = res {
+                    error!("Failed to restart dhcp config with {:?}", e);
+                }
+            }
+        }
+        Err(e) => error!("Failed to get dhcp resolvfile {:?}", e),
     }
 }
 
