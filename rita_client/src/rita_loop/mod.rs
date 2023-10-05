@@ -316,17 +316,22 @@ pub fn update_dns_conf() {
     match File::open(resolv_path) {
         Ok(file) => {
             let reader = BufReader::new(file);
+            let mut found = false;
             for line in reader.lines() {
                 let s = line.unwrap_or("".to_string());
                 if s.trim() == "nameserver 172.168.0.254" {
                     info!("Found nameserver 172.168.0.254, no update to resolv.conf");
+                    found = true;
                 }
             }
-            // if we get here we haven't found the nameserver and need to add it
-            match fs::write(resolv_path, updated_config) {
-                Ok(_) => info!("Updating resolv.conf"),
-                Err(e) => error!("Could not update resolv.conf with {:?}", e),
-            };
+
+            if !found {
+                // if we get here we haven't found the nameserver and need to add it
+                match fs::write(resolv_path, updated_config) {
+                    Ok(_) => info!("Updating resolv.conf"),
+                    Err(e) => error!("Could not update resolv.conf with {:?}", e),
+                };
+            }
         }
         Err(_e) => {
             match fs::write(resolv_path, updated_config) {
