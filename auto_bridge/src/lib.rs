@@ -8,7 +8,7 @@ use clarity::utils::bytes_to_hex_str;
 use clarity::{Address, PrivateKey};
 use num256::Uint256;
 use std::collections::HashSet;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use web30::amm::{DAI_CONTRACT_ADDRESS as DAI_CONTRACT_ON_ETH, USDC_CONTRACT_ADDRESS};
 use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
@@ -441,11 +441,16 @@ pub async fn check_withdrawals(
     contract: Address,
     xdai_web3: Web3,
     search_addresses: HashSet<Address>,
+    // The total amount of time this operation has to complete
+    // during that time failed requests will be retried
+    // if None exit will occur on the first error
+    retry_timeout: Option<Duration>,
 ) -> Result<Vec<WithdrawEvent>, Web3Error> {
     /// Total number of blocks on the xdai blockchain we retrieve at once. If the blocks to check is greater than this we loop.
-    const MAX_ITER: u64 = 10_000;
+    const MAX_ITER: u64 = 500;
     let mut blocks_left: u64 = blocks_to_check;
     let mut vec_of_withdraws = Vec::new();
+    let start_time = Instant::now();
 
     //get latest xdai block
     let xdai_client = xdai_web3;
@@ -460,11 +465,18 @@ pub async fn check_withdrawals(
         //We search for the phrase UserRequestForSignature(_receiver,valueToTransfer)
         let phrase_sig = "UserRequestForSignature(address,uint256)";
 
-        let logs = xdai_client
+        let mut logs = xdai_client
             .check_for_events(start, Some(end), vec![contract], vec![phrase_sig])
-            .await?;
+            .await;
+        if let Some(timeout) = retry_timeout {
+            while logs.is_err() && (Instant::now() - start_time) < timeout {
+                logs = xdai_client
+                    .check_for_events(start, Some(end), vec![contract], vec![phrase_sig])
+                    .await;
+            }
+        }
 
-        for log in logs.iter() {
+        for log in logs?.iter() {
             let withdraw_event = parse_withdraw_event(log, &xdai_client).await?;
             for &search_address in search_addresses.iter() {
                 if withdraw_event.sender == search_address {
@@ -723,7 +735,7 @@ mod tests {
 
         let token_bridge = new_token_bridge();
 
-        let blocks_to_check = 10000;
+        let blocks_to_check = 100_000;
         runner.block_on(async move {
             let mut h = HashSet::new();
             h.insert(token_bridge.own_address);
@@ -733,6 +745,7 @@ mod tests {
                 token_bridge.xdai_bridge_on_xdai,
                 token_bridge.xdai_web3,
                 h,
+                Some(Duration::from_secs(600)),
             )
             .await
             .unwrap();
