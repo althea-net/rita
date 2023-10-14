@@ -45,7 +45,7 @@ pub const ETH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(600);
 
 const WEI_PER_ETH: u128 = 1_000_000_000_000_000_000_u128;
 const SIGNATURES_TIMEOUT: Duration = ETH_TRANSFER_TIMEOUT;
-const BLOCKS: u64 = 40_032;
+const BLOCKS: u64 = 720;
 
 pub fn eth_to_wei(eth: u64) -> Uint256 {
     let wei = eth as u128 * WEI_PER_ETH;

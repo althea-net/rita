@@ -183,7 +183,7 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
 }
 
 /// This function is called inside the bridge loop. It retrieves the 'n' most recent blocks
-/// (where 'n' is the const 'BLOCKS' that is currently set to 40,032, which represents 1 week of blocks on xdai chain) that
+/// (where 'n' is the const 'BLOCKS' that is currently set to 720, which represents 1 hour of blocks on xdai chain) that
 /// have withdraw events related to our address. It then simulates these events and submits
 /// the signatures needed to unlock the funds.
 pub async fn simulated_withdrawal_on_eth(bridge: &TokenBridgeCore) -> Result<(), TokenBridgeError> {
@@ -191,7 +191,7 @@ pub async fn simulated_withdrawal_on_eth(bridge: &TokenBridgeCore) -> Result<(),
     let mut h = HashSet::new();
     h.insert(bridge.own_address);
 
-    let events = check_withdrawals(BLOCKS, bridge.xdai_bridge_on_xdai, client, h).await?;
+    let events = check_withdrawals(BLOCKS, bridge.xdai_bridge_on_xdai, client, h, None).await?;
 
     for event in events.iter() {
         let txid = event.txid;
