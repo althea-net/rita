@@ -443,7 +443,7 @@ pub async fn check_withdrawals(
     search_addresses: HashSet<Address>,
 ) -> Result<Vec<WithdrawEvent>, Web3Error> {
     /// Total number of blocks on the xdai blockchain we retrieve at once. If the blocks to check is greater than this we loop.
-    const MAX_ITER: u64 = 10_000;
+    const MAX_ITER: u64 = 1_000;
     let mut blocks_left: u64 = blocks_to_check;
     let mut vec_of_withdraws = Vec::new();
 
@@ -723,7 +723,7 @@ mod tests {
 
         let token_bridge = new_token_bridge();
 
-        let blocks_to_check = 10000;
+        let blocks_to_check = 1000;
         runner.block_on(async move {
             let mut h = HashSet::new();
             h.insert(token_bridge.own_address);
