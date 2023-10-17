@@ -173,6 +173,6 @@ pub fn convert_map_to_flat_usage_data(input: HashMap<u64, Usage>) -> VecDeque<In
         })
     }
     // we want this sorted from greatest to least so we do the cmp in reverse order
-    out.make_contiguous().sort_by(|a, b| b.index.cmp(&a.index));
+    out.make_contiguous().sort_by(|a, b| a.index.cmp(&b.index));
     out
 }
