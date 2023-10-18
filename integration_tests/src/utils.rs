@@ -17,7 +17,7 @@ use althea_proto::{
         query_client::QueryClient, Metadata, QueryDenomMetadataRequest,
     },
 };
-use althea_types::{ContactType, Denom, Regions, SystemChain, WgKey};
+use althea_types::{ContactType, Denom, ExitIdentity, Identity, Regions, SystemChain, WgKey};
 use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use clarity::{Address, Transaction, Uint256};
@@ -30,7 +30,7 @@ use nix::{
     sched::{setns, CloneFlags},
     sys::stat::Mode,
 };
-use rita_client_registration::client_db::{add_exit_admin, add_exit_to_exit_list, ExitIdentity};
+use rita_client_registration::client_db::{add_exit_admin, add_exit_to_exit_list};
 use rita_common::{
     debt_keeper::GetDebtsResult,
     payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT},
@@ -74,66 +74,66 @@ pub const MINER_PRIVATE_KEY: &str =
 lazy_static! {
     pub static ref TEST_EXIT_DETAILS: HashMap<String, ExitInfo> = {
         let mut details = HashMap::new();
-        let instance_4 = ExitInstances {
-            instance_name: "test_4".to_string(),
-            mesh_ip_v2: IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, 4)),
-            subnet: Ipv6Addr::new(0xfbad, 200, 0, 0, 0, 0, 0, 0),
+        let instance_4_name = "test_4".to_string();
+
+        let instance_4 = Identity {
+            mesh_ip: IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, 4)),
+            wg_public_key: "bvM10HW73yePrxdtCQQ4U20W5ogogdiZtUihrPc/oGY="
+                .parse()
+                .unwrap(),
+            eth_address: "0xc615875cba92d1cc472b9cffae25d56ca800f728688fc7faab601652b636183d"
+                .parse::<clarity::PrivateKey>()
+                .unwrap()
+                .to_address(),
+            nickname: None,
+        };
+
+        let exit_4 = ExitInfo {
+            exit_id: instance_4,
             wg_priv_key: "OGzbcm6czrjOEAViK7ZzlWM8mtjCxp7UPbuLS/dATV4="
                 .parse()
                 .unwrap(),
-            wg_pub_key: "bvM10HW73yePrxdtCQQ4U20W5ogogdiZtUihrPc/oGY="
-                .parse()
-                .unwrap(),
+            subnet: Ipv6Addr::new(0xfbad, 200, 0, 0, 0, 0, 0, 0),
             eth_private_key: "0xc615875cba92d1cc472b9cffae25d56ca800f728688fc7faab601652b636183d"
                 .parse()
                 .unwrap(),
         };
 
-        let instance_5 = ExitInstances {
-            instance_name: "test_5".to_string(),
-            mesh_ip_v2: IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, 5)),
-            subnet: Ipv6Addr::new(0xfbad, 400, 0, 0, 0, 0, 0, 0),
+        let instance_5_name = "test_5".to_string();
+        let instance_5 = Identity {
+            mesh_ip: IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, 5)),
+
+            wg_public_key: "R8F6IhDvy6PwcENEFQEBZXEY2fi6jEvmPTVvleR1IUw="
+                .parse()
+                .unwrap(),
+            eth_address: "0x09307a1687fe3ea745fb46f97612aa3d1ded864c4e7e7617f984fd7296d0f6fa"
+                .parse::<clarity::PrivateKey>()
+                .unwrap()
+                .to_address(),
+            nickname: None,
+        };
+        let exit_5 = ExitInfo {
+            exit_id: instance_5,
             wg_priv_key: "SEBve3ERCYCriBEfNFnWbED5OwWo/Ylppg1KEt0HZnA="
                 .parse()
                 .unwrap(),
-            wg_pub_key: "R8F6IhDvy6PwcENEFQEBZXEY2fi6jEvmPTVvleR1IUw="
-                .parse()
-                .unwrap(),
+            subnet: Ipv6Addr::new(0xfbad, 400, 0, 0, 0, 0, 0, 0),
             eth_private_key: "0x09307a1687fe3ea745fb46f97612aa3d1ded864c4e7e7617f984fd7296d0f6fa"
-                .parse()
+                .parse::<clarity::PrivateKey>()
                 .unwrap(),
         };
+        details.insert(instance_4_name, exit_4);
+        details.insert(instance_5_name, exit_5);
 
-        let exit = ExitInfo {
-            exit_name: "test".to_string(),
-            root_ip: IpAddr::V6(Ipv6Addr::new(0xfd00, 200, 199, 198, 197, 196, 195, 194)),
-            instances: {
-                let mut ret = HashMap::new();
-                ret.insert(instance_4.instance_name.clone(), instance_4);
-                ret.insert(instance_5.instance_name.clone(), instance_5);
-                ret
-            },
-        };
-        details.insert(exit.exit_name.clone(), exit);
         details
     };
 }
 
-/// Struct used to store info of each exit instance in tests
-#[derive(Clone, Debug)]
 pub struct ExitInfo {
-    pub exit_name: String,
-    pub root_ip: IpAddr,
-    pub instances: HashMap<String, ExitInstances>,
-}
-
-#[derive(Clone, Debug)]
-pub struct ExitInstances {
-    pub instance_name: String,
-    pub mesh_ip_v2: IpAddr,
-    pub subnet: Ipv6Addr,
-    pub wg_pub_key: WgKey,
+    pub exit_id: Identity,
+    // Params used in exit spawn
     pub wg_priv_key: WgKey,
+    pub subnet: Ipv6Addr,
     pub eth_private_key: clarity::PrivateKey,
 }
 
@@ -361,42 +361,31 @@ pub const EXIT_SUBNET: Ipv6Addr = Ipv6Addr::new(0xfbad, 200, 0, 0, 0, 0, 0, 0);
 /// Gets the default client and exit settings handling the pre-launch exchange of exit into and its insertion into
 /// the
 pub fn get_default_settings(
-    cluster_name: String,
     namespaces: NamespaceInfo,
 ) -> (RitaClientSettings, RitaExitSettingsStruct) {
     let exit = RitaExitSettingsStruct::new(EXIT_CONFIG_PATH).unwrap();
     let client = RitaClientSettings::new(CONFIG_FILE_PATH).unwrap();
 
-    let cluster = TEST_EXIT_DETAILS
-        .get(&cluster_name)
-        .expect("Please provide a valid cluster name");
-
-    let mut client_exit_servers = HashMap::new();
+    let mut exit_servers = HashMap::new();
 
     let mut exit_mesh_ips = HashSet::new();
     for ns in namespaces.names {
-        if let NodeType::Exit { instance_name: _ } = ns.node_type.clone() {
+        if let NodeType::Exit { instance_name } = ns.node_type.clone() {
             exit_mesh_ips.insert(get_ip_from_namespace(ns));
+            let exit_id = TEST_EXIT_DETAILS.get(&instance_name).unwrap();
+            exit_servers.insert(
+                exit_id.exit_id.mesh_ip,
+                settings::client::ExitServer {
+                    exit_id: exit_id.exit_id,
+                    registration_port: exit.exit_network.exit_hello_port,
+                    info: althea_types::ExitState::New,
+                },
+            );
         }
     }
 
-    client_exit_servers.insert(
-        cluster_name.clone(),
-        settings::client::ExitServer {
-            root_ip: cluster.root_ip,
-            subnet: None,
-            eth_address: exit.payment.eth_address.unwrap(),
-            // This is the wg key that is common among all instances
-            wg_public_key: exit.exit_network.wg_public_key,
-            registration_port: exit.exit_network.exit_hello_port,
-            description: exit.description.clone(),
-            info: althea_types::ExitState::New,
-        },
-    );
-
     let mut exit = exit.clone();
     let mut client = client.clone();
-    exit.network.mesh_ip = Some(cluster.root_ip);
     client.exit_client.contact_info = Some(
         ContactType::Both {
             number: get_test_runner_magic_phone().parse().unwrap(),
@@ -405,8 +394,7 @@ pub fn get_default_settings(
         }
         .into(),
     );
-    client.exit_client.current_exit = Some(cluster_name);
-    client.exit_client.exits = client_exit_servers.clone();
+    client.exit_client.exits = exit_servers.clone();
     // first node is passed through to the host machine for testing second node is used
     // for testnet queries
     exit.payment.althea_grpc_list = vec![get_althea_grpc()];
@@ -470,8 +458,21 @@ pub async fn register_to_exit(namespace_name: String, exit_name: String) -> Stat
             let client = awc::Client::default();
             let req = client
                 .post(format!(
+                    "http://localhost:4877/exits/{}/select",
+                    exit_network.exit_id.mesh_ip
+                ))
+                .send()
+                .await
+                .expect("Failed to make request to rita RPC");
+
+            if !req.status().is_success() {
+                panic!("Unable to select an appropriate exit to register to");
+            }
+
+            let req = client
+                .post(format!(
                     "http://localhost:4877/exits/{}/verify/1111",
-                    exit_network.exit_name
+                    exit_network.exit_id.mesh_ip
                 ))
                 .send()
                 .await
@@ -567,17 +568,7 @@ pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
 }
 
 pub fn get_ip_from_namespace(node: Namespace) -> String {
-    match node.node_type {
-        NodeType::Exit { instance_name } => TEST_EXIT_DETAILS
-            .get("test")
-            .unwrap()
-            .instances
-            .get(&instance_name)
-            .unwrap()
-            .mesh_ip_v2
-            .to_string(),
-        _ => format!("fd00::{}", node.id),
-    }
+    format!("fd00::{}", node.id)
 }
 
 /// Given a vec of nodes, query their endpoint for node debts. for_node is optional in case of none, we simply
@@ -591,10 +582,6 @@ pub async fn query_debts(
         Some(a) => {
             let mut map = HashSet::new();
             for node in a {
-                // For an exit, add the root ip as well
-                if let NodeType::Exit { .. } = node.node_type {
-                    map.insert(TEST_EXIT_DETAILS.get("test").unwrap().root_ip.to_string());
-                }
                 map.insert(get_ip_from_namespace(node));
             }
             map
@@ -1065,10 +1052,10 @@ pub async fn validate_debt_entry(
 pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
     let register_timeout = Duration::from_secs(20);
     for r in namespaces.names.clone() {
-        if let NodeType::Client { cluster_name } = r.node_type.clone() {
+        if let NodeType::Client { exit_name } = r.node_type.clone() {
             let start: Instant = Instant::now();
             loop {
-                let res = register_to_exit(r.get_name(), cluster_name.clone()).await;
+                let res = register_to_exit(r.get_name(), exit_name.clone()).await;
                 if res.is_success() {
                     break;
                 }
@@ -1078,7 +1065,7 @@ pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
                 warn!("Failed {} registration to exit, trying again", r.get_name());
                 thread::sleep(Duration::from_secs(1));
             }
-            info!("{} registered to exit {}", r.get_name(), cluster_name);
+            info!("{} registered to exit {}", r.get_name(), exit_name);
         }
     }
 }

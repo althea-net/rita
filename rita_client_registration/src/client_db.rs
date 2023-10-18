@@ -5,13 +5,12 @@ use std::{
     vec,
 };
 
-use althea_types::{Identity, Regions, SystemChain, WgKey};
+use althea_types::{ExitIdentity, Identity, Regions, SystemChain, WgKey};
 use clarity::{
     abi::{encode_call, AbiToken},
     utils::bytes_to_hex_str,
     Address, PrivateKey, Uint256,
 };
-use serde::{Deserialize, Serialize};
 use web30::{
     client::Web3,
     jsonrpc::error::Web3Error,
@@ -21,15 +20,6 @@ use web30::{
 use tokio::time::timeout as future_timeout;
 
 pub const WORD_SIZE: usize = 32;
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExitIdentity {
-    pub mesh_ip: IpAddr,
-    pub wg_key: WgKey,
-    pub eth_addr: Address,
-    pub allowed_regions: HashSet<Regions>,
-    pub payment_types: HashSet<SystemChain>,
-}
 
 pub async fn get_all_regsitered_clients(
     web30: &Web3,

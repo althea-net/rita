@@ -13,6 +13,8 @@ use actix::SystemService;
 #[cfg(feature = "development")]
 use actix_web::AsyncResponder;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
+use althea_types::ExitIdentity;
+use althea_types::ExitListV2;
 use althea_types::Regions;
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
@@ -21,7 +23,6 @@ use althea_types::{EncryptedExitList, Identity};
 use althea_types::{ExitList, WgKey};
 use num256::Int256;
 use rita_client_registration::client_db::get_client_exit_list;
-use rita_client_registration::client_db::ExitIdentity;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::payment_validator::calculate_unverified_payments;
@@ -74,7 +75,7 @@ fn decrypt_exit_client_id(
         match box_::open(&ciphertext, &their_nonce, &their_nacl_pubkey, our_secretkey) {
             Ok(value) => value,
             Err(e) => {
-                error!(
+                warn!(
                     "Error decrypting exit setup request for {} with {:?}",
                     their_wg_pubkey, e
                 );
@@ -132,15 +133,44 @@ pub async fn secure_setup_request(
     request: (Json<EncryptedExitClientIdentity>, HttpRequest),
 ) -> HttpResponse {
     let exit_settings = get_rita_exit();
-    let our_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
-    let our_secretkey = our_secretkey.into();
+
+    let our_old_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
+    let our_new_secretkey = exit_settings
+        .network
+        .wg_private_key
+        .unwrap_or(our_old_secretkey);
+
+    if our_old_secretkey == our_new_secretkey {
+        error!("Two Distinct wg key are not setup on this exit, please setup!!");
+    }
+
+    let our_old_secretkey: SecretKey = our_old_secretkey.into();
+    let our_new_secretkey = our_new_secretkey.into();
+    // The secret key that is used by the client, this value
+    let valid_secret_key;
 
     let their_wg_pubkey = request.0.pubkey;
     let their_nacl_pubkey = request.0.pubkey.into();
     let socket = request.1;
-    let decrypted_id = match decrypt_exit_client_id(request.0.into_inner(), &our_secretkey) {
-        DecryptResult::Success(val) => val,
-        DecryptResult::Failure(val) => match val {
+    let exit_client_id = request.0.into_inner();
+
+    let decrypted_id = match (
+        decrypt_exit_client_id(exit_client_id.clone(), &our_new_secretkey),
+        decrypt_exit_client_id(exit_client_id, &our_old_secretkey),
+    ) {
+        (DecryptResult::Success(val_new), DecryptResult::Success(_)) => {
+            valid_secret_key = our_new_secretkey;
+            val_new
+        }
+        (DecryptResult::Success(val), _) => {
+            valid_secret_key = our_new_secretkey;
+            val
+        }
+        (_, DecryptResult::Success(val)) => {
+            valid_secret_key = our_old_secretkey;
+            val
+        }
+        (DecryptResult::Failure(val), _) => match val {
             Ok(val) => return HttpResponse::Ok().json(val),
             Err(_) => return HttpResponse::InternalServerError().finish(),
         },
@@ -170,7 +200,7 @@ pub async fn secure_setup_request(
         match result {
             Ok(exit_state) => HttpResponse::Ok().json(secure_setup_return(
                 exit_state,
-                &our_secretkey,
+                &valid_secret_key,
                 their_nacl_pubkey,
             )),
             Err(e) => {
@@ -185,7 +215,7 @@ pub async fn secure_setup_request(
         };
         HttpResponse::Ok().json(secure_setup_return(
             state,
-            &our_secretkey,
+            &valid_secret_key,
             their_nacl_pubkey,
         ))
     }
@@ -193,8 +223,19 @@ pub async fn secure_setup_request(
 
 pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
     let exit_settings = get_rita_exit();
-    let our_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
-    let our_secretkey = our_secretkey.into();
+    let our_old_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
+    let our_new_secretkey = exit_settings
+        .network
+        .wg_private_key
+        .unwrap_or(our_old_secretkey);
+
+    if our_old_secretkey == our_new_secretkey {
+        error!("Two Distinct wg key are not setup on this exit, please setup!!");
+    }
+
+    let our_old_secretkey = our_old_secretkey.into();
+    let our_new_secretkey = our_new_secretkey.into();
+
     let our_address = exit_settings
         .payment
         .eth_private_key
@@ -205,13 +246,32 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
 
     let their_wg_pubkey = request.pubkey;
     let their_nacl_pubkey = request.pubkey.into();
-    let decrypted_id = match decrypt_exit_client_id(request.into_inner(), &our_secretkey) {
-        DecryptResult::Success(val) => val,
-        DecryptResult::Failure(val) => match val {
+    let exit_client_id = request.into_inner();
+    // The secret key that is used by the client, this value
+    let valid_secret_key;
+
+    let decrypted_id = match (
+        decrypt_exit_client_id(exit_client_id.clone(), &our_new_secretkey),
+        decrypt_exit_client_id(exit_client_id, &our_old_secretkey),
+    ) {
+        (DecryptResult::Success(val_new), DecryptResult::Success(_)) => {
+            valid_secret_key = our_new_secretkey;
+            val_new
+        }
+        (DecryptResult::Success(val), _) => {
+            valid_secret_key = our_new_secretkey;
+            val
+        }
+        (_, DecryptResult::Success(val)) => {
+            valid_secret_key = our_old_secretkey;
+            val
+        }
+        (DecryptResult::Failure(val), _) => match val {
             Ok(val) => return HttpResponse::Ok().json(val),
             Err(_) => return HttpResponse::InternalServerError().finish(),
         },
     };
+
     trace!("got status request from {}", their_wg_pubkey);
 
     // We use our eth address as the requesting address
@@ -235,7 +295,7 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
     };
     HttpResponse::Ok().json(secure_setup_return(
         state,
-        &our_secretkey,
+        &valid_secret_key,
         their_nacl_pubkey,
     ))
 }
@@ -295,8 +355,8 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
                         );
                         continue;
                     }
-                    if exit_allowed_regions.is_subset(&exit_regions)
-                        && exit.payment_types.is_subset(&accepted_payments)
+                    if !exit_allowed_regions.is_disjoint(&exit_regions)
+                        && !exit.payment_types.is_disjoint(&accepted_payments)
                     {
                         ret.push(exit_identity_to_id(exit))
                     }
@@ -327,7 +387,19 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
 
 /// Exit list v2, for newer router that do the fitering (region and payment type) themselves, this endpoint
 /// returns the entire list
-pub async fn get_exit_list_v2(_req: HttpRequest) -> HttpResponse {
+pub async fn get_exit_list_v2(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
+    let exit_settings = get_rita_exit();
+    let our_secretkey: WgKey = match exit_settings.network.wg_private_key {
+        Some(a) => a,
+        None => {
+            error!("This exit doesnt have a network wg key?");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let our_secretkey = our_secretkey.into();
+
+    let their_nacl_pubkey = request.pubkey.into();
+
     let contact = Web3::new(&get_web3_server(), CLIENT_STATUS_TIMEOUT);
     let rita_exit = get_rita_exit();
     let our_addr = rita_exit
@@ -337,13 +409,29 @@ pub async fn get_exit_list_v2(_req: HttpRequest) -> HttpResponse {
         .to_address();
     let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
 
-    match get_client_exit_list(&contact, our_addr, contract_addr).await {
-        Ok(a) => HttpResponse::Ok().json(a),
-        Err(e) => {
-            error!("Exit list retrieval failed with {}", e);
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    let ret: ExitListV2 = ExitListV2 {
+        exit_list: match get_client_exit_list(&contact, our_addr, contract_addr).await {
+            Ok(a) => a,
+            Err(e) => {
+                error!(
+                    "Unable to retreive the exit list with {}, returning empty list",
+                    e
+                );
+                vec![]
+            }
+        },
+        wg_exit_listen_port: settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
+    };
+
+    let plaintext = serde_json::to_string(&ret)
+        .expect("Failed to serialize Vec of ips!")
+        .into_bytes();
+    let nonce = box_::gen_nonce();
+    let ciphertext = box_::seal(&plaintext, &nonce, &their_nacl_pubkey, &our_secretkey);
+    HttpResponse::Ok().json(Json(EncryptedExitList {
+        nonce: nonce.0,
+        exit_list: ciphertext,
+    }))
 }
 
 pub fn exit_identity_to_id(exit_id: ExitIdentity) -> Identity {

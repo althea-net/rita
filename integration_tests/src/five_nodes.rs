@@ -21,8 +21,7 @@ pub async fn run_five_node_test_scenario() {
     info!("Starting registration server");
     start_registration_server(db_addr).await;
 
-    let (client_settings, exit_settings) =
-        get_default_settings("test".to_string(), namespaces.clone());
+    let (client_settings, exit_settings) = get_default_settings(namespaces.clone());
 
     namespaces.validate();
 
@@ -78,21 +77,21 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
         id: 1,
         cost: 25,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
     let testb = Namespace {
         id: 2,
         cost: 500,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
     let testc = Namespace {
         id: 3,
         cost: 15,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
     let testd = Namespace {
@@ -106,21 +105,21 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
         id: 5,
         cost: 40,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
     let testf = Namespace {
         id: 6,
         cost: 20,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
     let testg = Namespace {
         id: 7,
         cost: 15,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
 

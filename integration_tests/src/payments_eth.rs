@@ -49,8 +49,7 @@ pub async fn run_eth_payments_test_scenario() {
     info!("Starting registration server");
     start_registration_server(db_addr).await;
 
-    let (mut client_settings, mut exit_settings) =
-        get_default_settings("test".to_string(), namespaces.clone());
+    let (mut client_settings, mut exit_settings) = get_default_settings(namespaces.clone());
 
     // Set payment thresholds low enough so that they get triggered after an iperf
     let (client_settings, exit_settings) =

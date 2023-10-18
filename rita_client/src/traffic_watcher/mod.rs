@@ -29,9 +29,7 @@ use babel_monitor::structs::BabelMonitorError;
 use babel_monitor::structs::Route;
 use num256::Int256;
 use num_traits::identities::Zero;
-use rita_common::debt_keeper::{
-    traffic_replace, traffic_update, wgkey_insensitive_traffic_update, Traffic,
-};
+use rita_common::debt_keeper::{gateway_traffic_update, traffic_replace, traffic_update, Traffic};
 use rita_common::usage_tracker::structs::UsageType;
 use rita_common::usage_tracker::update_usage_data;
 use rita_common::usage_tracker::UpdateUsage;
@@ -104,7 +102,11 @@ pub struct QueryExitDebts {
 }
 
 pub async fn query_exit_debts(msg: QueryExitDebts) {
-    trace!("About to query the exit for client debts");
+    trace!(
+        "About to query the exit for client debts for exit id: {:?}",
+        msg.exit_id
+    );
+
     let tx_fee_percentage = settings::get_rita_common()
         .payment
         .simulated_transaction_fee;
@@ -183,7 +185,7 @@ pub async fn query_exit_debts(msg: QueryExitDebts) {
                 (false, _) => {
                     info!("We are a gateway!, Acting accordingly");
                     if let Some(val) = local_debt {
-                        wgkey_insensitive_traffic_update(Traffic {
+                        gateway_traffic_update(Traffic {
                             from: exit_id,
                             amount: val,
                         })
@@ -192,10 +194,7 @@ pub async fn query_exit_debts(msg: QueryExitDebts) {
             }
         }
         Err(e) => {
-            error!(
-                "Failed to open stream to exit for debts update! with {:?}",
-                e
-            );
+            error!("Unable to get clients_debt json with : {}", e);
             if let Some(val) = local_debt {
                 traffic_update(vec![Traffic {
                     from: exit_id,

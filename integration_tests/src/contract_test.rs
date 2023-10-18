@@ -1,11 +1,10 @@
 use std::collections::HashSet;
 
-use althea_types::{Regions, SystemChain};
+use althea_types::{ExitIdentity, Regions, SystemChain};
 use clarity::{Address, PrivateKey};
 use rita_client_registration::client_db::{
     add_client_to_registered_list, add_exit_admin, add_exit_to_exit_list, add_user_admin,
     get_all_regsitered_clients, get_client_exit_list, get_registered_client_using_wgkey,
-    ExitIdentity,
 };
 use rita_common::usage_tracker::tests::test::random_identity;
 use web30::{client::Web3, types::SendTxOption};

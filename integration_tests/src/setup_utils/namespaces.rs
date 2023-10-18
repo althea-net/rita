@@ -22,7 +22,7 @@ pub struct Namespace {
 pub enum NodeType {
     Client {
         // The exit this client should be connected to at network init
-        cluster_name: String,
+        exit_name: String,
     },
     Exit {
         instance_name: String,

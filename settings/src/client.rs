@@ -4,10 +4,8 @@ use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_client, setup_accepted_denoms, SettingsError};
-use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
-use clarity::Address;
-use ipnetwork::IpNetwork;
+
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -28,45 +26,23 @@ pub fn default_config_path() -> PathBuf {
     format!("/etc/{APP_NAME}.toml").into()
 }
 
-/// This struct represents an exit server cluster, meaning
-/// an arbitrary number of actual machines may be represented here
-/// all exits in a cluster share a wireguard and eth private key used for their
-/// wg_exit connections and are found via searching the routing table for
-/// ip's within the provided subnet.
+/// This struct represents a single exit server. It contains all the details
+/// needed to contact and register to the exit.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitServer {
-    /// Ip of exit we first connect to when connected to this cluster
-    #[serde(default = "dummy_root_ip")]
-    pub root_ip: IpAddr,
-
-    /// Subnet for backwards compatilibity
-    #[serde(default)]
-    pub subnet: Option<IpNetwork>,
-
-    /// eth address of this exit cluster
-    pub eth_address: Address,
-
-    /// wg public key used for wg_exit by this cluster
-    /// each exit has a distinct wg key used for peer
-    /// to peer tunnels and to identify it in logs
-    pub wg_public_key: WgKey,
+    /// This is the unique identity of the exit. Previously exit
+    /// had a shared wg key and mesh ip, this struct needs to have unique
+    /// meship, wgkey and ethaddress for each entry
+    pub exit_id: Identity,
 
     /// The power we reach out to to hit the register endpoint
     /// also used for all other exit lifecycle management api calls
     #[serde(default)]
     pub registration_port: u16,
 
-    /// the exit description, a short string blurb that is displayed
-    /// directly to the user
-    #[serde(default)]
-    pub description: String,
     /// The registration state and other data about the exit
     #[serde(default, flatten)]
     pub info: ExitState,
-}
-
-fn dummy_root_ip() -> IpAddr {
-    DUMMY_ROOT_IP.parse().unwrap()
 }
 
 /// Simple struct that keeps track of details related to the exit we are currently connected to, as well as the next potential exit to switch to
@@ -121,9 +97,7 @@ fn default_balance_notification() -> bool {
 pub struct ExitClientSettings {
     /// This stores a mapping between an identifier (any string) to exits
     #[serde(rename = "new_exits", default)]
-    pub exits: HashMap<String, ExitServer>,
-    /// This stores the current exit identifier
-    pub current_exit: Option<String>,
+    pub exits: HashMap<IpAddr, ExitServer>,
     /// This is the port which the exit wireguard tunnel will listen on
     /// NOTE: must be under `wg_start_port` in `NetworkSettings`
     pub wg_listen_port: u16,
@@ -142,21 +116,10 @@ impl Default for ExitClientSettings {
     fn default() -> Self {
         ExitClientSettings {
             exits: HashMap::new(),
-            current_exit: None,
             wg_listen_port: 59999,
             contact_info: None,
             lan_nics: HashSet::new(),
             low_balance_notification: true,
-        }
-    }
-}
-
-impl ExitClientSettings {
-    pub fn get_current_exit(&self) -> Option<&ExitServer> {
-        if self.exits.contains_key(self.current_exit.as_ref()?) {
-            Some(&self.exits[self.current_exit.as_ref()?])
-        } else {
-            None
         }
     }
 }
@@ -180,9 +143,8 @@ impl RitaClientSettings {
         }
 
         let config_toml = std::fs::read_to_string(file_name)?;
-        let ret: Self = toml::from_str(&config_toml)?;
+        let mut ret: Self = toml::from_str(&config_toml)?;
 
-        let mut ret = Self::convert_subnet_to_root_ip(&ret);
         // Setup accepted denoms for payment validator, this is for routers during opkg updates,
         // this can be removed once all router are updated to the version that handles althea chain
         ret.payment.accepted_denoms = Some(setup_accepted_denoms());
@@ -190,28 +152,6 @@ impl RitaClientSettings {
         set_rita_client(ret.clone());
 
         Ok(ret)
-    }
-
-    pub fn convert_subnet_to_root_ip(&self) -> Self {
-        let mut ret = self.clone();
-        let exit_server = &self.exit_client.exits;
-        for (hash, ser) in exit_server.iter() {
-            match (ser.subnet.is_none(), ser.root_ip == dummy_root_ip()) {
-                (true, true) => panic!("Please setup config with correct root_ip value"),
-                (false, true) => {
-                    let exit_ser = ret
-                        .exit_client
-                        .exits
-                        .get_mut(hash)
-                        .expect("Why did this fail");
-                    exit_ser.root_ip = ser.subnet.unwrap().ip();
-                    exit_ser.subnet = None;
-                    continue;
-                }
-                _ => continue,
-            }
-        }
-        ret
     }
 }
 

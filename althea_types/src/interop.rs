@@ -10,6 +10,7 @@ use num256::Uint256;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
@@ -107,6 +108,25 @@ impl Hash for Identity {
         self.mesh_ip.hash(state);
         self.eth_address.hash(state);
         self.wg_public_key.hash(state);
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExitIdentity {
+    pub mesh_ip: IpAddr,
+    pub wg_key: WgKey,
+    pub eth_addr: Address,
+    pub allowed_regions: HashSet<Regions>,
+    pub payment_types: HashSet<SystemChain>,
+}
+
+// Custom hash implementation that also ignores nickname. There should be no collding exits with
+// the same mesh, wgkey and ethaddr
+impl Hash for ExitIdentity {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.mesh_ip.hash(state);
+        self.eth_addr.hash(state);
+        self.wg_key.hash(state);
     }
 }
 
@@ -340,6 +360,14 @@ pub struct EncryptedExitList {
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitList {
     pub exit_list: Vec<Identity>,
+    // All exits in a cluster listen on same port
+    pub wg_exit_listen_port: u16,
+}
+
+/// Struct returned when hitting exit_list_V2 endpoint
+#[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct ExitListV2 {
+    pub exit_list: Vec<ExitIdentity>,
     // All exits in a cluster listen on same port
     pub wg_exit_listen_port: u16,
 }
