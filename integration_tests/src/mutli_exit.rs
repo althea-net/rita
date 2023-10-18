@@ -43,8 +43,7 @@ pub async fn run_multi_exit_test() {
     info!("Starting registration server");
     start_registration_server(db_addr).await;
 
-    let (rita_client_settings, rita_exit_settings) =
-        get_default_settings("test".to_string(), namespaces.clone());
+    let (rita_client_settings, rita_exit_settings) = get_default_settings(namespaces.clone());
 
     namespaces.validate();
 
@@ -173,21 +172,21 @@ pub fn multi_exit_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
         id: 1,
         cost: 25,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
     let testb = Namespace {
         id: 2,
         cost: 50,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
     let testc = Namespace {
         id: 3,
         cost: 15,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
     let testd = Namespace {
@@ -208,21 +207,21 @@ pub fn multi_exit_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
         id: 6,
         cost: 60,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
     let testg = Namespace {
         id: 7,
         cost: 15,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
     let testh = Namespace {
         id: 8,
         cost: 10,
         node_type: NodeType::Client {
-            cluster_name: "test".to_string(),
+            exit_name: "test_4".to_string(),
         },
     };
 

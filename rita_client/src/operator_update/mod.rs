@@ -4,7 +4,7 @@ pub mod update_loop;
 pub mod updater;
 extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
-use crate::exit_manager::{get_client_pub_ipv6, get_selected_exit_ip};
+use crate::exit_manager::{get_client_pub_ipv6, get_current_exit};
 use crate::rita_loop::is_gateway_client;
 use crate::{
     extend_hardware_info, reset_wifi_pass, set_router_update_instruction, set_wifi_multi_internal,
@@ -127,15 +127,11 @@ pub async fn operator_update(
     hardware_info_logs(&hardware_info);
 
     // Get current exit info
-    let cur_cluster = rita_client.exit_client.current_exit.clone();
     let cur_exit = Some(CurExitInfo {
-        cluster_name: cur_cluster.clone(),
+        cluster_name: None,
         // Hopefully ops fills this in
         instance_name: None,
-        instance_ip: match cur_cluster {
-            Some(a) => get_selected_exit_ip(a),
-            None => None,
-        },
+        instance_ip: get_current_exit(),
     });
 
     let exit_con = Some(ExitConnection {

@@ -26,8 +26,6 @@ use rita_common::network_monitor::get_network_info;
 use rita_common::network_monitor::GetNetworkInfo;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
 
-use crate::exit_manager::get_selected_exit_ip as get_selected_exit_em;
-
 use althea_types::HeartbeatMessage;
 use althea_types::Identity;
 use althea_types::WgKey;
@@ -53,6 +51,8 @@ use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
+
+use crate::exit_manager::get_current_exit;
 
 pub const HEARTBEAT_LOOP_SPEED: u64 = 5;
 
@@ -154,7 +154,7 @@ fn send_udp_heartbeat() {
     if !cfg!(feature = "operator_debug") {
         if let (Some(id), Some(exit)) = (
             settings::get_rita_client().get_identity(),
-            get_selected_exit(),
+            get_selected_exit_server(),
         ) {
             let exit_info = exit.info;
             match exit_info.general_details() {
@@ -266,24 +266,23 @@ fn send_udp_heartbeat() {
 }
 
 fn get_selected_exit_route(route_dump: &[Route]) -> Result<Route, BabelMonitorError> {
-    let rita_client = settings::get_rita_client();
-    let current_exit = match rita_client.exit_client.current_exit {
+    let exit_mesh_ip = match get_current_exit() {
         Some(a) => a,
-        None => "".to_string(),
+        None => return Err(BabelMonitorError::MiscStringError("No Exit".to_string())),
     };
-    let exit_mesh_ip = if let Some(e) = get_selected_exit_em(current_exit) {
-        e
-    } else {
-        return Err(BabelMonitorError::MiscStringError("No Exit".to_string()));
-    };
+
     get_installed_route(&exit_mesh_ip, route_dump)
 }
 
-fn get_selected_exit() -> Option<ExitServer> {
+pub fn get_selected_exit_server() -> Option<ExitServer> {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
-    let exit = exit_client.get_current_exit()?;
-    Some(exit.clone())
+    let exit = match get_current_exit() {
+        Some(ip) => exit_client.exits.get(&ip),
+        None => None,
+    };
+
+    exit.cloned()
 }
 
 fn get_rita_neigh_option(

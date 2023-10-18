@@ -278,21 +278,18 @@ pub fn traffic_update(traffic: Vec<Traffic>) {
 
 #[allow(dead_code)]
 /// Special case traffic update for client gateway corner case, see rita client traffic watcher for more
-/// details. This updates a debt identity matching only ip address and eth address.
-pub fn wgkey_insensitive_traffic_update(traffic: Traffic) {
+/// details.
+pub fn gateway_traffic_update(traffic: Traffic) {
     let dk_pin = &mut *DEBT_DATA.write().unwrap();
     let dk = get_debt_keeper_write_ref(dk_pin);
-    let partial_id = traffic.from;
+    let exit_id = traffic.from;
     for (id, _) in dk.debt_data.clone().iter() {
-        if id.eth_address == partial_id.eth_address
-            && id.mesh_ip == partial_id.mesh_ip
-            && id.wg_public_key != partial_id.wg_public_key
-        {
+        if *id == exit_id {
             dk.traffic_update(id, traffic.amount);
             return;
         }
     }
-    error!("Wg key insensitive billing has not found a target! Gateway billing incorrect!");
+    error!("Gateway billing has not found a target! Gateway billing incorrect!");
 }
 
 /// A variant of traffic update that replaces one debts entry wholesale

@@ -71,7 +71,7 @@ pub fn thread_spawner(
         // todo spawn exits first in order to pass data to the clients? Or configure via endpoints later?
 
         match ns.node_type.clone() {
-            NodeType::Client { cluster_name: _ } => {
+            NodeType::Client { exit_name: _ } => {
                 let instance_info = spawn_rita(
                     ns.get_name(),
                     veth_interfaces,
@@ -206,11 +206,8 @@ pub fn spawn_rita_exit(
     let router_identity_ref_local = router_identity_ref.clone();
 
     let instance = TEST_EXIT_DETAILS
-        .get("test")
-        .unwrap()
-        .instances
         .get(&instance_name)
-        .expect("Why is there no instance?");
+        .expect("Why is here no instance?");
 
     let _rita_handler = thread::spawn(move || {
         // set the host of this thread to the ns
@@ -223,7 +220,7 @@ pub fn spawn_rita_exit(
         let nsname: Vec<&str> = nameclone.split('-').collect();
         let id: u32 = nsname.get(1).unwrap().parse().unwrap();
 
-        resettings.network.mesh_ip_v2 = Some(IpAddr::V6(Ipv6Addr::new(
+        resettings.network.mesh_ip = Some(IpAddr::V6(Ipv6Addr::new(
             0xfd00,
             0,
             0,
@@ -239,7 +236,7 @@ pub fn spawn_rita_exit(
         ));
         resettings.exit_network.registered_users_contract_addr = db_addr;
         resettings.network.wg_private_key = Some(instance.wg_priv_key);
-        resettings.network.wg_public_key = Some(instance.wg_pub_key);
+        resettings.network.wg_public_key = Some(instance.exit_id.wg_public_key);
         resettings.network.wg_private_key_path = wg_keypath;
         resettings.network.peer_interfaces = veth_interfaces;
         resettings.payment.local_fee = local_fee;
@@ -283,9 +280,6 @@ pub fn spawn_rita_exit(
         info!("Waiting for Rita Exit instance {} to generate keys", ns_dup);
         thread::sleep(Duration::from_millis(100));
     }
-    let mut val = router_identity_ref_local.read().unwrap().unwrap();
-
-    // Return the identity with new mesh_ip_v2, instead of shared, mesh_ip
-    val.mesh_ip = instance.mesh_ip_v2;
+    let val = router_identity_ref_local.read().unwrap().unwrap();
     val
 }

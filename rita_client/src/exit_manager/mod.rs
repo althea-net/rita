@@ -27,14 +27,19 @@ use althea_kernel_interface::{
     exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
 };
 use althea_types::ExitClientDetails;
+use althea_types::ExitListV2;
+use althea_types::Identity;
+use althea_types::Regions;
 use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
 use althea_types::{EncryptedExitList, ExitDetails, ExitList};
-use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
+use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState};
 use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;
 use rita_common::KI;
 use settings::client::{ExitServer, SelectedExit};
+use settings::get_rita_client;
+use settings::set_rita_client;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
@@ -49,9 +54,12 @@ use std::time::Instant;
 /// The number of times ExitSwitcher will try to connect to an unresponsive exit before blacklisting its ip
 const MAX_BLACKLIST_STRIKES: u16 = 100;
 
+/// Default port used to contact an exit
+const DEFAULT_EXIT_REGISTRATION_PORT: u16 = 4875;
+
 lazy_static! {
-    pub static ref SELECTED_EXIT_LIST: Arc<RwLock<SelectedExitList>> =
-        Arc::new(RwLock::new(SelectedExitList::default()));
+    pub static ref SELECTED_EXIT_DETAILS: Arc<RwLock<SelectedExitDetails>> =
+        Arc::new(RwLock::new(SelectedExitDetails::default()));
 }
 
 /// This enum has two types of warnings for misbehaving exits, a hard warning which blacklists this ip immediatly, and a
@@ -70,11 +78,11 @@ pub struct ExitBlacklist {
 }
 
 #[derive(Default)]
-pub struct SelectedExitList {
-    /// Hashmap of Structs containing information of current exit we are connected to and tracking exit, if connected to one
+pub struct SelectedExitDetails {
+    /// information of current exit we are connected to and tracking exit, if connected to one
     /// It also holds information about metrics and degradation values. Look at doc comment on 'set_best_exit' for more
     /// information on what these mean
-    pub selected_exit_list: HashMap<String, SelectedExit>,
+    pub selected_exit: SelectedExit,
     /// This struct hold infomation about exits that have misbehaved and are blacklisted, or are being watched
     /// to being blacklisted through bad responses.
     pub exit_blacklist: ExitBlacklist,
@@ -124,37 +132,24 @@ pub fn set_exit_list(list: ExitList, em_state: &mut ExitManager) -> bool {
     false
 }
 
-pub fn get_selected_exit_ip(exit: String) -> Option<IpAddr> {
-    match SELECTED_EXIT_LIST
+pub fn get_current_exit() -> Option<IpAddr> {
+    SELECTED_EXIT_DETAILS
         .read()
         .unwrap()
-        .selected_exit_list
-        .get(&exit)
-    {
-        Some(a) => a.selected_id,
-        None => None,
-    }
+        .selected_exit
+        .selected_id
 }
 
-pub fn get_full_selected_exit(exit: String) -> Option<SelectedExit> {
-    SELECTED_EXIT_LIST
-        .read()
-        .unwrap()
-        .selected_exit_list
-        .get(&exit)
-        .cloned()
+pub fn get_full_selected_exit() -> SelectedExit {
+    SELECTED_EXIT_DETAILS.read().unwrap().selected_exit.clone()
 }
 
-pub fn set_selected_exit(exit: String, exit_info: SelectedExit) {
-    SELECTED_EXIT_LIST
-        .write()
-        .unwrap()
-        .selected_exit_list
-        .insert(exit, exit_info);
+pub fn set_selected_exit(exit_info: SelectedExit) {
+    SELECTED_EXIT_DETAILS.write().unwrap().selected_exit = exit_info;
 }
 
 pub fn get_exit_blacklist() -> HashSet<IpAddr> {
-    SELECTED_EXIT_LIST
+    SELECTED_EXIT_DETAILS
         .read()
         .unwrap()
         .exit_blacklist
@@ -163,7 +158,6 @@ pub fn get_exit_blacklist() -> HashSet<IpAddr> {
 }
 
 fn linux_setup_exit_tunnel(
-    exit: String,
     general_details: &ExitDetails,
     our_details: &ExitClientDetails,
     exit_list: &ExitList,
@@ -180,7 +174,7 @@ fn linux_setup_exit_tunnel(
         return Err(RitaClientError::MiscStringError(v));
     }
 
-    let selected_ip = get_selected_exit_ip(exit).expect("There should be an exit ip here");
+    let selected_ip = get_current_exit().expect("There should be an exit ip here");
     let args = ClientExitTunnelConfig {
         endpoint: SocketAddr::new(selected_ip, exit_list.wg_exit_listen_port),
         pubkey: get_exit_pubkey(selected_ip, exit_list),
@@ -275,7 +269,7 @@ fn encrypt_exit_client_id(
 /// blackhole attacks. Exits that cant be decrypted are immediately blacklisted and those exits that fail to respond after
 /// MAX_BLACKLIST_STRIKES warning strikes are blacklisted
 fn blacklist_strike_ip(ip: IpAddr, warning: WarningType) {
-    let writer = &mut SELECTED_EXIT_LIST.write().unwrap().exit_blacklist;
+    let writer = &mut SELECTED_EXIT_DETAILS.write().unwrap().exit_blacklist;
 
     match warning {
         WarningType::SoftWarning => {
@@ -298,7 +292,7 @@ fn blacklist_strike_ip(ip: IpAddr, warning: WarningType) {
 
 /// Resets the the warnings from this ip in this blacklist. This function is called whenever we
 fn reset_blacklist_warnings(ip: IpAddr) {
-    let writer = &mut SELECTED_EXIT_LIST.write().unwrap().exit_blacklist;
+    let writer = &mut SELECTED_EXIT_DETAILS.write().unwrap().exit_blacklist;
 
     // This condition should not be reached since if an exit is blacklisted, we should never sucessfully connect to it
     if writer.blacklisted_exits.contains(&ip) {
@@ -315,7 +309,7 @@ fn reset_blacklist_warnings(ip: IpAddr) {
 /// of false positives where exits that are not supposed to be blacklist have been blacklisted, perhaps for being unresposive for
 /// long periods of time
 fn reset_exit_blacklist() {
-    let writer = &mut SELECTED_EXIT_LIST.write().unwrap().exit_blacklist;
+    let writer = &mut SELECTED_EXIT_DETAILS.write().unwrap().exit_blacklist;
 
     writer.blacklisted_exits.clear();
     writer.potential_blacklists.clear();
@@ -355,6 +349,25 @@ fn decrypt_exit_state(
             }
         };
     Ok(decrypted_exit_state)
+}
+
+/// When we retrieve an exit list from an exit, add the compatible exits to the exit server list.
+/// This allows these exits to move to GotInfo state, allowing us to switch or connect quickly
+pub fn add_exits_to_exit_server_list(list: ExitList) {
+    let mut rita_client = settings::get_rita_client();
+    let mut exits = rita_client.exit_client.exits;
+
+    for e in list.exit_list {
+        exits.entry(e.mesh_ip).or_insert(ExitServer {
+            exit_id: e,
+            registration_port: DEFAULT_EXIT_REGISTRATION_PORT,
+            info: ExitState::New,
+        });
+    }
+
+    // Update settings with new exits
+    rita_client.exit_client.exits = exits;
+    set_rita_client(rita_client);
 }
 
 async fn send_exit_setup_request(
@@ -445,21 +458,17 @@ async fn send_exit_status_request(
     }
 }
 
-async fn exit_general_details_request(exit: String) -> Result<(), RitaClientError> {
+async fn exit_general_details_request(exit: IpAddr) -> Result<(), RitaClientError> {
     let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
-            return Err(RitaClientError::NoExitError(exit));
+            return Err(RitaClientError::NoExitError(exit.to_string()));
         }
     };
 
     trace!("Getting details for exit: {:?}", exit);
-    let current_exit_ip =
-        get_selected_exit_ip(exit.clone()).expect("There should be a selected ip here");
 
-    trace!("Current exit ip is : {:?}", current_exit_ip);
-
-    let endpoint = SocketAddr::new(current_exit_ip, current_exit.registration_port);
+    let endpoint = SocketAddr::new(current_exit.exit_id.mesh_ip, current_exit.registration_port);
 
     trace!(
         "sending exit general details request to {} with endpoint {:?}",
@@ -470,113 +479,102 @@ async fn exit_general_details_request(exit: String) -> Result<(), RitaClientErro
     let mut rita_client = settings::get_rita_client();
     let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
         Some(exit) => exit,
-        None => return Err(RitaClientError::ExitNotFound(exit)),
+        None => return Err(RitaClientError::ExitNotFound(exit.to_string())),
     };
     current_exit.info = exit_details;
     settings::set_rita_client(rita_client);
     Ok(())
 }
 
-pub async fn exit_setup_request(exit: String, code: Option<String>) -> Result<(), RitaClientError> {
+/// Registration is simply one of the exits requesting an update to a global smart contract
+/// with our information.
+pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientError> {
     let exit_client = settings::get_rita_client().exit_client;
-    let current_exit = match exit_client.exits.get(&exit) {
-        Some(exit_struct) => exit_struct.clone(),
-        None => return Err(RitaClientError::ExitNotFound(exit)),
-    };
 
-    let current_exit_ip = get_selected_exit_ip(exit.clone());
+    for (_, exit) in exit_client.exits {
+        match &exit.info {
+            ExitState::GotInfo { .. } | ExitState::Pending { .. } => {
+                let exit_pubkey = exit.exit_id.wg_public_key;
 
-    // If exit is not setup in lazy static, set up with subnet ip
-    let exit_server = match current_exit_ip {
-        Some(a) => a,
-        None => {
-            // set this ip in the lazy static
-            initialize_selected_exit_list(exit.clone(), current_exit.clone());
-            current_exit.root_ip
-        }
-    };
-    let exit_pubkey = current_exit.wg_public_key;
+                let mut reg_details: ExitRegistrationDetails =
+                    match settings::get_rita_client().exit_client.contact_info {
+                        Some(val) => val.into(),
+                        None => {
+                            return Err(RitaClientError::MiscStringError(
+                                "No registration info set!".to_string(),
+                            ))
+                        }
+                    };
 
-    let exit_auth_type = match current_exit.info.general_details() {
-        Some(details) => details.verif_mode,
-        None => {
-            return Err(RitaClientError::MiscStringError(
-                "Exit is not ready to be setup!".to_string(),
-            ))
-        }
-    };
+                // Send a verification code if we have one
+                reg_details.phone_code = code;
 
-    let mut reg_details: ExitRegistrationDetails =
-        match settings::get_rita_client().exit_client.contact_info {
-            Some(val) => val.into(),
-            None => {
-                if let ExitVerifMode::Off = exit_auth_type {
-                    ExitRegistrationDetails {
-                        email: None,
-                        email_code: None,
-                        phone: None,
-                        phone_code: None,
-                        sequence_number: None,
-                    }
+                let ident = ExitClientIdentity {
+                    global: match settings::get_rita_client().get_identity() {
+                        Some(id) => id,
+                        None => {
+                            return Err(RitaClientError::MiscStringError(
+                                "Identity has no mesh IP ready yet".to_string(),
+                            ));
+                        }
+                    },
+                    wg_port: exit_client.wg_listen_port,
+                    reg_details,
+                };
+
+                let endpoint = SocketAddr::new(exit.exit_id.mesh_ip, exit.registration_port);
+
+                info!(
+                    "sending exit setup request {:?} to {:?}, using {:?}",
+                    ident, exit, endpoint
+                );
+
+                let exit_response = send_exit_setup_request(exit_pubkey, endpoint, ident).await?;
+
+                info!("Setting an exit setup response");
+                let mut rita_client = get_rita_client();
+                if let Some(exit_to_update) =
+                    rita_client.exit_client.exits.get_mut(&exit.exit_id.mesh_ip)
+                {
+                    exit_to_update.info = exit_response;
                 } else {
-                    return Err(RitaClientError::MiscStringError(
-                        "No registration info set!".to_string(),
-                    ));
+                    warn!("Could not find an exit we just queried?");
                 }
-            }
-        };
 
-    match exit_auth_type {
-        ExitVerifMode::Email => {
-            reg_details.email_code = code;
+                set_rita_client(rita_client);
+                return Ok(());
+            }
+            ExitState::New => {
+                warn!(
+                    "Exit {} is in ExitState NEW, not ready to be setup",
+                    exit.exit_id.mesh_ip
+                );
+            }
+            ExitState::Denied { message } => {
+                warn!(
+                    "Exit {} is in ExitState DENIED with {}, not able to be setup",
+                    exit.exit_id.mesh_ip, message
+                );
+            }
+            ExitState::Registered { .. } => {
+                warn!(
+                    "Exit {} already reports us as registered",
+                    exit.exit_id.mesh_ip
+                )
+            }
         }
-        ExitVerifMode::Phone => {
-            reg_details.phone_code = code;
-        }
-        ExitVerifMode::Off => {}
     }
 
-    let ident = ExitClientIdentity {
-        global: match settings::get_rita_client().get_identity() {
-            Some(id) => id,
-            None => {
-                return Err(RitaClientError::MiscStringError(
-                    "Identity has no mesh IP ready yet".to_string(),
-                ));
-            }
-        },
-        wg_port: exit_client.wg_listen_port,
-        reg_details,
-    };
-
-    let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
-
-    info!(
-        "sending exit setup request {:?} to {}, using {:?}",
-        ident, exit, endpoint
-    );
-
-    let exit_response = send_exit_setup_request(exit_pubkey, endpoint, ident).await?;
-
-    let mut rita_client = settings::get_rita_client();
-
-    let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
-        Some(exit_struct) => exit_struct,
-        None => return Err(RitaClientError::ExitNotFound(exit)),
-    };
-
-    info!("Setting an exit setup response");
-    current_exit.info = exit_response;
-    settings::set_rita_client(rita_client);
-
-    Ok(())
+    Err(RitaClientError::MiscStringError(
+        "Could not find a valid exit to register to!".to_string(),
+    ))
 }
 
-async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
+async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
     let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
-            return Err(RitaClientError::NoExitError(exit));
+            return Err(RitaClientError::NoExitError(exit.to_string()));
         }
     };
     let reg_details = match settings::get_rita_client().exit_client.contact_info {
@@ -588,10 +586,7 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
         }
     };
 
-    let current_exit_ip = get_selected_exit_ip(exit.clone());
-
-    let exit_server = current_exit_ip.expect("There should be an exit ip here");
-    let exit_pubkey = current_exit.wg_public_key;
+    let exit_pubkey = current_exit.exit_id.wg_public_key;
     let ident = ExitClientIdentity {
         global: match settings::get_rita_client().get_identity() {
             Some(id) => id,
@@ -605,7 +600,7 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
         reg_details,
     };
 
-    let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
+    let endpoint = SocketAddr::new(current_exit.exit_id.mesh_ip, current_exit.registration_port);
 
     trace!(
         "sending exit status request to {} using {:?}",
@@ -617,7 +612,7 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
     let mut rita_client = settings::get_rita_client();
     let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
         Some(exit_struct) => exit_struct,
-        None => return Err(RitaClientError::ExitNotFound(exit)),
+        None => return Err(RitaClientError::ExitNotFound(exit.to_string())),
     };
     current_exit.info = exit_response.clone();
     settings::set_rita_client(rita_client);
@@ -626,15 +621,16 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
     Ok(())
 }
 
-async fn get_cluster_ip_list(exit: String) -> Result<ExitList, RitaClientError> {
-    let current_exit_cluster = match settings::get_rita_client().exit_client.exits.get(&exit) {
+/// Hits the exit_list endpoint for a given exit.
+async fn get_exit_list(exit: IpAddr) -> Result<ExitList, RitaClientError> {
+    let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
-            return Err(RitaClientError::NoExitError(exit));
+            return Err(RitaClientError::NoExitError(exit.to_string()));
         }
     };
 
-    let exit_pubkey = current_exit_cluster.wg_public_key;
+    let exit_pubkey = current_exit.exit_id.wg_public_key;
     let reg_details = match settings::get_rita_client().exit_client.contact_info {
         Some(val) => val.into(),
         None => {
@@ -656,12 +652,11 @@ async fn get_cluster_ip_list(exit: String) -> Result<ExitList, RitaClientError> 
         reg_details,
     };
 
-    let current_exit_ip = get_selected_exit_ip(exit.clone());
-    let exit_server = current_exit_ip.expect("There should be an exit ip here");
+    let exit_server = current_exit.exit_id.mesh_ip;
 
     let endpoint = format!(
-        "http://[{}]:{}/exit_list",
-        exit_server, current_exit_cluster.registration_port
+        "http://[{}]:{}/exit_list_v2",
+        exit_server, current_exit.registration_port
     );
     let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
 
@@ -712,7 +707,7 @@ fn decrypt_exit_list(
         .into();
     let ciphertext = exit_list.exit_list;
     let nonce = Nonce(exit_list.nonce);
-    let ret: ExitList = match box_::open(&ciphertext, &nonce, &exit_pubkey, &our_secretkey) {
+    let ret: ExitListV2 = match box_::open(&ciphertext, &nonce, &exit_pubkey, &our_secretkey) {
         Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
             Ok(json_string) => match serde_json::from_str(&json_string) {
                 Ok(ip_list) => ip_list,
@@ -732,7 +727,59 @@ fn decrypt_exit_list(
             ));
         }
     };
-    Ok(ret)
+    Ok(convert_exit_list(ret))
+}
+
+/// This function converts an exit list v2 (which has allowed payments and region codes for each exit) into
+/// an exit list, where the exit we can connect to are filtered based on our selected regions and system chain
+fn convert_exit_list(list: ExitListV2) -> ExitList {
+    let rita_client = settings::get_rita_client();
+    let mut regions = rita_client.network.allowed_countries;
+    if regions.contains(&Regions::UknownRegion) {
+        error!(
+            "Why is this router setup with an unknown region? please fix: {:?}",
+            regions
+        );
+        regions.remove(&Regions::UknownRegion);
+    }
+    let payments = rita_client.network.payment_chains;
+
+    if regions.is_empty() || payments.is_empty() {
+        error!(
+            "Either region or payment not setup correctly! \nRegions: {:?} \nPayments: {:?}",
+            regions, payments
+        )
+    }
+
+    let mut ret = vec![];
+    for exit in list.exit_list {
+        let mut exit_regions = exit.allowed_regions.clone();
+        let exit_payments = exit.payment_types.clone();
+
+        // Sanity check info received from exits
+        if exit_regions.contains(&Regions::UknownRegion) {
+            error!("An exit has an unknown region! {:?}", exit);
+            exit_regions.remove(&Regions::UknownRegion);
+        }
+        if exit_regions.is_empty() || exit_payments.is_empty() {
+            error!("Received an invalid exit: {:?}", exit);
+            continue;
+        }
+
+        if !regions.is_disjoint(&exit_regions) && !payments.is_disjoint(&exit_payments) {
+            ret.push(Identity {
+                mesh_ip: exit.mesh_ip,
+                eth_address: exit.eth_addr,
+                wg_public_key: exit.wg_key,
+                nickname: None,
+            })
+        }
+    }
+
+    ExitList {
+        exit_list: ret,
+        wg_exit_listen_port: list.wg_exit_listen_port,
+    }
 }
 
 fn correct_default_route(input: Option<DefaultRoute>) -> bool {
@@ -740,24 +787,6 @@ fn correct_default_route(input: Option<DefaultRoute>) -> bool {
         Some(v) => v.is_althea_default_route(),
         None => false,
     }
-}
-
-/// This function initializes the Selected Exit list every tick by adding an entry if there isnt one
-/// THe reason we store this info is to get general details of all exits on the manual peers list
-/// This function call should be moved to another location as it doesnt need to be called on every tick, only on startup
-fn initialize_selected_exit_list(exit: String, server: ExitServer) {
-    let list = &mut SELECTED_EXIT_LIST.write().unwrap().selected_exit_list;
-
-    info!(
-        "Setting initialized IP for exit {} with ip: {}",
-        exit, server.root_ip
-    );
-    list.entry(exit).or_insert_with(|| SelectedExit {
-        selected_id: Some(server.root_ip),
-        selected_id_degradation: None,
-        tracking_exit: None,
-        selected_id_metric: None,
-    });
 }
 
 /// This function takes a list of babel routes and uses this to insert ip -> route
@@ -772,9 +801,29 @@ fn get_routes_hashmap(routes: Vec<Route>) -> HashMap<IpAddr, Route> {
     ret
 }
 
+/// Exits are ready to switch to when they are in the Registered State, we return list of exits that are
+pub fn get_ready_to_switch_exits(exit_list: ExitList) -> Vec<Identity> {
+    let exits = get_rita_client().exit_client.exits;
+
+    let mut ret = vec![];
+    for exit in exit_list.exit_list {
+        match exits.get(&exit.mesh_ip) {
+            Some(server) => {
+                if let ExitState::Registered { .. } = server.info {
+                    ret.push(exit);
+                }
+            }
+            None => {
+                error!("Exit List logic error! All entries of exit list should be setup in config!")
+            }
+        }
+    }
+    ret
+}
+
 pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
     let rita_settings = settings::get_rita_client();
-    let current_exit = rita_settings.exit_client.current_exit;
+    let current_exit = get_current_exit();
     if let Some(exit) = current_exit {
         let exit_ser = rita_settings.exit_client.exits.get(&exit);
         if let Some(exit_ser) = exit_ser {
@@ -824,23 +873,26 @@ pub fn has_exit_changed(
 
 #[cfg(test)]
 mod tests {
-    use althea_types::SystemChain;
+    use althea_types::{ExitVerifMode, SystemChain};
 
     use super::*;
 
     #[test]
     fn test_exit_has_changed() {
         let mut exit_server = ExitServer {
-            root_ip: "fd00::1337".parse().unwrap(),
-            subnet: None,
-            eth_address: "0xd2C5b6dd6ca641BE4c90565b5d3DA34C14949A53"
-                .parse()
-                .unwrap(),
+            exit_id: Identity {
+                mesh_ip: "fd00::1337".parse().unwrap(),
+                eth_address: "0xd2C5b6dd6ca641BE4c90565b5d3DA34C14949A53"
+                    .parse()
+                    .unwrap(),
+                wg_public_key: "V9I9yrxAqFqLV+9GeT5pnXPwk4Cxgfvl30Fv8khVGsM="
+                    .parse()
+                    .unwrap(),
+                nickname: None,
+            },
+
             registration_port: 3452,
-            wg_public_key: "V9I9yrxAqFqLV+9GeT5pnXPwk4Cxgfvl30Fv8khVGsM="
-                .parse()
-                .unwrap(),
-            description: "Dummy exit server!".to_string(),
+
             info: ExitState::New,
         };
         let dummy_exit_details = ExitDetails {

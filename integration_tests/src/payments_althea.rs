@@ -49,8 +49,7 @@ pub async fn run_althea_payments_test_scenario() {
     info!("Starting registration server");
     start_registration_server(db_addr).await;
 
-    let (mut client_settings, mut exit_settings) =
-        get_default_settings("test".to_string(), namespaces.clone());
+    let (mut client_settings, mut exit_settings) = get_default_settings(namespaces.clone());
 
     namespaces.validate();
 

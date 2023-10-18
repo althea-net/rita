@@ -4,8 +4,9 @@
 //! This loop manages exit signup based on the settings configuration state and deploys an exit vpn
 //! tunnel if the signup was successful on the selected exit.
 
-use crate::exit_manager::get_selected_exit_ip;
+use crate::exit_manager::get_current_exit;
 use crate::get_interfaces;
+use crate::heartbeat::get_selected_exit_server;
 use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::operator_fee_manager::tick_operator_payments;
@@ -172,17 +173,8 @@ fn check_for_gateway_client_billing_corner_case() {
     let res = tm_get_neighbors();
     // strange notation lets us scope our access to SETTING and prevent
     // holding a readlock
-    let exit_server = {
-        settings::get_rita_client()
-            .exit_client
-            .get_current_exit()
-            .cloned()
-    };
-    let rita_client = settings::get_rita_client();
-    let current_exit = match rita_client.exit_client.current_exit {
-        Some(a) => a,
-        None => "".to_string(),
-    };
+    let exit_server = get_selected_exit_server();
+
     let neighbors = res;
     if let Some(exit) = exit_server {
         if let ExitState::Registered { .. } = exit.info {
@@ -190,10 +182,10 @@ fn check_for_gateway_client_billing_corner_case() {
                 info!("Neighbor is {:?}", neigh);
                 // we have a neighbor who is also our selected exit!
                 // wg_key excluded due to multihomed exits having a different one
-                let current_ip = get_selected_exit_ip(current_exit.clone())
-                    .expect("If registered, there should be an exit ip here");
+                let current_ip =
+                    get_current_exit().expect("If registered, there should be an exit ip here");
                 if neigh.identity.global.mesh_ip == current_ip
-                    && neigh.identity.global.eth_address == exit.eth_address
+                    && neigh.identity.global.eth_address == exit.exit_id.eth_address
                 {
                     info!("We are a gateway client");
                     set_gateway_client(true);

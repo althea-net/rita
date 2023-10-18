@@ -10,7 +10,6 @@ use crate::utils::{
     add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_default_settings,
     get_ip_from_namespace, populate_routers_eth, query_debts, register_all_namespaces_to_exit,
     test_all_internet_connectivity, test_reach_all, test_routes, DEBT_ACCURACY_THRES,
-    TEST_EXIT_DETAILS,
 };
 use num256::Int256;
 use num_traits::Signed;
@@ -50,8 +49,7 @@ pub async fn run_debts_test() {
     info!("Starting registration server");
     start_registration_server(db_addr).await;
 
-    let (client_settings, exit_settings) =
-        get_default_settings("test".to_string(), namespaces.clone());
+    let (client_settings, exit_settings) = get_default_settings(namespaces.clone());
 
     // The exit price is set to ns.cost during thread_spawner
     let exit_price = namespaces.get_namespace(4).unwrap().cost;
@@ -153,7 +151,6 @@ pub async fn run_debts_test() {
                 &existing_debts_screenshot,
                 1u32,
                 weight_left,
-                to_node.is_none(),
             );
 
             weight_left -= to_neigh.cost
@@ -168,7 +165,6 @@ pub async fn run_debts_test() {
                 &existing_debts_screenshot,
                 1u32,
                 exit_price,
-                to_node.is_none(),
             );
         }
     }
@@ -232,7 +228,6 @@ pub fn validate_debt_increase(
     existing_debts_screenshot: &HashMap<Namespace, Vec<GetDebtsResult>>,
     data_sent: u32,
     weight: u32,
-    to_internet: bool,
 ) {
     let bytes_per_gb: Int256 = (1024u64 * 1024u64 * 1024u64).into();
 
@@ -240,7 +235,6 @@ pub fn validate_debt_increase(
     let (debt_entry, existing_debt_entry) = get_relevant_debt_entries(
         debts_screenshot,
         existing_debts_screenshot,
-        to_internet,
         from_node.clone(),
         to_node.clone(),
     );
@@ -272,7 +266,6 @@ pub fn validate_debt_increase(
     let (debt_entry, existing_debt_entry) = get_relevant_debt_entries(
         debts_screenshot,
         existing_debts_screenshot,
-        to_internet,
         to_node.clone(),
         from_node.clone(),
     );
@@ -315,7 +308,6 @@ pub fn validate_debt_increase(
 fn get_relevant_debt_entries(
     debts_screenshot: &HashMap<Namespace, Vec<GetDebtsResult>>,
     existing_debts_screenshot: &HashMap<Namespace, Vec<GetDebtsResult>>,
-    to_internet: bool,
     debt_of_node: Namespace,
     querying_node: Namespace,
 ) -> (GetDebtsResult, GetDebtsResult) {
@@ -326,20 +318,7 @@ fn get_relevant_debt_entries(
         .get(&debt_of_node)
         .expect("There needs to be an entry here")
     {
-        // If an exit, get the root ip debt entry as it acts a relay
-
-        if let NodeType::Exit { .. } = querying_node.node_type {
-            if to_internet {
-                if entry.identity.mesh_ip.to_string()
-                    == get_ip_from_namespace(querying_node.clone())
-                {
-                    debt_entry.push(entry.clone());
-                }
-            } else if entry.identity.mesh_ip == TEST_EXIT_DETAILS.get("test").unwrap().root_ip {
-                debt_entry.push(entry.clone());
-            }
-        } else if entry.identity.mesh_ip.to_string() == get_ip_from_namespace(querying_node.clone())
-        {
+        if entry.identity.mesh_ip.to_string() == get_ip_from_namespace(querying_node.clone()) {
             debt_entry.push(entry.clone());
         }
     }
@@ -348,19 +327,7 @@ fn get_relevant_debt_entries(
         .get(&debt_of_node)
         .expect("There needs to be an entry here")
     {
-        if let NodeType::Exit { .. } = querying_node.node_type {
-            if to_internet {
-                if entry.identity.mesh_ip.to_string()
-                    == get_ip_from_namespace(querying_node.clone())
-                {
-                    info!("Adding entry: {}", entry.identity);
-                    existing_debt_entry.push(entry.clone());
-                }
-            } else if entry.identity.mesh_ip == TEST_EXIT_DETAILS.get("test").unwrap().root_ip {
-                existing_debt_entry.push(entry.clone());
-            }
-        } else if entry.identity.mesh_ip.to_string() == get_ip_from_namespace(querying_node.clone())
-        {
+        if entry.identity.mesh_ip.to_string() == get_ip_from_namespace(querying_node.clone()) {
             info!("Adding entry: {}", entry.identity);
             existing_debt_entry.push(entry.clone());
         }
