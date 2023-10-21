@@ -11,8 +11,8 @@ path = "src/main.rs"
 env_logger = "0.10"
 log = "0.4"
 docopt = "1.1"
-ctrlc = { version = "3.2.1", features = ["termination"] }
-awc = "3.1"
+ctrlc = {version = "3.2.1", features = ["termination"]}
+awc = {workspace = true}
 actix-rt = "2.8"
 integration_tests = { path = "../integration_tests" }
 althea_types = { path = "../althea_types" }

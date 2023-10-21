@@ -97,7 +97,7 @@ pub mod test {
         assert!(res2 == res4);
     }
 
-    /// tests that the flat conversion comes out in the right order (decreasing usage hours)
+    /// tests that the flat conversion comes out in the right order (increasing usage hours)
     #[test]
     fn check_flat_conversion() {
         let tracker = generate_dummy_usage_tracker();
@@ -105,7 +105,7 @@ pub mod test {
         let mut last: Option<IndexedUsageHour> = None;
         for i in flat {
             if let Some(last) = last {
-                assert!(i.index < last.index)
+                assert!(i.index > last.index)
             }
             last = Some(i)
         }

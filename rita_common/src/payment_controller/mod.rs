@@ -31,6 +31,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::time::Instant;
 use web30::client::Web3;
+use web30::jsonrpc::error::Web3Error;
 use web30::types::SendTxOption;
 
 pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
@@ -353,11 +354,12 @@ async fn make_xdai_payment(
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
 
-    let transaction_status = web3
-        .send_transaction(
+    let tx = web3
+        .prepare_legacy_transaction(
             pmt.to.eth_address,
             Vec::new(),
             pmt.amount,
+            our_private_key.to_address(),
             *our_private_key,
             vec![
                 SendTxOption::Nonce(nonce),
@@ -366,44 +368,66 @@ async fn make_xdai_payment(
         )
         .await;
 
-    if transaction_status.is_err() {
-        error!(
-            "Failed to send payment {:?} to {:?} with {:?}",
-            pmt, pmt.to, transaction_status
-        );
-        // we have not yet published the tx (at least hopefully)
-        // so it's safe to add this debt back to our balances
-        payment_failed(pmt.to);
-        return Err(PaymentControllerError::FailedToSendPayment);
-    }
-    let tx_id = transaction_status.unwrap();
+    match tx {
+        Ok(tx) => {
+            let transaction_status = web3.send_prepared_transaction(tx.clone()).await;
+            let tx_id = match transaction_status {
+                Ok(tx_id) => tx_id,
+                Err(e) => {
+                    error!(
+                        "Failed to send payment {:?} to {:?} with {:?}",
+                        pmt, pmt.to, e
+                    );
+                    // it is now possible that this transaction has been published
+                    // so we have to try and determine what happened
+                    if let Web3Error::JsonRpcError { .. } = e {
+                        // in this case, we got a response from the full node that it did not like our
+                        // tx, no chance that it is published (unless they start lying to us in a new way)
+                        payment_failed(pmt.to);
+                        return Err(PaymentControllerError::FailedToSendPayment);
+                    } else {
+                        // the published state of the tx is ambiguous, now we have to pretend like we sent it.
+                        tx.txid()
+                    }
+                }
+            };
 
-    // increment our nonce, this allows us to send another transaction
-    // right away before this one that we just sent out gets into the chain
-    {
-        set_oracle_nonce(get_oracle_nonce() + 1u64.into());
-    }
+            // increment our nonce, this allows us to send another transaction
+            // right away before this one that we just sent out gets into the chain
+            set_oracle_nonce(get_oracle_nonce() + 1u64.into());
 
-    info!("Sending bw payment with txid {:#066x} current balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
+            info!("Sending bw payment with txid {:#066x} current balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
                             tx_id, balance, pmt.amount, our_address, pmt.to.eth_address, nonce);
 
-    // add published txid to submission
-    let pmt = pmt.publish(tx_id);
+            // add published txid to submission
+            let pmt = pmt.publish(tx_id);
 
-    send_make_payment_endpoints(pmt, network_settings, Some(full_node), None).await;
+            send_make_payment_endpoints(pmt.clone(), network_settings, Some(full_node), None).await;
 
-    // place this payment in the validation queue to handle later.
-    let ts = ToValidate {
-        payment: pmt,
-        received: Instant::now(),
-        checked: false,
-    };
+            // place this payment in the validation queue to handle later.
+            let ts = ToValidate {
+                payment: pmt,
+                received: Instant::now(),
+                checked: false,
+            };
 
-    if let Err(e) = validate_later(ts.clone()) {
-        error!("Received error trying to validate {:?} Error: {:?}", ts, e);
+            if let Err(e) = validate_later(ts.clone()) {
+                error!("Received error trying to validate {:?} Error: {:?}", ts, e);
+            }
+
+            Ok(())
+        }
+        Err(e) => {
+            error!(
+                "Failed to send payment {:?} to {:?} with {:?}",
+                pmt, pmt.to, e
+            );
+            // we have not yet published the tx
+            // so it's safe to add this debt back to our balances
+            payment_failed(pmt.to);
+            Err(PaymentControllerError::FailedToSendPayment)
+        }
     }
-
-    Ok(())
 }
 
 fn sanity_check_balance(

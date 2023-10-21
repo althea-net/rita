@@ -98,45 +98,49 @@ pub async fn tick_simulated_tx() {
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
 
-    let transaction_status = web3.send_transaction(
-        simulated_transaction_fee_address,
-        Vec::new(),
-        amount_to_pay,
-        eth_private_key,
-        vec![
-            SendTxOption::Nonce(nonce),
-            SendTxOption::GasPrice(gas_price),
-        ],
-    );
+    let tx = web3
+        .prepare_transaction(
+            simulated_transaction_fee_address,
+            Vec::new(),
+            amount_to_pay,
+            eth_private_key,
+            vec![
+                SendTxOption::Nonce(nonce),
+                SendTxOption::GasPrice(gas_price),
+            ],
+        )
+        .await;
+    match tx {
+        Ok(tx) => match web3.send_prepared_transaction(tx).await {
+            Ok(txid) => {
+                info!("Successfully paid the simulated txfee {:#066x}!", txid);
+                update_payments(PaymentTx {
+                    to: txfee_identity,
+                    from: our_id,
+                    amount: amount_to_pay,
+                    txid,
+                });
 
-    // in theory this may fail, for now there is no handler and
-    // we will just underpay when that occurs
-    match transaction_status.await {
-        Ok(txid) => {
-            info!("Successfully paid the simulated txfee {:#066x}!", txid);
-            update_payments(PaymentTx {
-                to: txfee_identity,
-                from: our_id,
-                amount: amount_to_pay,
-                txid,
-            });
-
-            // update the billing now that the payment has gone through
-            let amount_owed = &mut *AMOUNT_OWED.write().unwrap();
-            let amount_owed = get_amount_owed_write_ref(amount_owed);
-            let payment_amount = amount_to_pay;
-            if payment_amount <= *amount_owed {
-                *amount_owed -= payment_amount;
-            } else {
-                // I don't think this can ever happen unless successful
-                // payment gets called outside of this actor, or more than one
-                // instance of this actor exists, System service prevents the later
-                // and the lack of 'pub' prevents the former
-                error!("Maintainer fee overpayment!")
+                // update the billing now that the payment has gone through
+                let amount_owed = &mut *AMOUNT_OWED.write().unwrap();
+                let amount_owed = get_amount_owed_write_ref(amount_owed);
+                let payment_amount = amount_to_pay;
+                if payment_amount <= *amount_owed {
+                    *amount_owed -= payment_amount;
+                } else {
+                    // I don't think this can ever happen unless successful
+                    // payment gets called outside of this actor, or more than one
+                    // instance of this actor exists, System service prevents the later
+                    // and the lack of 'pub' prevents the former
+                    error!("Maintainer fee overpayment!")
+                }
             }
-        }
+            Err(e) => {
+                warn!("Failed to pay simulated txfee! {:?}", e);
+            }
+        },
         Err(e) => {
             warn!("Failed to pay simulated txfee! {:?}", e);
         }
-    };
+    }
 }

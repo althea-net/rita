@@ -15,7 +15,7 @@ rita_common = { path = "../rita_common" }
 rita_client = { path = "../rita_client" }
 log = { version = "0.4", features = ["release_max_level_info"] }
 settings = { path = "../settings" }
-awc = "3.1"
+awc = {workspace = true}
 actix-async = {package="actix", version = "0.13"}
 actix-web-async = { package="actix-web", version = "4.3", default_features = false, features= ["openssl"]}
 althea_types = {path = "../althea_types"}

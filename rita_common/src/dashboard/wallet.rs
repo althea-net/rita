@@ -86,8 +86,8 @@ pub async fn eth_compatible_withdraw(dest: Address, amount: Uint256) -> HttpResp
     let web3 = Web3::new(&full_node, WITHDRAW_TIMEOUT);
     let payment_settings = settings::get_rita_common().payment;
 
-    let transaction_status = web3
-        .send_transaction(
+    let tx = web3
+        .prepare_transaction(
             dest,
             Vec::new(),
             amount,
@@ -98,10 +98,18 @@ pub async fn eth_compatible_withdraw(dest: Address, amount: Uint256) -> HttpResp
             ],
         )
         .await;
-    if let Err(e) = transaction_status {
-        HttpResponse::InternalServerError().json(format!("Withdraw failed with {:?} try again!", e))
-    } else {
-        HttpResponse::Ok().json(format!("Successful withdraw of {} to {}", amount, dest))
+    match tx {
+        Ok(tx) => {
+            let transaction_status = web3.send_prepared_transaction(tx).await;
+            if let Err(e) = transaction_status {
+                HttpResponse::InternalServerError()
+                    .json(format!("Withdraw failed with {:?} try again!", e))
+            } else {
+                HttpResponse::Ok().json(format!("Successful withdraw of {} to {}", amount, dest))
+            }
+        }
+        Err(e) => HttpResponse::InternalServerError()
+            .json(format!("Withdraw failed with {:?} try again!", e)),
     }
 }
 

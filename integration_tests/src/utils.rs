@@ -1013,7 +1013,7 @@ pub async fn send_eth_bulk(amount: Uint256, destinations: &[clarity::Address], w
     }
     let mut txids = Vec::new();
     for tx in transactions.iter() {
-        let txid = web3.eth_send_raw_transaction(tx.to_bytes()).await;
+        let txid = web3.send_prepared_transaction(tx.clone()).await;
         info!("{:?}", txid);
         txids.push(txid);
     }

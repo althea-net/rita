@@ -119,9 +119,9 @@ impl TokenBridge {
         // You basically just send it some dai to the bridge address and they show
         // up in the same address on the xdai side we have no idea when this has succeeded
         // since the events are not indexed
-        let tx_hash = self
+        let tx = self
             .eth_web3
-            .send_transaction(
+            .prepare_transaction(
                 *DAI_CONTRACT_ON_ETH,
                 encode_call(
                     "transfer(address,uint256)",
@@ -133,6 +133,7 @@ impl TokenBridge {
                 Vec::new(),
             )
             .await?;
+        let tx_hash = self.eth_web3.send_prepared_transaction(tx).await?;
 
         self.eth_web3
             .wait_for_transaction(tx_hash, timeout, None)
@@ -178,9 +179,9 @@ impl TokenBridge {
             bytes_to_hex_str(&payload),
         );
 
-        let txid = self
+        let tx = self
             .eth_web3
-            .send_transaction(
+            .prepare_transaction(
                 self.xdai_bridge_on_eth,
                 payload,
                 0u32.into(),
@@ -188,6 +189,7 @@ impl TokenBridge {
                 Vec::new(),
             )
             .await?;
+        let txid = self.eth_web3.send_prepared_transaction(tx).await?;
 
         let _ = self
             .eth_web3
@@ -369,9 +371,9 @@ pub async fn encode_relaytokens(
     let payload = encode_call("relayTokens(address)", &[dest_address.into()]).unwrap();
     let options = Vec::new();
 
-    let tx_hash = bridge
+    let tx = bridge
         .xdai_web3
-        .send_transaction(
+        .prepare_transaction(
             bridge.xdai_bridge_on_xdai,
             payload,
             amount,
@@ -379,6 +381,7 @@ pub async fn encode_relaytokens(
             options,
         )
         .await?;
+    let tx_hash = bridge.xdai_web3.send_prepared_transaction(tx).await?;
 
     bridge
         .xdai_web3

@@ -26,15 +26,15 @@ rita_db_migration = { path = "../rita_db_migration" }
 ctrlc = { version = "3.2.1", features = ["termination"] }
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 diesel_migrations = { version = "1.4", features = ["postgres"] }
-awc = "3.1"
+awc = {workspace = true}
 actix-rt = "2.8"
-deep_space = { workspace = true }
-clarity = "1.2"
+deep_space = {workspace = true}
+clarity = {workspace = true}
 althea_proto = "0.3.0"
 futures = { version = "0.3", features = ["compat"] }
 num256 = "0.5"
-num-traits = "0.2"
-web30 = "1.0"
+num-traits="0.2"
+web30 = {workspace = true}
 lazy_static = "1.4"
 actix-web = { version = "4.3", default_features = false, features = [
     "openssl",

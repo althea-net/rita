@@ -13,7 +13,7 @@ log = "0.4"
 ipgen = "1.0.1"
 rand = "0.8"
 serde_json = "1.0"
-clarity = "1.2"
+clarity = {workspace = true}
 sodiumoxide = "0.2"
 deep_space = { workspace = true }
 
