@@ -175,7 +175,6 @@ fn process_messages(
             ForwardingProtocolMessage::ConnectionCloseMessage { stream_id } => {
                 trace!("Got close message for stream {}", stream_id);
                 *last_message = Instant::now();
-                let stream_id = stream_id;
                 if let Some(stream) = streams.get(stream_id) {
                     let _res = stream.stream.shutdown(Shutdown::Both);
                     streams.remove(stream_id);

@@ -103,8 +103,8 @@ pub async fn add_client_to_registered_list(
     wait_timeout: Option<Duration>,
     options: Vec<SendTxOption>,
 ) -> Result<Uint256, Web3Error> {
-    let tx_hash = web30
-        .send_transaction(
+    let tx = web30
+        .prepare_transaction(
             contract,
             encode_call(
                 "add_registered_user((string,string,address))",
@@ -119,6 +119,7 @@ pub async fn add_client_to_registered_list(
             options,
         )
         .await?;
+    let tx_hash = web30.send_prepared_transaction(tx).await?;
 
     if let Some(timeout) = wait_timeout {
         future_timeout(timeout, web30.wait_for_transaction(tx_hash, timeout, None)).await??;

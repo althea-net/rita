@@ -125,8 +125,8 @@ pub async fn tick_operator_payments() {
         let full_node = get_web3_server();
         let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
 
-        let transaction_status = web3
-            .send_transaction(
+        let tx = web3
+            .prepare_transaction(
                 operator_address,
                 Vec::new(),
                 amount_to_pay,
@@ -137,26 +137,27 @@ pub async fn tick_operator_payments() {
                 ],
             )
             .await;
-
-        // in theory this may fail to get into a block, for now there is no handler and
-        // we will just underpay when that occurs. Failure to successfully submit the tx
-        // will be properly retried
-        match transaction_status {
-            Ok(txid) => {
-                info!(
-                    "Successfully paid the operator {} wei with txid: {:#066x}!",
-                    amount_to_pay, txid
-                );
-                update_payments(PaymentTx {
-                    to: operator_identity,
-                    from: our_id,
-                    amount: amount_to_pay,
-                    txid,
-                });
-                add_tx_to_total(amount_to_pay);
-                state.operator_debt -= amount_to_pay;
-                set_operator_fee_data(state);
-            }
+        match tx {
+            Ok(tx) => match web3.send_prepared_transaction(tx).await {
+                Ok(txid) => {
+                    info!(
+                        "Successfully paid the operator {} wei with txid: {:#066x}!",
+                        amount_to_pay, txid
+                    );
+                    update_payments(PaymentTx {
+                        to: operator_identity,
+                        from: our_id,
+                        amount: amount_to_pay,
+                        txid,
+                    });
+                    add_tx_to_total(amount_to_pay);
+                    state.operator_debt -= amount_to_pay;
+                    set_operator_fee_data(state);
+                }
+                Err(e) => {
+                    warn!("Failed to pay the operator! {:?}", e);
+                }
+            },
             Err(e) => {
                 warn!("Failed to pay the operator! {:?}", e);
             }

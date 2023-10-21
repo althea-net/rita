@@ -27,14 +27,14 @@ phonenumber = "0.3"
 babel_monitor = { path = "../babel_monitor" }
 arrayvec = { version = "0.7", features = ["serde"] }
 sodiumoxide = "0.2"
-web30 = "1.0"
-awc = "3.1"
+clu = { path = "../clu" }
+web30 = {workspace = true}
+awc = {workspace = true}
 ipnetwork = "0.20"
-actix-async = { package = "actix", version = "0.13" }
-actix-web-async = { package = "actix-web", version = "4.3", default_features = false, features = [
-    "openssl",
-] }
-clarity = "1.2"
+actix-async = {package="actix", version = "0.13"}
+actix-web-async = { package="actix-web", version = "4.3", default_features = false, features= ["openssl"]}
+actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.8.0"}
+clarity = {workspace = true}
 openssh-keys = "0.6"
 mac_address = "1.1.4"
 futures = { version = "0.3", features = ["compat"] }

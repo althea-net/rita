@@ -78,7 +78,7 @@ pub fn register_client_batch_loop(
                         let mut batch = vec![];
                         for id in reg_clients {
                             match contact
-                                .send_transaction(
+                                .prepare_transaction(
                                     contract_addr,
                                     match encode_call(
                                         "add_registered_user((string,string,address))",
@@ -103,11 +103,21 @@ pub fn register_client_batch_loop(
                                 )
                                 .await
                             {
-                                Ok(tx_id) => {
-                                    //increment nonce for next tx
-                                    nonce += 1u64.into();
-                                    remove_client_from_reg_batch(id);
-                                    batch.push(tx_id);
+                                Ok(tx) => {
+                                    match contact.send_prepared_transaction(tx).await {
+                                        Ok(txid) => {
+                                            //increment nonce for next tx
+                                            nonce += 1u64.into();
+                                            remove_client_from_reg_batch(id);
+                                            batch.push(txid);
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                "Failed registration for {} with {}",
+                                                id.wg_public_key, e
+                                            );
+                                        }
+                                    }
                                 }
                                 Err(e) => {
                                     error!(
