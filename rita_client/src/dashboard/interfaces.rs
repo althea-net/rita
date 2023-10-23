@@ -155,7 +155,6 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
 
 /// Set mode for an individual interface
 fn set_interface_mode(iface_name: String, mode: InterfaceMode) -> Result<(), RitaClientError> {
-    let iface_name = iface_name;
     let target_mode = mode;
     let interfaces = get_interfaces()?;
     let current_mode = get_current_interface_mode(&interfaces, &iface_name);
@@ -598,6 +597,31 @@ pub fn get_current_interface_mode(
     InterfaceMode::Unknown
 }
 
+pub async fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
+    debug!("get /interfaces hit");
+
+    match get_interfaces() {
+        Ok(val) => HttpResponse::Ok().json(val),
+        Err(e) => {
+            error!("get_interfaces failed with {:?}", e);
+            HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e:?}"))
+        }
+    }
+}
+
+pub async fn set_interfaces_endpoint(interfaces: Json<InterfacesToSet>) -> HttpResponse {
+    let interface = interfaces.into_inner();
+    debug!("set /interfaces hit");
+
+    match multiset_interfaces(interface.interfaces, interface.modes) {
+        Ok(_) => HttpResponse::Ok().into(),
+        Err(e) => {
+            error!("Set interfaces failed with {:?}", e);
+            HttpResponse::InternalServerError().into()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -634,30 +658,5 @@ mod tests {
 
         let b = list_add(&b, "eth4");
         assert_eq!(b, "eth1 eth0.3 eth4");
-    }
-}
-
-pub async fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
-    debug!("get /interfaces hit");
-
-    match get_interfaces() {
-        Ok(val) => HttpResponse::Ok().json(val),
-        Err(e) => {
-            error!("get_interfaces failed with {:?}", e);
-            HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e:?}"))
-        }
-    }
-}
-
-pub async fn set_interfaces_endpoint(interfaces: Json<InterfacesToSet>) -> HttpResponse {
-    let interface = interfaces.into_inner();
-    debug!("set /interfaces hit");
-
-    match multiset_interfaces(interface.interfaces, interface.modes) {
-        Ok(_) => HttpResponse::Ok().into(),
-        Err(e) => {
-            error!("Set interfaces failed with {:?}", e);
-            HttpResponse::InternalServerError().into()
-        }
     }
 }

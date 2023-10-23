@@ -73,7 +73,6 @@ async fn register_router(client: Json<ExitClientIdentity>) -> HttpResponse {
     let db_addr = get_althea_db_addr();
 
     // Check for an existing client
-    let client = client;
     if client_conflict(
         &client,
         &contact,

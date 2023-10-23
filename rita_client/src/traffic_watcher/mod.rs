@@ -67,7 +67,7 @@ pub fn get_traffic_watcher_write_ref(
     input: &mut HashMap<u32, TrafficWatcher>,
 ) -> &mut TrafficWatcher {
     let netns = KI.check_integration_test_netns();
-    input.entry(netns).or_insert_with(TrafficWatcher::default);
+    input.entry(netns).or_default();
     input.get_mut(&netns).unwrap()
 }
 

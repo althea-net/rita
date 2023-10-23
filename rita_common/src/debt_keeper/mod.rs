@@ -66,7 +66,7 @@ pub fn get_debt_keeper() -> DebtKeeper {
 /// but still hold the lock in the local thread to prevent parallel modification
 pub fn get_debt_keeper_write_ref(input: &mut HashMap<u32, DebtKeeper>) -> &mut DebtKeeper {
     let netns = KI.check_integration_test_netns();
-    input.entry(netns).or_insert_with(DebtKeeper::default);
+    input.entry(netns).or_default();
     input.get_mut(&netns).unwrap()
 }
 
@@ -512,9 +512,7 @@ impl DebtKeeper {
     }
 
     fn get_debt_data_mut(&mut self, ident: &Identity) -> &mut NodeDebtData {
-        self.debt_data
-            .entry(*ident)
-            .or_insert_with(NodeDebtData::new)
+        self.debt_data.entry(*ident).or_default()
     }
 
     fn payment_failed(&mut self, to: &Identity) {
