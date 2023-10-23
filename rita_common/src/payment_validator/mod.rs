@@ -89,7 +89,7 @@ pub fn get_payment_validator_write_ref(
     input: &mut HashMap<u32, PaymentValidator>,
 ) -> &mut PaymentValidator {
     let netns = KI.check_integration_test_netns();
-    input.entry(netns).or_insert_with(PaymentValidator::default);
+    input.entry(netns).or_default();
     input.get_mut(&netns).unwrap()
 }
 
@@ -748,7 +748,7 @@ fn handle_tx_messaging_althea(transaction: TransactionDetails, ts: ToValidate) {
     for d in get_rita_common()
         .payment
         .accepted_denoms
-        .unwrap_or(HashMap::new())
+        .unwrap_or_default()
     {
         if transaction.denom == d.1.denom {
             denom = Some(d.1);

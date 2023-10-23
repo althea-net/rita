@@ -61,9 +61,7 @@ pub fn get_payment_controller_write_ref(
     input: &mut HashMap<u32, PaymentController>,
 ) -> &mut PaymentController {
     let netns = KI.check_integration_test_netns();
-    input
-        .entry(netns)
-        .or_insert_with(PaymentController::default);
+    input.entry(netns).or_default();
     input.get_mut(&netns).unwrap()
 }
 
@@ -210,7 +208,7 @@ async fn make_althea_payment(
     // On althea chain, we default to paying with usdc, config must specify this as an accepted denom
     let usdc_denom = match payment_settings
         .accepted_denoms
-        .unwrap_or(HashMap::new())
+        .unwrap_or_default()
         .get("usdc")
     {
         Some(a) => a.clone(),
@@ -402,7 +400,7 @@ async fn make_xdai_payment(
             // add published txid to submission
             let pmt = pmt.publish(tx_id);
 
-            send_make_payment_endpoints(pmt.clone(), network_settings, Some(full_node), None).await;
+            send_make_payment_endpoints(pmt, network_settings, Some(full_node), None).await;
 
             // place this payment in the validation queue to handle later.
             let ts = ToValidate {

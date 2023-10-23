@@ -133,7 +133,7 @@ impl Ord for UsageTrackerPayment {
 
 impl PartialOrd for UsageTrackerPayment {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.index.partial_cmp(&other.index)
+        Some(self.index.cmp(&other.index))
     }
 }
 

@@ -189,7 +189,6 @@ fn process_messages(
                     payload.len()
                 );
                 *last_message = Instant::now();
-                let stream_id = stream_id;
                 if let Some(antenna_stream) = streams.get_mut(stream_id) {
                     if let Err(e) = write_all_spinlock(&mut antenna_stream.stream, payload) {
                         error!(

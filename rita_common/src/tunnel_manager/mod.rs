@@ -62,7 +62,7 @@ pub fn get_tunnel_manager() -> TunnelManager {
 /// but still hold the lock in the local thread to prevent parallel modification
 pub fn get_tunnel_manager_write_ref(input: &mut HashMap<u32, TunnelManager>) -> &mut TunnelManager {
     let netns = KI.check_integration_test_netns();
-    input.entry(netns).or_insert_with(TunnelManager::default);
+    input.entry(netns).or_default();
     input.get_mut(&netns).unwrap()
 }
 
@@ -695,7 +695,7 @@ pub mod tests {
         tunnel_manager
             .tunnels
             .entry(id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(get_test_tunnel("0.0.0.0".parse().unwrap()));
         {
             let existing_tunnel =
