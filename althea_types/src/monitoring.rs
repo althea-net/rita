@@ -287,6 +287,26 @@ pub fn has_packet_loss(sample: u16) -> bool {
     lost_packets > 0
 }
 
+/// Represents various usage data and statistics for a given interface
+/// parsed from /proc/net/dev
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct InterfaceUsageStats {
+    pub interface_name: String,
+    pub recieve_bytes: u64,
+    pub transmit_bytes: u64,
+    pub recieve_packets: u64,
+    pub transmit_packets: u64,
+    pub recieve_errors: u64,
+    pub transmit_errors: u64,
+    pub recieve_dropped: u64,
+    pub recieve_fifo_errors: u64,
+    pub transmit_fifo_errors: u64,
+    pub recieve_frame_errors: u64,
+    pub recieve_multicast_erorrs: u64,
+    pub transmit_collission_erorrs: u64,
+    pub tranmist_carrier_errors: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
