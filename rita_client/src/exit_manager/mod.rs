@@ -224,23 +224,6 @@ fn remove_nat() {
     }
 }
 
-pub async fn get_exit_info(to: &SocketAddr) -> Result<ExitState, RitaClientError> {
-    let endpoint = format!("http://[{}]:{}/exit_info", to.ip(), to.port());
-
-    let client = awc::Client::default();
-    let mut response = match client.get(&endpoint).send().await {
-        Ok(a) => a,
-        Err(e) => {
-            warn!("Unable to get exit info with {}", e);
-            return Err(RitaClientError::SendRequestError(e.to_string()));
-        }
-    };
-    let response_json = response.json().await?;
-
-    info!("Received {:?} from endpoint {:?}", response_json, endpoint);
-    Ok(response_json)
-}
-
 fn encrypt_exit_client_id(
     exit_pubkey: &PublicKey,
     id: ExitClientIdentity,
@@ -458,34 +441,6 @@ async fn send_exit_status_request(
     }
 }
 
-async fn exit_general_details_request(exit: IpAddr) -> Result<(), RitaClientError> {
-    let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
-        Some(current_exit) => current_exit.clone(),
-        None => {
-            return Err(RitaClientError::NoExitError(exit.to_string()));
-        }
-    };
-
-    trace!("Getting details for exit: {:?}", exit);
-
-    let endpoint = SocketAddr::new(current_exit.exit_id.mesh_ip, current_exit.registration_port);
-
-    trace!(
-        "sending exit general details request to {} with endpoint {:?}",
-        exit,
-        endpoint
-    );
-    let exit_details = get_exit_info(&endpoint).await?;
-    let mut rita_client = settings::get_rita_client();
-    let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
-        Some(exit) => exit,
-        None => return Err(RitaClientError::ExitNotFound(exit.to_string())),
-    };
-    current_exit.info = exit_details;
-    settings::set_rita_client(rita_client);
-    Ok(())
-}
-
 /// Registration is simply one of the exits requesting an update to a global smart contract
 /// with our information.
 pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientError> {
@@ -493,7 +448,7 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
 
     for (_, exit) in exit_client.exits {
         match &exit.info {
-            ExitState::GotInfo { .. } | ExitState::Pending { .. } => {
+            ExitState::New { .. } | ExitState::Pending { .. } => {
                 let exit_pubkey = exit.exit_id.wg_public_key;
 
                 let mut reg_details: ExitRegistrationDetails =
@@ -544,12 +499,6 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
                 set_rita_client(rita_client);
                 return Ok(());
             }
-            ExitState::New => {
-                warn!(
-                    "Exit {} is in ExitState NEW, not ready to be setup",
-                    exit.exit_id.mesh_ip
-                );
-            }
             ExitState::Denied { message } => {
                 warn!(
                     "Exit {} is in ExitState DENIED with {}, not able to be setup",
@@ -561,6 +510,9 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
                     "Exit {} already reports us as registered",
                     exit.exit_id.mesh_ip
                 )
+            }
+            ExitState::GotInfo { .. } => {
+                warn!("This state should be removed for new clients and is kept around for backward compatibilty, how did we reach it?");
             }
         }
     }
@@ -905,12 +857,6 @@ mod tests {
             verif_mode: ExitVerifMode::Off,
         };
         let mut last_states = LastExitStates::default();
-
-        // Exit moves from New -> GotInfo
-        exit_server.info = ExitState::GotInfo {
-            general_details: dummy_exit_details.clone(),
-            message: "".to_string(),
-        };
 
         // An ip is selected and setup in last_states
         let selected_exit = Some("fd00::2602".parse().unwrap());

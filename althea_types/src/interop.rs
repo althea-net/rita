@@ -263,7 +263,9 @@ pub enum ExitState {
     /// the default state of the struct in the config
     #[default]
     New,
-    /// we have successfully contacted the exit and gotten basic info
+    /// we have successfully contacted the exit and gotten basic info. This is
+    /// kept around for backwards compatitbility, it should be removed once all clients are
+    /// updated
     GotInfo {
         general_details: ExitDetails,
         message: String,

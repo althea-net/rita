@@ -2,10 +2,10 @@ use super::exit_switcher::{get_babel_routes, set_best_exit};
 use super::ExitManager;
 use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
 use crate::exit_manager::{
-    add_exits_to_exit_server_list, correct_default_route, exit_general_details_request,
-    exit_status_request, get_client_pub_ipv6, get_current_exit, get_exit_list,
-    get_full_selected_exit, get_ready_to_switch_exits, get_routes_hashmap, has_exit_changed,
-    linux_setup_exit_tunnel, remove_nat, restore_nat, run_ping_test, set_exit_list,
+    add_exits_to_exit_server_list, correct_default_route, exit_status_request, get_client_pub_ipv6,
+    get_current_exit, get_exit_list, get_full_selected_exit, get_ready_to_switch_exits,
+    get_routes_hashmap, has_exit_changed, linux_setup_exit_tunnel, remove_nat, restore_nat,
+    run_ping_test, set_exit_list,
 };
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
@@ -257,18 +257,13 @@ pub fn start_exit_manager_loop() {
                         let servers = { settings::get_rita_client().exit_client.exits };
                         for (k, s) in servers {
                             match s.info {
+                                // Once one exit is registered, this moves all exits from New -> Registered
+                                // Giving us an internal ipv4 and ipv6 address for each exit in our config
                                 ExitState::New { .. } => {
                                     trace!("Exit {} is in state NEW, calling general details", k);
-                                    general_requests.push(exit_general_details_request(k))
+                                    general_requests.push(exit_status_request(k))
                                 },
-                                // This will move our GotInfo -> Registered state for an exit that has info in the
-                                // smart contract
-                                ExitState::GotInfo { .. } => {
-                                    trace!("Exit {} is in state GotInfo, calling status request", k);
-                                    // This is only for clients registered via ops
-                                    status_requests.push(exit_status_request(k));
-                                },
-                                // For routers that register normally, (not through ops), GotInfo -> Pending. In this state, we 
+                                // For routers that register normally, (not through ops), New -> Pending. In this state, we 
                                 // continue to query until we reach Registered
                                 ExitState::Pending { .. } => {
                                     trace!("Exit {} is in state Pending, calling status request", k);
