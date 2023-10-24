@@ -1,6 +1,7 @@
 use crate::file_io::get_lines;
 use crate::KernelInterface;
 use crate::KernelInterfaceError as Error;
+use althea_types::InterfaceUsageStats;
 use regex::Regex;
 use std::fs::read_dir;
 use std::net::IpAddr;
@@ -8,7 +9,51 @@ use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 use std::str::from_utf8;
 
+/// Utility function for get_per_interface_usage that makes options ? compatible
+fn get_helper(input: Option<&&str>) -> Result<String, Error> {
+    match input {
+        Some(v) => Ok(v.to_string()),
+        None => Err(Error::ParseError(
+            "Missing field in /proc/net/dev!".to_string(),
+        )),
+    }
+}
+
 impl dyn KernelInterface {
+    /// Gets usage data from all interfaces from /proc/net/dev, note that for wireguard interfaces
+    /// updating the interface on the fly (like we do with wg_exit) will reset the usage
+    /// counter on the wireguard side, but not on in proc which this code pulls from
+    pub fn get_per_interface_usage(&self) -> Result<Vec<InterfaceUsageStats>, Error> {
+        let lines = get_lines("/proc/net/dev")?;
+        // all lines represent an interface, except the first line which is a header
+        let mut lines = lines.iter();
+        // skip the first and second lines
+        lines.next();
+        lines.next();
+        let mut ret = Vec::new();
+        for line in lines {
+            println!("line ins {}", line);
+            let parts: Vec<&str> = line.split_ascii_whitespace().collect();
+            ret.push(InterfaceUsageStats {
+                interface_name: get_helper(parts.first())?.trim_end_matches(':').to_string(),
+                recieve_bytes: get_helper(parts.get(1))?.parse()?,
+                recieve_packets: get_helper(parts.get(2))?.parse()?,
+                recieve_errors: get_helper(parts.get(3))?.parse()?,
+                recieve_dropped: get_helper(parts.get(4))?.parse()?,
+                recieve_fifo_errors: get_helper(parts.get(5))?.parse()?,
+                recieve_frame_errors: get_helper(parts.get(6))?.parse()?,
+                recieve_multicast_erorrs: get_helper(parts.get(8))?.parse()?,
+                transmit_bytes: get_helper(parts.get(9))?.parse()?,
+                transmit_packets: get_helper(parts.get(10))?.parse()?,
+                transmit_errors: get_helper(parts.get(11))?.parse()?,
+                transmit_fifo_errors: get_helper(parts.get(12))?.parse()?,
+                transmit_collission_erorrs: get_helper(parts.get(13))?.parse()?,
+                tranmist_carrier_errors: get_helper(parts.get(14))?.parse()?,
+            })
+        }
+        Ok(ret)
+    }
+
     /// Returns all existing interfaces
     pub fn get_interfaces(&self) -> Result<Vec<String>, Error> {
         let links = read_dir("/sys/class/net/")?;
@@ -344,4 +389,10 @@ fn test_get_ip_addresses_linux() {
     let interfaces = KI.get_ip_from_iface("eth8").unwrap();
     let val = ("192.168.1.203".parse().unwrap(), 32);
     assert!(interfaces.contains(&val))
+}
+
+#[test]
+fn test_get_interface_usage() {
+    use crate::KI;
+    let _ = KI.get_per_interface_usage().unwrap();
 }
