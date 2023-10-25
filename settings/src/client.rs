@@ -37,12 +37,25 @@ pub struct ExitServer {
 
     /// The power we reach out to to hit the register endpoint
     /// also used for all other exit lifecycle management api calls
-    #[serde(default)]
+    #[serde(default = "default_registration_port")]
     pub registration_port: u16,
+
+    /// The power we reach out to to hit the register endpoint
+    /// also used for all other exit lifecycle management api calls
+    #[serde(default = "default_wg_listen_port")]
+    pub wg_exit_listen_port: u16,
 
     /// The registration state and other data about the exit
     #[serde(default, flatten)]
     pub info: ExitState,
+}
+
+fn default_registration_port() -> u16 {
+    4875
+}
+
+fn default_wg_listen_port() -> u16 {
+    59998
 }
 
 /// Simple struct that keeps track of details related to the exit we are currently connected to, as well as the next potential exit to switch to

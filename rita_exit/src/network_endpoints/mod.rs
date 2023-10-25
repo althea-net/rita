@@ -13,7 +13,7 @@ use actix::SystemService;
 #[cfg(feature = "development")]
 use actix_web::AsyncResponder;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
-use althea_types::ExitIdentity;
+use althea_types::exit_identity_to_id;
 use althea_types::ExitListV2;
 use althea_types::Regions;
 use althea_types::{
@@ -420,7 +420,6 @@ pub async fn get_exit_list_v2(request: Json<EncryptedExitClientIdentity>) -> Htt
                 vec![]
             }
         },
-        wg_exit_listen_port: settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
     };
 
     let plaintext = serde_json::to_string(&ret)
@@ -432,15 +431,6 @@ pub async fn get_exit_list_v2(request: Json<EncryptedExitClientIdentity>) -> Htt
         nonce: nonce.0,
         exit_list: ciphertext,
     }))
-}
-
-pub fn exit_identity_to_id(exit_id: ExitIdentity) -> Identity {
-    Identity {
-        mesh_ip: exit_id.mesh_ip,
-        eth_address: exit_id.eth_addr,
-        wg_public_key: exit_id.wg_key,
-        nickname: None,
-    }
 }
 
 /// Used by clients to get their debt from the exits. While it is in theory possible for the

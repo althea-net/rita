@@ -17,6 +17,8 @@ struct ExitIdentity {
     uint128 mesh_ip;
     uint256 wg_key;
     address eth_addr;
+    uint16 registration_port;
+    uint16 wg_exit_listen_port;
     uint256[] allowed_regions;
     uint256[] payment_types;
 }
@@ -88,6 +90,8 @@ contract AltheaDB {
                 mesh_ip: 0,
                 wg_key: 0,
                 eth_addr: address(0),
+                registration_port: 0,
+                wg_exit_listen_port: 0,
                 allowed_regions: empty_array,
                 payment_types: empty_array
             });

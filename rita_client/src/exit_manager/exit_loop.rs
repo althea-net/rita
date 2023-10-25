@@ -9,7 +9,7 @@ use crate::exit_manager::{
 };
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
-use althea_types::ExitList;
+use althea_types::ExitListV2;
 use althea_types::ExitState;
 use futures::future::join_all;
 use futures::join;
@@ -104,9 +104,8 @@ pub fn start_exit_manager_loop() {
                                     Err(e) => {
                                         error!("Exit_Switcher: Unable to get exit list: {:?}", e);
 
-                                        ExitList {
+                                        ExitListV2 {
                                             exit_list: Vec::new(),
-                                            wg_exit_listen_port: 0,
                                         }
                                     }
                                 };
@@ -120,11 +119,9 @@ pub fn start_exit_manager_loop() {
                                 // status from them in the future when we connect
                                 add_exits_to_exit_server_list(exit_list.clone());
 
-                                let exit_wg_port = exit_list.wg_exit_listen_port;
-                                let is_valid = set_exit_list(exit_list, em_state);
-                                // When the list is empty or the port is 0, the exit services us
+                                // When the list is empty, the exit services us
                                 // an invalid struct or we made a bad request
-                                if !is_valid || exit_wg_port == 0 {
+                                if !set_exit_list(exit_list, em_state) {
                                     error!("Received an invalid exit list!")
                                 }
                                 // Set all babel routes in a hashmap that we use to instantly get the route object of the exit we are trying to
@@ -171,7 +168,6 @@ pub fn start_exit_manager_loop() {
                                         linux_setup_exit_tunnel(
                                             &general_details.clone(),
                                             exit.info.our_details().unwrap(),
-                                            &exit_list,
                                         )
                                         .expect("failure setting up exit tunnel");
                                         em_state.nat_setup = true;
@@ -181,7 +177,6 @@ pub fn start_exit_manager_loop() {
                                         linux_setup_exit_tunnel(
                                             &general_details.clone(),
                                             exit.info.our_details().unwrap(),
-                                            &exit_list,
                                         )
                                         .expect("failure setting up exit tunnel");
                                         em_state.nat_setup = true;

@@ -20,19 +20,20 @@ pub mod exit_loop;
 pub mod exit_switcher;
 pub mod time_sync;
 
+use crate::heartbeat::get_selected_exit_server;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use actix_web_async::Result;
 use althea_kernel_interface::{
     exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
 };
+use althea_types::exit_identity_to_id;
 use althea_types::ExitClientDetails;
 use althea_types::ExitListV2;
 use althea_types::Identity;
-use althea_types::Regions;
 use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
-use althea_types::{EncryptedExitList, ExitDetails, ExitList};
+use althea_types::{EncryptedExitList, ExitDetails};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState};
 use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;
@@ -53,9 +54,6 @@ use std::time::Instant;
 
 /// The number of times ExitSwitcher will try to connect to an unresponsive exit before blacklisting its ip
 const MAX_BLACKLIST_STRIKES: u16 = 100;
-
-/// Default port used to contact an exit
-const DEFAULT_EXIT_REGISTRATION_PORT: u16 = 4875;
 
 lazy_static! {
     pub static ref SELECTED_EXIT_DETAILS: Arc<RwLock<SelectedExitDetails>> =
@@ -100,7 +98,7 @@ pub struct LastExitStates {
 pub struct ExitManager {
     pub nat_setup: bool,
     /// Every tick we query an exit endpoint to get a list of exits in that cluster. We use this list for exit switching
-    pub exit_list: ExitList,
+    pub exit_list: ExitListV2,
     /// Store last exit here, when we see an exit change, we reset wg tunnels
     pub last_exit_state: LastExitStates,
     /// Store exit connection status. If no update in > 10, perform a power cycle
@@ -113,7 +111,7 @@ impl Default for ExitManager {
     fn default() -> Self {
         ExitManager {
             nat_setup: false,
-            exit_list: ExitList::default(),
+            exit_list: ExitListV2::default(),
             last_exit_state: LastExitStates::default(),
             last_connection_time: Instant::now(),
             last_status_request: None,
@@ -124,7 +122,7 @@ impl Default for ExitManager {
 /// This functions sets the exit list ONLY IF the list arguments provived is not empty. This is need for the following edge case:
 /// When an exit goes down, the endpoint wont repsond, so we have no exits to switch to. By setting only when we have a length > 1
 /// we assure that we switch when an exit goes down
-pub fn set_exit_list(list: ExitList, em_state: &mut ExitManager) -> bool {
+pub fn set_exit_list(list: ExitListV2, em_state: &mut ExitManager) -> bool {
     if !list.exit_list.is_empty() {
         em_state.exit_list = list;
         return true;
@@ -160,7 +158,6 @@ pub fn get_exit_blacklist() -> HashSet<IpAddr> {
 fn linux_setup_exit_tunnel(
     general_details: &ExitDetails,
     our_details: &ExitClientDetails,
-    exit_list: &ExitList,
 ) -> Result<(), RitaClientError> {
     let mut rita_client = settings::get_rita_client();
     let mut network = rita_client.network;
@@ -174,10 +171,13 @@ fn linux_setup_exit_tunnel(
         return Err(RitaClientError::MiscStringError(v));
     }
 
-    let selected_ip = get_current_exit().expect("There should be an exit ip here");
+    let selected_exit = get_selected_exit_server().expect("There should be a selected exit here");
     let args = ClientExitTunnelConfig {
-        endpoint: SocketAddr::new(selected_ip, exit_list.wg_exit_listen_port),
-        pubkey: get_exit_pubkey(selected_ip, exit_list),
+        endpoint: SocketAddr::new(
+            selected_exit.exit_id.mesh_ip,
+            selected_exit.wg_exit_listen_port,
+        ),
+        pubkey: selected_exit.exit_id.wg_public_key,
         private_key_path: network.wg_private_key_path.clone(),
         listen_port: rita_client.exit_client.wg_listen_port,
         local_ip: our_details.client_internal_ip,
@@ -198,18 +198,6 @@ fn linux_setup_exit_tunnel(
     KI.create_client_nat_rules()?;
 
     Ok(())
-}
-
-/// From a exit list, find the corresponding wg public key of our current connected exit to
-/// set up wg tunnels
-fn get_exit_pubkey(ip: IpAddr, exit_list: &ExitList) -> WgKey {
-    for id in exit_list.exit_list.clone() {
-        if id.mesh_ip == ip {
-            return id.wg_public_key;
-        }
-    }
-
-    panic!("Unable to find a valid wg key for current exit, please check that all exit Identities are properly setup on the exit");
 }
 
 fn restore_nat() {
@@ -336,14 +324,15 @@ fn decrypt_exit_state(
 
 /// When we retrieve an exit list from an exit, add the compatible exits to the exit server list.
 /// This allows these exits to move to GotInfo state, allowing us to switch or connect quickly
-pub fn add_exits_to_exit_server_list(list: ExitList) {
+pub fn add_exits_to_exit_server_list(list: ExitListV2) {
     let mut rita_client = settings::get_rita_client();
     let mut exits = rita_client.exit_client.exits;
 
     for e in list.exit_list {
         exits.entry(e.mesh_ip).or_insert(ExitServer {
-            exit_id: e,
-            registration_port: DEFAULT_EXIT_REGISTRATION_PORT,
+            exit_id: exit_identity_to_id(e.clone()),
+            registration_port: e.registration_port,
+            wg_exit_listen_port: e.wg_exit_listen_port,
             info: ExitState::New,
         });
     }
@@ -574,7 +563,7 @@ async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
 }
 
 /// Hits the exit_list endpoint for a given exit.
-async fn get_exit_list(exit: IpAddr) -> Result<ExitList, RitaClientError> {
+async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> {
     let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
@@ -650,7 +639,7 @@ async fn get_exit_list(exit: IpAddr) -> Result<ExitList, RitaClientError> {
 fn decrypt_exit_list(
     exit_list: EncryptedExitList,
     exit_pubkey: PublicKey,
-) -> Result<ExitList, RitaClientError> {
+) -> Result<ExitListV2, RitaClientError> {
     let rita_client = settings::get_rita_client();
     let network_settings = rita_client.network;
     let our_secretkey = network_settings
@@ -679,59 +668,7 @@ fn decrypt_exit_list(
             ));
         }
     };
-    Ok(convert_exit_list(ret))
-}
-
-/// This function converts an exit list v2 (which has allowed payments and region codes for each exit) into
-/// an exit list, where the exit we can connect to are filtered based on our selected regions and system chain
-fn convert_exit_list(list: ExitListV2) -> ExitList {
-    let rita_client = settings::get_rita_client();
-    let mut regions = rita_client.network.allowed_countries;
-    if regions.contains(&Regions::UknownRegion) {
-        error!(
-            "Why is this router setup with an unknown region? please fix: {:?}",
-            regions
-        );
-        regions.remove(&Regions::UknownRegion);
-    }
-    let payments = rita_client.network.payment_chains;
-
-    if regions.is_empty() || payments.is_empty() {
-        error!(
-            "Either region or payment not setup correctly! \nRegions: {:?} \nPayments: {:?}",
-            regions, payments
-        )
-    }
-
-    let mut ret = vec![];
-    for exit in list.exit_list {
-        let mut exit_regions = exit.allowed_regions.clone();
-        let exit_payments = exit.payment_types.clone();
-
-        // Sanity check info received from exits
-        if exit_regions.contains(&Regions::UknownRegion) {
-            error!("An exit has an unknown region! {:?}", exit);
-            exit_regions.remove(&Regions::UknownRegion);
-        }
-        if exit_regions.is_empty() || exit_payments.is_empty() {
-            error!("Received an invalid exit: {:?}", exit);
-            continue;
-        }
-
-        if !regions.is_disjoint(&exit_regions) && !payments.is_disjoint(&exit_payments) {
-            ret.push(Identity {
-                mesh_ip: exit.mesh_ip,
-                eth_address: exit.eth_addr,
-                wg_public_key: exit.wg_key,
-                nickname: None,
-            })
-        }
-    }
-
-    ExitList {
-        exit_list: ret,
-        wg_exit_listen_port: list.wg_exit_listen_port,
-    }
+    Ok(ret)
 }
 
 fn correct_default_route(input: Option<DefaultRoute>) -> bool {
@@ -754,7 +691,7 @@ fn get_routes_hashmap(routes: Vec<Route>) -> HashMap<IpAddr, Route> {
 }
 
 /// Exits are ready to switch to when they are in the Registered State, we return list of exits that are
-pub fn get_ready_to_switch_exits(exit_list: ExitList) -> Vec<Identity> {
+pub fn get_ready_to_switch_exits(exit_list: ExitListV2) -> Vec<Identity> {
     let exits = get_rita_client().exit_client.exits;
 
     let mut ret = vec![];
@@ -762,7 +699,7 @@ pub fn get_ready_to_switch_exits(exit_list: ExitList) -> Vec<Identity> {
         match exits.get(&exit.mesh_ip) {
             Some(server) => {
                 if let ExitState::Registered { .. } = server.info {
-                    ret.push(exit);
+                    ret.push(exit_identity_to_id(exit));
                 }
             }
             None => {
@@ -844,6 +781,7 @@ mod tests {
             },
 
             registration_port: 3452,
+            wg_exit_listen_port: 59998,
 
             info: ExitState::New,
         };
