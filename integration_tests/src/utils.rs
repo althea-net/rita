@@ -378,6 +378,7 @@ pub fn get_default_settings(
                 settings::client::ExitServer {
                     exit_id: exit_id.exit_id,
                     registration_port: exit.exit_network.exit_hello_port,
+                    wg_exit_listen_port: exit.exit_network.wg_v2_tunnel_port,
                     info: althea_types::ExitState::New,
                 },
             );
@@ -1109,6 +1110,8 @@ pub async fn add_exits_contract_exit_list(db_addr: Address, rita_identities: Ins
             mesh_ip: id.mesh_ip,
             wg_key: id.wg_public_key,
             eth_addr: id.eth_address,
+            registration_port: 4875,
+            wg_exit_listen_port: 59998,
             allowed_regions: {
                 let mut ret = HashSet::new();
                 ret.insert(Regions::US);

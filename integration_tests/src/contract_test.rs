@@ -37,6 +37,8 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
         mesh_ip: exit_1.mesh_ip,
         wg_key: exit_1.wg_public_key,
         eth_addr: exit_1.eth_address,
+        registration_port: 4875,
+        wg_exit_listen_port: 59998,
         allowed_regions: {
             let mut ret = HashSet::new();
             ret.insert(Regions::Nigeria);
@@ -55,6 +57,8 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
         mesh_ip: exit_2.mesh_ip,
         wg_key: exit_2.wg_public_key,
         eth_addr: exit_2.eth_address,
+        registration_port: 4875,
+        wg_exit_listen_port: 59998,
         allowed_regions: HashSet::new(),
         payment_types: HashSet::new(),
     };
@@ -64,6 +68,8 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
         mesh_ip: exit_3.mesh_ip,
         wg_key: exit_3.wg_public_key,
         eth_addr: exit_3.eth_address,
+        registration_port: 4888,
+        wg_exit_listen_port: 60000,
         allowed_regions: {
             let mut ret = HashSet::new();
             ret.insert(Regions::Columbia);
@@ -106,62 +112,52 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
 
     assert!(res.is_err());
 
-    let res = add_exit_to_exit_list(
+    let _res = add_exit_to_exit_list(
         &contact,
         exit_1.clone(),
         db_addr,
         miner_private_key,
-        None,
+        Some(TX_TIMEOUT),
         vec![],
     )
     .await
     .unwrap();
 
-    contact
-        .wait_for_transaction(res, TX_TIMEOUT, None)
-        .await
-        .unwrap();
-
-    let res = add_exit_to_exit_list(
+    let _res = add_exit_to_exit_list(
         &contact,
         exit_2.clone(),
         db_addr,
         miner_private_key,
-        None,
+        Some(TX_TIMEOUT),
         vec![],
     )
     .await
     .unwrap();
 
-    contact
-        .wait_for_transaction(res, TX_TIMEOUT, None)
-        .await
-        .unwrap();
-
     let res = get_client_exit_list(&contact, miner_pub_key, db_addr)
         .await
         .unwrap();
 
+    println!("res is {:?}", res);
+
     assert_eq!(res, vec![exit_1.clone(), exit_2.clone()]);
 
-    let res = add_exit_to_exit_list(
+    let _res = add_exit_to_exit_list(
         &contact,
         exit_3.clone(),
         db_addr,
         miner_private_key,
-        None,
+        Some(TX_TIMEOUT),
         vec![],
     )
     .await
     .unwrap();
-    contact
-        .wait_for_transaction(res, TX_TIMEOUT, None)
-        .await
-        .unwrap();
 
     let res = get_client_exit_list(&contact, miner_pub_key, db_addr)
         .await
         .unwrap();
+
+    println!("res is {:?}", res);
 
     assert_eq!(res, vec![exit_1, exit_2, exit_3]);
 }

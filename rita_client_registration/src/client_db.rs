@@ -113,11 +113,13 @@ pub async fn add_exit_to_exit_list(
             .prepare_transaction(
                 contract,
                 encode_call(
-                    "add_registered_exit((uint128,uint256,address,uint256[],uint256[]))",
+                    "add_registered_exit((uint128,uint256,address,uint16,uint16,uint256[],uint256[]))",
                     &[AbiToken::Struct(vec![
                         AbiToken::Uint(u128::from(mesh_ip_v6).into()),
                         AbiToken::Uint(exit.wg_key.into()),
                         AbiToken::Address(exit.eth_addr),
+                        AbiToken::Uint(exit.registration_port.into()),
+                        AbiToken::Uint(exit.wg_exit_listen_port.into()),
                         allowed_regions_abi_array(exit.allowed_regions).into(),
                         payment_types_abi_array(exit.payment_types).into(),
                     ])],
@@ -432,6 +434,9 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
     00000000000000000000000000000000d5ce8b4de8234789da53bddd707db3d5    // Mesh ip
     d5ce8b4de8234789da53bddd707db3d589e00b5fce9d9b5f68cc7f3550d8944f    // wg key
     000000000000000000000000351634dbb20142a7f5ab996b96f71795e35e93f3    // eth address
+    000000000000000000000000000000000000000000000000000000000000130b    // Registration pot
+    000000000000000000000000000000000000000000000000000000000000ea5e    // wg listen port
+
     00000000000000000000000000000000000000000000000000000000000000a0    //
     0000000000000000000000000000000000000000000000000000000000000100    //
     0000000000000000000000000000000000000000000000000000000000000002    // Number of entries in region array
@@ -449,6 +454,9 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
     000000000000000000000000000000009de79d5506c2d55aba50edaee3b9579f    // First entry mesh ip
     9de79d5506c2d55aba50edaee3b9579f75acd14a63c551c5595bbf66d074a379    // wg key
     000000000000000000000000dcc1137e069cab580fd4199ac682a81978e39bc5    // eth address
+    000000000000000000000000000000000000000000000000000000000000130b    // Registration pot
+    000000000000000000000000000000000000000000000000000000000000ea5e    // wg listen port
+
     00000000000000000000000000000000000000000000000000000000000000a0    // Position of first array len from start of array
     0000000000000000000000000000000000000000000000000000000000000100    // Postion of second array len form start
     0000000000000000000000000000000000000000000000000000000000000002    // Number of entries in regions array
@@ -460,6 +468,9 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
     000000000000000000000000000000007bbab1ac348ee5be29ac57e2c3e052a1    // Second array entry mesh ip
     7bbab1ac348ee5be29ac57e2c3e052a164bc756beb5063743399fd08fdb6c5bb
     000000000000000000000000a970fab4bff2530005fdb65eeb4fe88d228aa9f8
+    000000000000000000000000000000000000000000000000000000000000130b    // Registration pot
+    000000000000000000000000000000000000000000000000000000000000ea5e    // wg listen port
+
     00000000000000000000000000000000000000000000000000000000000000a0
     00000000000000000000000000000000000000000000000000000000000000e0
     0000000000000000000000000000000000000000000000000000000000000001    // Num entry in regions
@@ -468,9 +479,9 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
     0000000000000000000000000000000000000000000000000000000000000003    // Payment entry
     */
 
-    // A valid array with 1 entry will have atleast 9 lines
+    // A valid array with 1 entry will have atleast 11 lines
     let byte_chunks: Vec<_> = bytes.chunks(WORD_SIZE).collect();
-    if byte_chunks.len() < 9 {
+    if byte_chunks.len() < 11 {
         return Err(Web3Error::BadInput(format!(
             "Empty or invalid array: {byte_chunks:?}"
         )));
@@ -531,6 +542,9 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
     000000000000000000000000000000007bbab1ac348ee5be29ac57e2c3e052a1    // Second array entry mesh ip
     7bbab1ac348ee5be29ac57e2c3e052a164bc756beb5063743399fd08fdb6c5bb
     000000000000000000000000a970fab4bff2530005fdb65eeb4fe88d228aa9f8
+    000000000000000000000000000000000000000000000000000000000000130b    // Registration pot
+    000000000000000000000000000000000000000000000000000000000000ea5e    // wg listen port
+
     00000000000000000000000000000000000000000000000000000000000000a0
     00000000000000000000000000000000000000000000000000000000000000e0
     0000000000000000000000000000000000000000000000000000000000000001    // Num entry in regions
@@ -540,7 +554,7 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
     */
 
     // The smallest entry has 7 lines, with two empty arrays
-    if byte_chunks.len() < 7 {
+    if byte_chunks.len() < 9 {
         return Err(Web3Error::BadInput(format!(
             "Received byte chunks: {byte_chunks:?}"
         )));
@@ -549,7 +563,35 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
     // Parse first 3 entries to get identity struct. Already validated length
     let exit_id = parse_identity_abi(byte_chunks[0..3].to_vec())?;
 
-    let regions_start: Uint256 = Uint256::from_be_bytes(byte_chunks[3]) / WORD_SIZE.into();
+    let registration_port: Uint256 = Uint256::from_be_bytes(byte_chunks[3]);
+    let registration_port: u16 = u16::from_be_bytes(
+        match registration_port.to_be_bytes()[30..WORD_SIZE].try_into() {
+            Ok(a) => a,
+            Err(e) => {
+                error!("Cannot get registration port with {}", e);
+                return Err(Web3Error::BadInput(format!(
+                    "Cannot get registration port with {}",
+                    e
+                )));
+            }
+        },
+    );
+
+    let wg_exit_listen_port: Uint256 = Uint256::from_be_bytes(byte_chunks[4]);
+    let wg_exit_listen_port: u16 = u16::from_be_bytes(
+        match wg_exit_listen_port.to_be_bytes()[30..WORD_SIZE].try_into() {
+            Ok(a) => a,
+            Err(e) => {
+                error!("Cannot get wg_exit port with {}", e);
+                return Err(Web3Error::BadInput(format!(
+                    "Cannot get wg_exit port with {}",
+                    e
+                )));
+            }
+        },
+    );
+
+    let regions_start: Uint256 = Uint256::from_be_bytes(byte_chunks[5]) / WORD_SIZE.into();
     let regions_start: usize = usize::from_be_bytes(
         match regions_start.to_be_bytes()[24..WORD_SIZE].try_into() {
             Ok(a) => a,
@@ -563,7 +605,7 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
         },
     );
 
-    let payment_start: Uint256 = Uint256::from_be_bytes(byte_chunks[4]) / WORD_SIZE.into();
+    let payment_start: Uint256 = Uint256::from_be_bytes(byte_chunks[6]) / WORD_SIZE.into();
     let payment_start: usize = usize::from_be_bytes(
         match payment_start.to_be_bytes()[24..WORD_SIZE].try_into() {
             Ok(a) => a,
@@ -612,10 +654,10 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
     });
 
     // Validate length here to avoid tedious error handling later
-    // Total len should be: 3 (3 id struct entries) + 2 (struct len localtion pointers) + 2 (len value of each array)
+    // Total len should be: 3 (3 id struct entries) + 2 (struct len localtion pointers) + 2 (len value of each array) +2(ports)
     // + len of region array + len of payment array
 
-    if byte_chunks.len() < 7 + regions_arr_len + payment_arr_len {
+    if byte_chunks.len() < 9 + regions_arr_len + payment_arr_len {
         let msg = format!("Length validation failed, parsed incorrectly, expected length {}, got lent {}. Slice {byte_chunks:?}", 7+regions_arr_len+payment_arr_len, byte_chunks.len());
         error!("{}", msg);
         return Err(Web3Error::BadInput(msg));
@@ -644,6 +686,8 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
         mesh_ip: exit_id.mesh_ip,
         wg_key: exit_id.wg_public_key,
         eth_addr: exit_id.eth_address,
+        registration_port,
+        wg_exit_listen_port,
         allowed_regions: reg_arr,
         payment_types: payment_arr,
     })
@@ -764,8 +808,10 @@ fn test_parse_exit_id_abi() {
     000000000000000000000000000000007bbab1ac348ee5be29ac57e2c3e052a1\
     7bbab1ac348ee5be29ac57e2c3e052a164bc756beb5063743399fd08fdb6c5bb\
     000000000000000000000000a970fab4bff2530005fdb65eeb4fe88d228aa9f8\
-    00000000000000000000000000000000000000000000000000000000000000a0\
+    000000000000000000000000000000000000000000000000000000000000130b\
+    000000000000000000000000000000000000000000000000000000000000ea5e\
     00000000000000000000000000000000000000000000000000000000000000e0\
+    0000000000000000000000000000000000000000000000000000000000000120\
     0000000000000000000000000000000000000000000000000000000000000001\
     0000000000000000000000000000000000000000000000000000000000000006\
     0000000000000000000000000000000000000000000000000000000000000001\
@@ -782,8 +828,10 @@ fn test_parse_exit_id_abi() {
     00000000000000000000000000000000d5ce8b4de8234789da53bddd707db3d5\
     d5ce8b4de8234789da53bddd707db3d589e00b5fce9d9b5f68cc7f3550d8944f\
     000000000000000000000000351634dbb20142a7f5ab996b96f71795e35e93f3\
-    00000000000000000000000000000000000000000000000000000000000000a0\
-    0000000000000000000000000000000000000000000000000000000000000100\
+    000000000000000000000000000000000000000000000000000000000000130b\
+    000000000000000000000000000000000000000000000000000000000000ea5e\
+    00000000000000000000000000000000000000000000000000000000000000e0\
+    0000000000000000000000000000000000000000000000000000000000000140\
     0000000000000000000000000000000000000000000000000000000000000002\
     0000000000000000000000000000000000000000000000000000000000000005\
     0000000000000000000000000000000000000000000000000000000000000006\
@@ -802,8 +850,10 @@ fn test_parse_exit_id_abi() {
     00000000000000000000000000000000d5ce8b4de8234789da53bddd707db3d5\
     d5ce8b4de8234789da53bddd707db3d589e00b5fce9d9b5f68cc7f3550d8944f\
     000000000000000000000000351634dbb20142a7f5ab996b96f71795e35e93f3\
-    00000000000000000000000000000000000000000000000000000000000000a0\
-    0000000000000000000000000000000000000000000000000000000000000100\
+    000000000000000000000000000000000000000000000000000000000000130b\
+    000000000000000000000000000000000000000000000000000000000000ea5e\
+    00000000000000000000000000000000000000000000000000000000000000e0\
+    0000000000000000000000000000000000000000000000000000000000000140\
     0000000000000000000000000000000000000000000000000000000000000002\
     0000000000000000000000000000000000000000000000000000000000000003\
     0000000000000000000000000000000000000000000000000000000000000004\
@@ -832,8 +882,10 @@ fn test_exit_array_abi() {
     000000000000000000000000000000009de79d5506c2d55aba50edaee3b9579f\
     9de79d5506c2d55aba50edaee3b9579f75acd14a63c551c5595bbf66d074a379\
     000000000000000000000000dcc1137e069cab580fd4199ac682a81978e39bc5\
-    00000000000000000000000000000000000000000000000000000000000000a0\
-    0000000000000000000000000000000000000000000000000000000000000100\
+    000000000000000000000000000000000000000000000000000000000000130b\
+    000000000000000000000000000000000000000000000000000000000000ea5e\
+    00000000000000000000000000000000000000000000000000000000000000e0\
+    0000000000000000000000000000000000000000000000000000000000000140\
     0000000000000000000000000000000000000000000000000000000000000002\
     0000000000000000000000000000000000000000000000000000000000000005\
     0000000000000000000000000000000000000000000000000000000000000006\
@@ -842,8 +894,10 @@ fn test_exit_array_abi() {
     000000000000000000000000000000007bbab1ac348ee5be29ac57e2c3e052a1\
     7bbab1ac348ee5be29ac57e2c3e052a164bc756beb5063743399fd08fdb6c5bb\
     000000000000000000000000a970fab4bff2530005fdb65eeb4fe88d228aa9f8\
-    00000000000000000000000000000000000000000000000000000000000000a0\
+    000000000000000000000000000000000000000000000000000000000000130b\
+    000000000000000000000000000000000000000000000000000000000000ea5e\
     00000000000000000000000000000000000000000000000000000000000000e0\
+    0000000000000000000000000000000000000000000000000000000000000120\
     0000000000000000000000000000000000000000000000000000000000000001\
     0000000000000000000000000000000000000000000000000000000000000006\
     0000000000000000000000000000000000000000000000000000000000000001\

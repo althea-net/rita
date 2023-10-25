@@ -58,6 +58,8 @@ async function addUser(opts: {
     mesh_ip: "0xfd001338",
     wg_key: "0xAFEDB",
     eth_addr: "0x154CB202089D58efB56a2B11ce812Ae3882fE1f3",
+    registration_port: "0xFF",
+    wg_exit_listen_port: "0xEE",
     allowed_regions: [],
     payment_types: []
   };
@@ -142,6 +144,8 @@ async function addExit(opts: {
     mesh_ip: "0xfd001337",
     wg_key: "0xAFEDB",
     eth_addr: "0x054CA202089D58efB56a2B11ce812Ae3882fE1f3",
+    registration_port: "0xFF",
+    wg_exit_listen_port: "0xEE",
     allowed_regions: [1, 3],
     payment_types: [5, 6],
   };
@@ -149,6 +153,8 @@ async function addExit(opts: {
     mesh_ip: "0xfd001337",
     wg_key: "0xAFEDB",
     eth_addr: "0x054CA202089D58efB56a2B11ce812Ae3882fE1f3",
+    registration_port: "0xFF",
+    wg_exit_listen_port: "0xEE",
     allowed_regions: [16, 25],
     payment_types: [8, 9],
   };
@@ -156,6 +162,8 @@ async function addExit(opts: {
     mesh_ip: "0xfd001329",
     wg_key: "0xAFEDD",
     eth_addr: "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD",
+    registration_port: "0xFF",
+    wg_exit_listen_port: "0xEE",
     allowed_regions: [],
     payment_types: []
   };
@@ -163,6 +171,8 @@ async function addExit(opts: {
     mesh_ip: "0xfd001338",
     wg_key: "0xAFEDB",
     eth_addr: "0x154CB202089D58efB56a2B11ce812Ae3882fE1f3",
+    registration_port: "0xFF",
+    wg_exit_listen_port: "0xEE",
     allowed_regions: [],
     payment_types: []
   };
@@ -175,6 +185,8 @@ async function addExit(opts: {
     mesh_ip: "0x0",
     wg_key: "0x0",
     eth_addr: "0x0000000000000000000000000000000000000000",
+    registration_port: "0xFF",
+    wg_exit_listen_port: "0xEE",
     allowed_regions: [],
     payment_types: []
   };

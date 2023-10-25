@@ -116,6 +116,10 @@ pub struct ExitIdentity {
     pub mesh_ip: IpAddr,
     pub wg_key: WgKey,
     pub eth_addr: Address,
+    // The port the client uses to query exit endpoints
+    pub registration_port: u16,
+    // The port the clients uses for exit wg tunnel setup
+    pub wg_exit_listen_port: u16,
     pub allowed_regions: HashSet<Regions>,
     pub payment_types: HashSet<SystemChain>,
 }
@@ -127,6 +131,15 @@ impl Hash for ExitIdentity {
         self.mesh_ip.hash(state);
         self.eth_addr.hash(state);
         self.wg_key.hash(state);
+    }
+}
+
+pub fn exit_identity_to_id(exit_id: ExitIdentity) -> Identity {
+    Identity {
+        mesh_ip: exit_id.mesh_ip,
+        eth_address: exit_id.eth_addr,
+        wg_public_key: exit_id.wg_key,
+        nickname: None,
     }
 }
 
@@ -370,8 +383,6 @@ pub struct ExitList {
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitListV2 {
     pub exit_list: Vec<ExitIdentity>,
-    // All exits in a cluster listen on same port
-    pub wg_exit_listen_port: u16,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
