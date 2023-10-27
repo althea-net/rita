@@ -61,7 +61,14 @@ pub async fn run_db_migration_test() {
     register_client_batch_loop(get_eth_node(), althea_db_addr, miner_private_key);
 
     info!("Running user migration");
-    match start_db_migration(DB_URI.to_string()) {
+    match start_db_migration(
+        DB_URI.to_string(),
+        get_eth_node(),
+        miner_private_key.to_address(),
+        althea_db_addr,
+    )
+    .await
+    {
         Ok(_) => println!("Successfully migrated all clients!"),
         Err(e) => println!("Failed to migrate clients with {}", e),
     }

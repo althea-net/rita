@@ -40,10 +40,15 @@ contract AltheaDB {
     /// A list of addresses allowed to add and remove exits from the list of exits
     address[] public state_ExitAdmins;
 
-    // Mappings to regsitered clients
+    // List of regsitered clients
     Identity[] public state_registeredUsers;
-    // Mappings to regsitered exits
+    // List of regsitered exits
     ExitIdentity[] public state_registeredExits;
+
+    // Mappings for duplicate checking
+    mapping(uint128 => bool) public state_registeredIps;
+    mapping(uint256 => bool) public state_registeredKey;
+    mapping(address => bool) public state_registeredAddr;
 
     event UserRegisteredEvent(Identity indexed _user);
     event UserRemovedEvent(Identity indexed _user);
@@ -222,57 +227,18 @@ contract AltheaDB {
     function check_for_any_duplicates(
         Identity memory entry
     ) public view returns (bool) {
-        if (
-            !identities_are_equal(
-                exit_id_to_id(
-                    get_registered_exit_with_eth_addr(entry.eth_addr)
-                ),
-                get_null_identity()
-            )
-        ) {
-            return true;
-        }
-        if (
-            !identities_are_equal(
-                exit_id_to_id(get_registered_exit_with_mesh_ip(entry.mesh_ip)),
-                get_null_identity()
-            )
-        ) {
-            return true;
-        }
-        if (
-            !identities_are_equal(
-                exit_id_to_id(get_registered_exit_with_wg_key(entry.wg_key)),
-                get_null_identity()
-            )
-        ) {
+        if (state_registeredIps[entry.mesh_ip] == true) {
             return true;
         }
 
-        if (
-            !identities_are_equal(
-                get_registered_client_with_eth_addr(entry.eth_addr),
-                get_null_identity()
-            )
-        ) {
+        if (state_registeredKey[entry.wg_key] == true) {
             return true;
         }
-        if (
-            !identities_are_equal(
-                get_registered_client_with_mesh_ip(entry.mesh_ip),
-                get_null_identity()
-            )
-        ) {
+
+        if (state_registeredAddr[entry.eth_addr] == true) {
             return true;
         }
-        if (
-            !identities_are_equal(
-                get_registered_client_with_wg_key(entry.wg_key),
-                get_null_identity()
-            )
-        ) {
-            return true;
-        }
+
         return false;
     }
 
@@ -287,6 +253,10 @@ contract AltheaDB {
                 revert DuplicateUser();
             }
 
+            state_registeredIps[entry.mesh_ip] = true;
+            state_registeredKey[entry.wg_key] = true;
+            state_registeredAddr[entry.eth_addr] = true;
+
             state_registeredUsers.push(entry);
             emit UserRegisteredEvent(entry);
         } else {
@@ -299,6 +269,11 @@ contract AltheaDB {
         if (is_user_admin(msg.sender)) {
             uint256 index = get_index_of_id(entry, state_registeredUsers);
             delete_array_entry(index, state_registeredUsers);
+
+            state_registeredAddr[entry.eth_addr] = false;
+            state_registeredIps[entry.mesh_ip] = false;
+            state_registeredKey[entry.wg_key] = false;
+
             emit UserRemovedEvent(entry);
         } else {
             revert UnathorizedCaller();
@@ -314,6 +289,10 @@ contract AltheaDB {
                 revert DuplicateUser();
             }
 
+            state_registeredIps[entry.mesh_ip] = true;
+            state_registeredKey[entry.wg_key] = true;
+            state_registeredAddr[entry.eth_addr] = true;
+
             state_registeredExits.push(entry);
             emit ExitRegisteredEvent(entry);
         } else {
@@ -326,6 +305,11 @@ contract AltheaDB {
         if (is_exit_admin(msg.sender)) {
             uint256 index = get_index_of_id(entry, state_registeredExits);
             delete_array_entry(index, state_registeredExits);
+
+            state_registeredAddr[entry.eth_addr] = false;
+            state_registeredIps[entry.mesh_ip] = false;
+            state_registeredKey[entry.wg_key] = false;
+
             emit ExitRemovedEvent(entry);
         } else {
             revert UnathorizedCaller();
