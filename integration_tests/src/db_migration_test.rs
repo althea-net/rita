@@ -57,6 +57,8 @@ pub async fn run_db_migration_test() {
     )
     .await;
 
+    thread::sleep(Duration::from_secs(5));
+
     info!("Starting registration loop");
     register_client_batch_loop(get_eth_node(), althea_db_addr, miner_private_key);
 
