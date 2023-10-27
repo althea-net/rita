@@ -182,8 +182,8 @@ pub async fn add_user_admin(
         )
         .await?;
 
-    let is_admin =
-        Uint256::from_be_bytes(res.chunks(WORD_SIZE).collect::<Vec<_>>()[0]) == 1u8.into();
+    let is_admin = !res.is_empty()
+        && Uint256::from_be_bytes(res.chunks(WORD_SIZE).collect::<Vec<_>>()[0]) == 1u8.into();
 
     if !is_admin {
         let tx = web30

@@ -9,7 +9,7 @@ pub mod error;
 pub mod models;
 pub mod schema;
 
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use crate::schema::clients::dsl::clients;
 use althea_types::Identity;
@@ -18,12 +18,20 @@ use diesel::{r2d2::ConnectionManager, PgConnection, RunQueryDsl};
 use error::RitaDBMigrationError;
 use models::Client;
 use r2d2::PooledConnection;
-use rita_client_registration::{add_client_to_reg_batch, client_db::add_user_admin};
+use rita_client_registration::{
+    add_client_to_reg_batch,
+    client_db::{add_user_admin, get_all_regsitered_clients},
+};
 use web30::client::Web3;
 
 const WEB3_TIMEOUT: Duration = Duration::from_secs(60);
 
-pub fn start_db_migration(db_url: String) -> Result<(), RitaDBMigrationError> {
+pub async fn start_db_migration(
+    db_url: String,
+    web3_url: String,
+    requester_address: Address,
+    db_addr: Address,
+) -> Result<(), RitaDBMigrationError> {
     // Validate that db_url and contract_addr are valid
     if !(db_url.contains("postgres://")
         || db_url.contains("postgresql://")
@@ -40,7 +48,8 @@ pub fn start_db_migration(db_url: String) -> Result<(), RitaDBMigrationError> {
             clients_list.len()
         );
 
-        add_clients_to_reg_queue(clients_list)
+        let contact = Web3::new(&web3_url, WEB3_TIMEOUT);
+        add_clients_to_reg_queue(clients_list, &contact, requester_address, db_addr).await
     } else {
         return Err(RitaDBMigrationError::MiscStringError(
             "Unable to get db clients".to_string(),
@@ -50,7 +59,24 @@ pub fn start_db_migration(db_url: String) -> Result<(), RitaDBMigrationError> {
     Ok(())
 }
 
-fn add_clients_to_reg_queue(client_list: Vec<Client>) {
+async fn add_clients_to_reg_queue(
+    client_list: Vec<Client>,
+    contact: &Web3,
+    requester_address: Address,
+    contract: Address,
+) {
+    let existing_users: HashSet<Identity> =
+        match get_all_regsitered_clients(contact, requester_address, contract).await {
+            Ok(a) => HashSet::from_iter(a.iter().cloned()),
+            Err(e) => {
+                error!(
+                    "Failed to get a list of existing users with {}!. Trying to add all users",
+                    e
+                );
+                HashSet::new()
+            }
+        };
+
     for c in client_list {
         let id = Identity {
             mesh_ip: match c.mesh_ip.parse() {
@@ -77,7 +103,12 @@ fn add_clients_to_reg_queue(client_list: Vec<Client>) {
             nickname: None,
         };
 
-        add_client_to_reg_batch(id);
+        if !existing_users.contains(&id) {
+            info!("Adding user {}", id.mesh_ip);
+            add_client_to_reg_batch(id);
+        } else {
+            warn!("User {} already exists!", id.mesh_ip);
+        }
     }
 }
 
