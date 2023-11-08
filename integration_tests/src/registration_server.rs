@@ -89,6 +89,7 @@ async fn register_router(client: Json<ExitClientIdentity>) -> HttpResponse {
         handle_sms_registration(
             client,
             "dummy key".to_string(),
+            "dummy-id".to_string(),
             Some(get_test_runner_magic_phone()),
         )
         .await,
