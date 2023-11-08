@@ -30,6 +30,7 @@ use nix::{
     sched::{setns, CloneFlags},
     sys::stat::Mode,
 };
+use phonenumber::PhoneNumber;
 use rita_client_registration::client_db::{add_exit_admin, add_exit_to_exit_list};
 use rita_common::{
     debt_keeper::GetDebtsResult,
@@ -145,8 +146,8 @@ pub fn get_eth_node() -> String {
     format!("http://{}:8545", NODE_IP)
 }
 
-pub fn get_test_runner_magic_phone() -> String {
-    "+17040000000".to_string()
+pub fn get_test_runner_magic_phone() -> PhoneNumber {
+    "+17040000000".parse().unwrap()
 }
 
 pub async fn deploy_contracts() -> Address {
@@ -389,7 +390,7 @@ pub fn get_default_settings(
     let mut client = client.clone();
     client.exit_client.contact_info = Some(
         ContactType::Both {
-            number: get_test_runner_magic_phone().parse().unwrap(),
+            number: get_test_runner_magic_phone(),
             email: "fake@fake.com".parse().unwrap(),
             sequence_number: Some(0),
         }

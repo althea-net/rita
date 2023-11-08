@@ -1,11 +1,14 @@
 #![deny(unused_crate_dependencies)]
 use std::{
     collections::{HashMap, HashSet},
+    error::Error,
+    fmt::Display,
     sync::{Arc, RwLock},
     time::Duration,
 };
 
 use althea_types::{ExitClientIdentity, Identity, WgKey};
+use awc::error::SendRequestError;
 use phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
 
@@ -30,9 +33,29 @@ pub const TX_TIMEOUT: Duration = Duration::from_secs(60);
 /// Return struct from check_text and Send Text. Verified indicates status from api http req,
 /// bad phone number is an error parsing clients phone number
 /// Internal server error is an error while querying api endpoint
-enum TextApiError {
+#[derive(Debug)]
+pub enum TextApiError {
     BadPhoneNumber,
     InternalServerError { error: String },
+    SendRequestError { error: SendRequestError },
+}
+
+impl Display for TextApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TextApiError::BadPhoneNumber => write!(f, "InvalidPhoneNumber"),
+            TextApiError::InternalServerError { error } => write!(f, "Internal error {}", error),
+            TextApiError::SendRequestError { error } => write!(f, "{}", error),
+        }
+    }
+}
+
+impl Error for TextApiError {}
+
+impl From<SendRequestError> for TextApiError {
+    fn from(value: SendRequestError) -> Self {
+        TextApiError::SendRequestError { error: value }
+    }
 }
 
 /// Return struct from Registration server to exit
@@ -94,7 +117,8 @@ pub struct SmsRequest {
 pub async fn handle_sms_registration(
     client: ExitClientIdentity,
     api_key: String,
-    magic_number: Option<String>,
+    verify_profile_id: String,
+    magic_number: Option<PhoneNumber>,
 ) -> ExitSignupReturn {
     info!(
         "Handling phone registration for {}",
@@ -107,70 +131,92 @@ pub async fn handle_sms_registration(
     let text_num = get_texts_sent(client.global.wg_public_key);
     let sent_more_than_allowed_texts = text_num > 10;
 
-    match (
-        client.reg_details.phone.clone(),
-        client.reg_details.phone_code.clone(),
-        sent_more_than_allowed_texts,
-    ) {
-        // all texts exhausted, but they can still submit the correct code
-        (Some(number), Some(code), true) => {
-            let is_magic =
-                magic_phone_number.is_some() && magic_phone_number.unwrap() == number.clone();
-            let result = is_magic || {
-                match check_text(number.clone(), code, api_key).await {
-                    Ok(a) => a,
-                    Err(e) => return return_api_error(e),
-                }
-            };
-            if result {
-                info!(
-                    "Phone registration complete for {}",
-                    client.global.wg_public_key
-                );
+    match client.reg_details.phone {
+        Some(number) => match number.parse() {
+            Ok(number) => {
+                let number: PhoneNumber = number;
+                match (
+                    client.reg_details.phone_code.clone(),
+                    sent_more_than_allowed_texts,
+                ) {
+                    // all texts exhausted, but they can still submit the correct code
+                    (Some(code), true) => {
+                        let is_magic = magic_phone_number.is_some()
+                            && magic_phone_number.unwrap() == number.clone();
+                        let result = is_magic || {
+                            match check_sms_auth_result(
+                                number.clone(),
+                                code,
+                                api_key,
+                                verify_profile_id,
+                            )
+                            .await
+                            {
+                                Ok(a) => a,
+                                Err(e) => return return_api_error(e),
+                            }
+                        };
+                        if result {
+                            info!(
+                                "Phone registration complete for {}",
+                                client.global.wg_public_key
+                            );
 
-                add_client_to_reg_batch(client.global);
-                reset_texts_sent(client.global.wg_public_key);
-                ExitSignupReturn::RegistrationOk
-            } else {
-                ExitSignupReturn::PendingRegistration
-            }
-        }
-        // user has exhausted attempts but is still not submitting code
-        (Some(_number), None, true) => ExitSignupReturn::PendingRegistration,
-        // user has attempts remaining and is requesting the code be resent
-        (Some(number), None, false) => {
-            if let Err(e) = send_text(number, api_key).await {
-                return return_api_error(e);
-            }
-            increment_texts_sent(client.global.wg_public_key);
-            ExitSignupReturn::PendingRegistration
-        }
-        // user has attempts remaining and is submitting a code
-        (Some(number), Some(code), false) => {
-            let is_magic =
-                magic_phone_number.is_some() && magic_phone_number.unwrap() == number.clone();
+                            add_client_to_reg_batch(client.global);
+                            reset_texts_sent(client.global.wg_public_key);
+                            ExitSignupReturn::RegistrationOk
+                        } else {
+                            ExitSignupReturn::PendingRegistration
+                        }
+                    }
+                    // user has exhausted attempts but is still not submitting code
+                    (None, true) => ExitSignupReturn::PendingRegistration,
+                    // user has attempts remaining and is requesting the code be resent
+                    (None, false) => {
+                        if let Err(e) =
+                            start_sms_auth_flow(number, api_key, verify_profile_id).await
+                        {
+                            return return_api_error(e);
+                        }
+                        increment_texts_sent(client.global.wg_public_key);
+                        ExitSignupReturn::PendingRegistration
+                    }
+                    // user has attempts remaining and is submitting a code
+                    (Some(code), false) => {
+                        let is_magic = magic_phone_number.is_some()
+                            && magic_phone_number.unwrap() == number.clone();
 
-            let result = is_magic || {
-                match check_text(number.clone(), code, api_key).await {
-                    Ok(a) => a,
-                    Err(e) => return return_api_error(e),
+                        let result = is_magic || {
+                            match check_sms_auth_result(
+                                number.clone(),
+                                code,
+                                api_key,
+                                verify_profile_id,
+                            )
+                            .await
+                            {
+                                Ok(a) => a,
+                                Err(e) => return return_api_error(e),
+                            }
+                        };
+                        trace!("Check text returned {}", result);
+                        if result {
+                            info!(
+                                "Phone registration complete for {}",
+                                client.global.wg_public_key
+                            );
+                            add_client_to_reg_batch(client.global);
+                            reset_texts_sent(client.global.wg_public_key);
+                            ExitSignupReturn::RegistrationOk
+                        } else {
+                            ExitSignupReturn::PendingRegistration
+                        }
+                    }
                 }
-            };
-            trace!("Check text returned {}", result);
-            if result {
-                info!(
-                    "Phone registration complete for {}",
-                    client.global.wg_public_key
-                );
-                add_client_to_reg_batch(client.global);
-                reset_texts_sent(client.global.wg_public_key);
-                ExitSignupReturn::RegistrationOk
-            } else {
-                ExitSignupReturn::PendingRegistration
             }
-        }
-        // user did not submit a phonenumber
-        (None, _, _) => ExitSignupReturn::BadPhoneNumber,
+            Err(_) => ExitSignupReturn::BadPhoneNumber,
+        },
+        None => ExitSignupReturn::BadPhoneNumber,
     }
 }
 
@@ -180,74 +226,80 @@ fn return_api_error(e: TextApiError) -> ExitSignupReturn {
         TextApiError::InternalServerError { error } => {
             ExitSignupReturn::InternalServerError { e: error }
         }
+        TextApiError::SendRequestError { error } => ExitSignupReturn::InternalServerError {
+            e: error.to_string(),
+        },
     }
+}
+
+#[derive(Serialize)]
+pub struct TelnyxSmsAuthCheck {
+    verify_profile_id: String,
+    code: String,
 }
 
 /// Posts to the validation endpoint with the code, will return success if the code
 /// is the same as the one sent to the user
-async fn check_text(number: String, code: String, api_key: String) -> Result<bool, TextApiError> {
-    trace!("About to check text message status for {}", number);
-    let number: PhoneNumber = match number.parse() {
-        Ok(number) => number,
-        Err(e) => {
-            error!("Phone parse error: {}", e);
-            return Err(TextApiError::BadPhoneNumber);
-        }
-    };
-    let url = "https://api.authy.com/protected/json/phones/verification/check";
+pub async fn check_sms_auth_result(
+    number: PhoneNumber,
+    code: String,
+    bearer_key: String,
+    verify_profile_id: String,
+) -> Result<bool, TextApiError> {
+    info!("About to check text message status for {}", number);
 
-    let client = awc::Client::default();
-    let response = match client
-        .get(url)
-        .send_form(&SmsCheck {
-            api_key,
-            verification_code: code,
-            phone_number: number.national().to_string(),
-            country_code: number.code().value().to_string(),
-        })
-        .await
-    {
-        Ok(a) => a,
-        Err(e) => {
-            return Err(TextApiError::InternalServerError {
-                error: e.to_string(),
-            })
-        }
-    };
-
-    trace!("Got {} back from check text", response.status());
-    Ok(response.status().is_success())
-}
-
-/// Sends the authy verification text by hitting the api endpoint
-async fn send_text(number: String, api_key: String) -> Result<(), TextApiError> {
-    info!("Sending message for {}", number);
-    let url = "https://api.authy.com/protected/json/phones/verification/start";
-    let number: PhoneNumber = match number.parse() {
-        Ok(number) => number,
-        Err(e) => {
-            error!("Parse phone number error {}", e);
-            return Err(TextApiError::BadPhoneNumber);
-        }
-    };
+    let check_url = format!(
+        "https://api.telnyx.com/v2/verifications/by_phone_number/{}/actions/verify",
+        number
+    );
 
     let client = awc::Client::default();
     match client
-        .post(url)
-        .send_form(&SmsRequest {
-            api_key,
-            via: "sms".to_string(),
-            phone_number: number.national().to_string(),
-            country_code: number.code().value().to_string(),
+        .post(check_url)
+        .bearer_auth(bearer_key)
+        .send_json(&TelnyxSmsAuthCheck {
+            verify_profile_id,
+            code,
         })
         .await
     {
-        Ok(_a) => Ok(()),
+        Ok(a) => Ok(a.status().is_success()),
         Err(e) => {
-            error!("Send text error! {}", e);
-            Err(TextApiError::InternalServerError {
-                error: e.to_string(),
-            })
+            error!("Failed to verify code with {:?}", e);
+            Err(e.into())
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct TelnyxAuthMessage {
+    /// user target number
+    pub phone_number: String,
+    pub verify_profile_id: String,
+}
+
+/// Url for sending auth code
+const URL_START: &str = "https://api.telnyx.com/v2/verifications/sms";
+pub async fn start_sms_auth_flow(
+    phone_number: PhoneNumber,
+    bearer_key: String,
+    verify_profile_id: String,
+) -> Result<(), TextApiError> {
+    let client = awc::Client::default();
+    match client
+        .post(URL_START)
+        .bearer_auth(bearer_key)
+        .timeout(Duration::from_secs(1))
+        .send_json(&TelnyxAuthMessage {
+            phone_number: phone_number.to_string(),
+            verify_profile_id,
+        })
+        .await
+    {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            error!("auth text error {:?}", e);
+            Err(e.into())
         }
     }
 }
