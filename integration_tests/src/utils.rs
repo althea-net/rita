@@ -31,6 +31,7 @@ use nix::{
     sched::{setns, CloneFlags},
     sys::stat::Mode,
 };
+use phonenumber::PhoneNumber;
 use rita_common::{
     debt_keeper::GetDebtsResult,
     payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT},
@@ -138,8 +139,8 @@ pub fn get_eth_node() -> String {
     format!("http://{}:8545", NODE_IP)
 }
 
-pub fn get_test_runner_magic_phone() -> String {
-    "+17040000000".to_string()
+pub fn get_test_runner_magic_phone() -> PhoneNumber {
+    "+17040000000".parse().unwrap()
 }
 
 pub async fn deploy_contracts() -> Address {
@@ -405,7 +406,7 @@ pub fn get_default_settings(
     exit.exit_network.cluster_exits = cluster_exits;
     client.exit_client.contact_info = Some(
         ContactType::Both {
-            number: get_test_runner_magic_phone().parse().unwrap(),
+            number: get_test_runner_magic_phone(),
             email: "fake@fake.com".parse().unwrap(),
             sequence_number: Some(0),
         }
