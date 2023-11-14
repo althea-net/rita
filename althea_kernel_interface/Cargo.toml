@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 oping = "0.3"
 lazy_static = "1.4"
-log = "0.4"
+log = {workspace = true}
 serde_derive = "1.0"
 serde = "1.0"
 althea_types = { path = "../althea_types" }

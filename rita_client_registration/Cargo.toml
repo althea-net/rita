@@ -8,12 +8,12 @@ edition = "2021"
 [dependencies]
 lazy_static = "1.4"
 althea_types = { path = "../althea_types" }
-log = { version = "0.4", features = ["release_max_level_info"] }
+log = { workspace = true }
 serde = "1.0"
-clarity = "1.2"
+clarity = { workspace = true }
 phonenumber = "0.3"
-awc = "3.1"
-web30 = "1.0"
+awc = {workspace = true}
+web30 = { workspace = true }
 tokio = { version = "1.21", features = ["macros", "time"] }
 actix = "0.13"
 futures = { version = "0.3", features = ["compat"] }

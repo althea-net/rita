@@ -20,7 +20,7 @@ flate2 = { version = "1.0", features = [
 actix-async = { package = "actix", version = "0.13" }
 auto-bridge = { path = "../auto_bridge" }
 serde_json = "1.0"
-log = { version = "0.4", features = ["release_max_level_info"] }
+log = { workspace = true }
 settings = { path = "../settings" }
 clarity = {workspace = true}
 futures = { version = "0.3", features = ["compat"] }
@@ -53,3 +53,4 @@ env_logger = "0.10"
 dash_debug = []
 legacy_integration_test = []
 integration_test = []
+

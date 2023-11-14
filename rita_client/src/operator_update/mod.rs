@@ -144,26 +144,30 @@ pub async fn operator_update(
     });
 
     let client = awc::Client::default();
+    let checkin_msg = &OperatorCheckinMessage {
+        id,
+        operator_address,
+        system_chain,
+        exit_con,
+        neighbor_info,
+        contact_info,
+        install_details,
+        billing_details,
+        hardware_info,
+        user_bandwidth_limit,
+        rita_uptime: RITA_UPTIME.elapsed(),
+        user_bandwidth_usage: None,
+        user_bandwidth_usage_v2: prepare_usage_data_for_upload(ops_last_seen_usage_hour)?,
+        client_mbps: get_current_throughput(UsageType::Client),
+        relay_mbps: get_current_throughput(UsageType::Relay),
+    };
+
+    info!("Sending checkin_msg: {:?}", checkin_msg);
+
     let response = client
         .post(url)
         .timeout(timeout)
-        .send_json(&OperatorCheckinMessage {
-            id,
-            operator_address,
-            system_chain,
-            exit_con,
-            neighbor_info,
-            contact_info,
-            install_details,
-            billing_details,
-            hardware_info,
-            user_bandwidth_limit,
-            rita_uptime: RITA_UPTIME.elapsed(),
-            user_bandwidth_usage: None,
-            user_bandwidth_usage_v2: prepare_usage_data_for_upload(ops_last_seen_usage_hour)?,
-            client_mbps: get_current_throughput(UsageType::Client),
-            relay_mbps: get_current_throughput(UsageType::Relay),
-        })
+        .send_json(checkin_msg)
         .await;
 
     let response = match response {
