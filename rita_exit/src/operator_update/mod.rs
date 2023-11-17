@@ -41,7 +41,7 @@ pub async fn operator_update(rita_started: Instant) {
         info!("About to perform operator update with {}", url);
 
         let client = awc::Client::default();
-        let _response = client
+        let response = client
             .post(url)
             .timeout(OPERATOR_UPDATE_TIMEOUT)
             .send_json(&OperatorExitCheckinMessage {
@@ -52,5 +52,9 @@ pub async fn operator_update(rita_started: Instant) {
                 users_online: KI.get_wg_exit_clients_online(EXIT_INTERFACE).ok(),
             })
             .await;
+        match response {
+            Ok(v) => info!("Exit operator update succeeded with {:?}", v),
+            Err(e) => error!("Exit operator update failed with {:?}", e),
+        }
     }
 }
