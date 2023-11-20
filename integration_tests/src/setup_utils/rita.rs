@@ -155,7 +155,7 @@ pub fn spawn_rita(
         rcsettings.network.babeld_settings.local_fee = local_fee;
 
         // mirrored from rita_bin/src/client.rs
-        let s = clu::init("linux", rcsettings);
+        let s = clu::init(rcsettings);
         set_flag_config(config_path.into());
         settings::set_rita_client(s.clone());
 
@@ -248,7 +248,7 @@ pub fn spawn_rita_exit(
         resettings.db_uri = "postgresql://postgres@10.0.0.1/test".to_string();
 
         // mirrored from rita_bin/src/exit.rs
-        let resettings = clu::exit_init("linux", resettings);
+        let resettings = clu::exit_init(resettings);
 
         set_flag_config(config_path.into());
         settings::set_rita_exit(resettings.clone());

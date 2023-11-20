@@ -49,16 +49,12 @@ use settings::client::{default_config_path, APP_NAME};
 pub struct Args {
     #[serde(default = "default_config_path")]
     pub flag_config: PathBuf,
-    pub flag_platform: String,
-    pub flag_future: bool,
 }
 
 impl Default for Args {
     fn default() -> Self {
         Args {
             flag_config: default_config_path(),
-            flag_platform: "linux".to_string(),
-            flag_future: false,
         }
     }
 }
@@ -71,8 +67,6 @@ pub fn get_client_usage(version: &str, git_hash: &str) -> String {
         "Usage: {APP_NAME} [--config=<settings>] [--platform=<platform>] [--future]
 Options:
     -c, --config=<settings>     Name of config file
-    -p, --platform=<platform>   Platform (linux or OpenWrt)
-    --future                    Enable B side of A/B releases
 About:
     Version {READABLE_VERSION} - {version}
     git hash {git_hash}"
