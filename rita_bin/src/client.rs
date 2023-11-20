@@ -79,16 +79,12 @@ fn main() {
     // load the settings file, setup a thread to save it out every so often
     // and populate the memory cache of settings used throughout the program
     let settings: RitaClientSettings = {
-        let platform = &args.flag_platform;
-
         RitaClientSettings::new_watched(settings_file.clone()).unwrap();
-        let mut s = settings::get_rita_client();
+        let s = settings::get_rita_client();
 
         settings::set_flag_config(settings_file.clone());
 
-        s.set_future(args.flag_future);
-
-        let s = clu::init(platform, s);
+        let s = clu::init(s);
 
         s.write(settings_file).unwrap();
         settings::set_rita_client(s.clone());
