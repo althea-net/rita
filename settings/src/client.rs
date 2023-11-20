@@ -164,7 +164,8 @@ impl ExitClientSettings {
 impl RitaClientSettings {
     pub fn new(file_name: &str) -> Result<Self, SettingsError> {
         if !Path::new(file_name).exists() {
-            return Err(SettingsError::FileNotFoundError(file_name.to_string()));
+            error!("Failed to find settings file at location {}, generating", file_name);
+            return Ok(RitaClientSettings::default())
         }
 
         let config_toml = std::fs::read_to_string(file_name)?;
@@ -227,8 +228,6 @@ pub struct RitaClientSettings {
     pub localization: LocalizationSettings,
     pub network: NetworkSettings,
     pub exit_client: ExitClientSettings,
-    #[serde(skip)]
-    pub future: bool,
     #[serde(default = "default_app_name")]
     pub app_name: String,
     /// The save interval defaults to 48 hours for exit settings represented in seconds
@@ -267,12 +266,5 @@ impl RitaClientSettings {
             self.network.nickname,
         ))
     }
-
-    pub fn get_future(&self) -> bool {
-        self.future
-    }
-
-    pub fn set_future(&mut self, future: bool) {
-        self.future = future
-    }
 }
+

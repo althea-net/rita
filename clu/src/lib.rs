@@ -15,7 +15,7 @@ use std::fs::File;
 use std::io::Read;
 use std::net::IpAddr;
 use std::path::Path;
-use std::{str, thread};
+use std::thread;
 
 mod error;
 pub use error::NewCluError;
@@ -300,18 +300,12 @@ fn linux_exit_init(
     Ok(settings)
 }
 
-pub fn init(platform: &str, settings: RitaClientSettings) -> RitaClientSettings {
-    match platform {
-        "linux" => linux_init(settings).unwrap(),
-        _ => unimplemented!(),
-    }
+pub fn init(settings: RitaClientSettings) -> RitaClientSettings {
+    linux_init(settings).unwrap()
 }
 
-pub fn exit_init(platform: &str, settings: RitaExitSettingsStruct) -> RitaExitSettingsStruct {
-    match platform {
-        "linux" => linux_exit_init(settings).unwrap(),
-        _ => unimplemented!(),
-    }
+pub fn exit_init(settings: RitaExitSettingsStruct) -> RitaExitSettingsStruct {
+    linux_exit_init(settings).unwrap()
 }
 
 #[cfg(test)]
