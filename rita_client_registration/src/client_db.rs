@@ -368,6 +368,11 @@ pub fn parse_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<Identity>, Web3Err
     let mut ret = vec![];
     let byte_chunks: Vec<&[u8]> = bytes.chunks(WORD_SIZE).collect();
 
+    // An empty list, the first word has a type identifier, the second is empty
+    if byte_chunks.len() == 2 {
+        return Ok(vec![])
+    }
+
     // A valid array with 1 entry has 5 lines. An empty list has 2 lines
     if byte_chunks.len() < 5 {
         return Err(Web3Error::BadInput(format!(

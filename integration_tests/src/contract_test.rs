@@ -201,7 +201,7 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     // Try requests when there are no users present
     let res = get_all_regsitered_clients(&contact, miner_pub_key, db_addr).await;
 
-    assert!(res.is_err());
+    assert_eq!(res.unwrap(), vec![]);
 
     let res =
         get_registered_client_using_wgkey(user_1.wg_public_key, miner_pub_key, db_addr, &contact)

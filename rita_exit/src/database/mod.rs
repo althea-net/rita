@@ -221,7 +221,7 @@ pub async fn client_status(
             })
         }
         Err(e) => {
-            error!("Failed to retrieve a client: {}", e);
+            trace!("Failed to retrieve a client: {}", e);
             Err(Box::new(RitaExitError::NoClientError))
         }
     }

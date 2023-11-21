@@ -27,7 +27,7 @@ pub const OPERATOR_UPDATE_TIMEOUT: Duration = Duration::from_secs(4);
 pub async fn operator_update(rita_started: Instant) {
     let url: &str;
     if cfg!(feature = "dev_env") {
-        url = "http://7.7.7.7:8080/exitcheckin";
+        url = "http://7.7.7.1:8080/exitcheckin";
     } else if cfg!(feature = "operator_debug") {
         url = "http://192.168.10.2:8080/exitcheckin";
     } else {
@@ -53,7 +53,10 @@ pub async fn operator_update(rita_started: Instant) {
             })
             .await;
         match response {
-            Ok(v) => info!("Exit operator update succeeded with {:?}", v),
+            Ok(v) => match v.status().is_success() {
+                true => info!("Exit operator update succeeded"),
+                false => error!("Exit operator update failed with {:?}", v),
+            },
             Err(e) => error!("Exit operator update failed with {:?}", e),
         }
     }

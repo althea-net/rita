@@ -135,14 +135,7 @@ pub async fn secure_setup_request(
     let exit_settings = get_rita_exit();
 
     let our_old_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
-    let our_new_secretkey = exit_settings
-        .network
-        .wg_private_key
-        .unwrap_or(our_old_secretkey);
-
-    if our_old_secretkey == our_new_secretkey {
-        error!("Two Distinct wg key are not setup on this exit, please setup!!");
-    }
+    let our_new_secretkey = exit_settings.network.wg_private_key.unwrap();
 
     let our_old_secretkey: SecretKey = our_old_secretkey.into();
     let our_new_secretkey = our_new_secretkey.into();
@@ -224,14 +217,7 @@ pub async fn secure_setup_request(
 pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
     let exit_settings = get_rita_exit();
     let our_old_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
-    let our_new_secretkey = exit_settings
-        .network
-        .wg_private_key
-        .unwrap_or(our_old_secretkey);
-
-    if our_old_secretkey == our_new_secretkey {
-        error!("Two Distinct wg key are not setup on this exit, please setup!!");
-    }
+    let our_new_secretkey = exit_settings.network.wg_private_key.unwrap();
 
     let our_old_secretkey = our_old_secretkey.into();
     let our_new_secretkey = our_new_secretkey.into();
