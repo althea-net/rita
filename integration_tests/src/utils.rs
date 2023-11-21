@@ -1,5 +1,4 @@
 use crate::{
-    config::{CONFIG_FILE_PATH, EXIT_CONFIG_PATH},
     payments_althea::get_althea_evm_priv,
     payments_eth::{eth_chain_id, get_eth_miner_key, get_miner_address, ONE_ETH, WEB3_TIMEOUT},
     setup_utils::{
@@ -36,7 +35,7 @@ use rita_common::{
     debt_keeper::GetDebtsResult,
     payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT},
 };
-use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
+use settings::{client::RitaClientSettings, exit::{RitaExitSettingsStruct, ExitNetworkSettings}, payment::PaymentSettings, localization::LocalizationSettings, network::NetworkSettings};
 use std::{
     collections::{HashMap, HashSet},
     net::Ipv6Addr,
@@ -359,15 +358,25 @@ pub const EXIT_ROOT_IP: IpAddr =
 // this masks public ipv6 ips in the test env and is being used to test assignment
 pub const EXIT_SUBNET: Ipv6Addr = Ipv6Addr::new(0xfbad, 200, 0, 0, 0, 0, 0, 0);
 
-/// Gets the default client and exit settings handling the pre-launch exchange of exit into and its insertion into
-/// the
+/// Gets the default client and exit settings
 pub fn get_default_settings(
     namespaces: NamespaceInfo,
 ) -> (RitaClientSettings, RitaExitSettingsStruct) {
-    let exit = RitaExitSettingsStruct::new(EXIT_CONFIG_PATH).unwrap();
-    let client = RitaClientSettings::new(CONFIG_FILE_PATH).unwrap();
-
     let mut exit_servers = HashMap::new();
+    let exit = RitaExitSettingsStruct {
+        db_uri: "postgres://postgres@localhost/test".to_string(),
+        client_registration_url: "https://7.7.7.1:40400/register_router".to_string(),
+        workers: 2,
+        remote_log: false,
+        description: "Test environment exit instance".to_string(),
+        payment: PaymentSettings::default(),
+        localization: LocalizationSettings::default(),
+        network: NetworkSettings::default(),
+        exit_network: ExitNetworkSettings::test_default(),
+        allowed_countries: HashSet::new(),
+        save_interval: 6000,
+    };
+    let client = RitaClientSettings::default();
 
     let mut exit_mesh_ips = HashSet::new();
     for ns in namespaces.names {

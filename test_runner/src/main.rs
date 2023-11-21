@@ -1,6 +1,3 @@
-use integration_tests::config::{
-    generate_exit_config_file, generate_rita_config_file, CONFIG_FILE_PATH, EXIT_CONFIG_PATH,
-};
 use integration_tests::contract_test::run_altheadb_contract_test;
 use integration_tests::db_migration_test::run_db_migration_test;
 use integration_tests::debts::run_debts_test;
@@ -35,11 +32,6 @@ async fn main() {
     set_sigterm();
 
     println!("Starting the Rita test runner");
-
-    let conf = generate_rita_config_file(CONFIG_FILE_PATH.to_string());
-    info!("Generating rita config file: {:?}", conf);
-    let conf = generate_exit_config_file(EXIT_CONFIG_PATH.to_string());
-    info!("Generating exit config file: {:?}", conf);
 
     let test_type = env::var("TEST_TYPE");
     info!("Starting tests with {:?}", test_type);
