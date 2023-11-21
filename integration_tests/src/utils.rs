@@ -363,7 +363,7 @@ pub fn get_default_settings(
     namespaces: NamespaceInfo,
 ) -> (RitaClientSettings, RitaExitSettingsStruct) {
     let mut exit_servers = HashMap::new();
-    let exit = RitaExitSettingsStruct {
+    let mut exit = RitaExitSettingsStruct {
         db_uri: "postgres://postgres@localhost/test".to_string(),
         client_registration_url: "https://7.7.7.1:40400/register_router".to_string(),
         workers: 2,
@@ -377,6 +377,7 @@ pub fn get_default_settings(
         save_interval: 6000,
     };
     let client = RitaClientSettings::default();
+    exit.exit_network.pass = Some("testpass".to_string());
 
     let mut exit_mesh_ips = HashSet::new();
     for ns in namespaces.names {
