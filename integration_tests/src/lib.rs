@@ -3,7 +3,6 @@ extern crate lazy_static;
 
 use std::time::Duration;
 
-pub mod config;
 pub mod contract_test;
 pub mod db_migration_test;
 pub mod debts;

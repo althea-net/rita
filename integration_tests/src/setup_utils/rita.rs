@@ -199,6 +199,7 @@ pub fn spawn_rita_exit(
 ) -> Identity {
     let ns_dup = ns.clone();
     let wg_keypath = format!("/var/tmp/{ns}");
+    let wg_keypath_exit = format!("/var/tmp/{ns}-exit");
     let config_path = format!("/var/tmp/settings-{ns}.toml");
     // thread safe lock that allows us to pass data between the router thread and this thread
     // one copy of the reference is sent into the closure and the other is kept in this scope.
@@ -238,7 +239,10 @@ pub fn spawn_rita_exit(
         resettings.exit_network.registered_users_contract_addr = db_addr;
         resettings.network.wg_private_key = Some(instance.wg_priv_key);
         resettings.network.wg_public_key = Some(instance.wg_pub_key);
+        resettings.exit_network.wg_private_key = instance.wg_priv_key;
+        resettings.exit_network.wg_public_key = instance.wg_pub_key;
         resettings.network.wg_private_key_path = wg_keypath;
+        resettings.exit_network.wg_private_key_path = wg_keypath_exit;
         resettings.network.peer_interfaces = veth_interfaces;
         resettings.network.babeld_settings.local_fee = local_fee;
         resettings.exit_network.exit_price = exit_fee;
