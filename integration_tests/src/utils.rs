@@ -35,7 +35,13 @@ use rita_common::{
     debt_keeper::GetDebtsResult,
     payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT},
 };
-use settings::{client::RitaClientSettings, exit::{RitaExitSettingsStruct, ExitNetworkSettings}, payment::PaymentSettings, localization::LocalizationSettings, network::NetworkSettings};
+use settings::{
+    client::RitaClientSettings,
+    exit::{ExitNetworkSettings, RitaExitSettingsStruct},
+    localization::LocalizationSettings,
+    network::NetworkSettings,
+    payment::PaymentSettings,
+};
 use std::{
     collections::{HashMap, HashSet},
     net::Ipv6Addr,

@@ -370,7 +370,7 @@ pub fn parse_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<Identity>, Web3Err
 
     // An empty list, the first word has a type identifier, the second is empty
     if byte_chunks.len() == 2 {
-        return Ok(vec![])
+        return Ok(vec![]);
     }
 
     // A valid array with 1 entry has 5 lines. An empty list has 2 lines

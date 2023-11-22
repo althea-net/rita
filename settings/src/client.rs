@@ -140,8 +140,11 @@ impl Default for ExitClientSettings {
 impl RitaClientSettings {
     pub fn new(file_name: &str) -> Result<Self, SettingsError> {
         if !Path::new(file_name).exists() {
-            error!("Failed to find settings file at location {}, generating", file_name);
-            return Ok(RitaClientSettings::default())
+            error!(
+                "Failed to find settings file at location {}, generating",
+                file_name
+            );
+            return Ok(RitaClientSettings::default());
         }
 
         let config_toml = std::fs::read_to_string(file_name)?;
@@ -220,4 +223,3 @@ impl RitaClientSettings {
         ))
     }
 }
-
