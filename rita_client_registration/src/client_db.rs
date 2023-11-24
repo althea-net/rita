@@ -1,25 +1,31 @@
-use std::{
-    collections::HashSet,
-    net::{IpAddr, Ipv6Addr},
-    time::Duration,
-    vec,
-};
-
 use althea_types::{ExitIdentity, Identity, Regions, SystemChain, WgKey};
 use clarity::{
     abi::{encode_call, AbiToken},
     utils::bytes_to_hex_str,
     Address, PrivateKey, Uint256,
 };
+use std::{
+    collections::HashSet,
+    net::{IpAddr, Ipv6Addr},
+    time::Duration,
+    vec,
+};
+use tokio::time::timeout as future_timeout;
 use web30::{
     client::Web3,
     jsonrpc::error::Web3Error,
     types::{SendTxOption, TransactionRequest},
 };
 
-use tokio::time::timeout as future_timeout;
-
+/// The EVM integer size
 pub const WORD_SIZE: usize = 32;
+
+/// This function takes a flat byte vector `input` and divides it into chunks of a specified
+/// word size (`WORD_SIZE`). Each chunk is then converted into a separate vector of bytes,
+/// resulting in a vector of EVM words.
+fn to_evm_words(input: Vec<u8>) -> Vec<Vec<u8>> {
+    input.chunks(WORD_SIZE).map(|i| i.to_vec()).collect()
+}
 
 pub async fn get_all_regsitered_clients(
     web30: &Web3,
@@ -55,7 +61,7 @@ pub async fn get_registered_client_using_wgkey(
         .await?;
 
     // Parse resulting bytes
-    parse_identity_abi(res.chunks(WORD_SIZE).collect())
+    parse_identity_abi(res.chunks(WORD_SIZE).map(|i| i.to_vec()).collect())
 }
 
 pub async fn add_client_to_registered_list(
@@ -263,7 +269,7 @@ pub async fn get_client_exit_list(
     parse_exit_identity_array_abi(res)
 }
 
-pub fn parse_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<Identity, Web3Error> {
+pub fn parse_identity_abi(byte_chunks: Vec<Vec<u8>>) -> Result<Identity, Web3Error> {
     /* Expected Input:
     00000000000000000000000000000000c5860e75c42cec1fe1d838a78de785fb // Mesh ip as u128
     c5860e75c42cec1fe1d838a78de785fbb687e85cbd5073a089b5395397423ccc // wgkey as u256
@@ -366,7 +372,7 @@ pub fn parse_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<Identity>, Web3Err
     */
 
     let mut ret = vec![];
-    let byte_chunks: Vec<&[u8]> = bytes.chunks(WORD_SIZE).collect();
+    let byte_chunks = to_evm_words(bytes);
 
     // An empty list, the first word has a type identifier, the second is empty
     if byte_chunks.len() == 2 {
@@ -410,11 +416,12 @@ pub fn parse_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<Identity>, Web3Err
                 )))
             }
         };
+        let bytes_to_pass: Vec<Vec<u8>> = bytes_to_pass.iter().map(|i| i.to_vec()).collect();
 
         // Increment index for next iteration
         index += 3;
 
-        ret.push(match parse_identity_abi((*bytes_to_pass).to_vec()) {
+        ret.push(match parse_identity_abi(bytes_to_pass) {
             Ok(a) => a,
             Err(e) => {
                 error!(
@@ -485,7 +492,7 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
     */
 
     // A valid array with 1 entry will have atleast 11 lines
-    let byte_chunks: Vec<_> = bytes.chunks(WORD_SIZE).collect();
+    let byte_chunks = to_evm_words(bytes);
     if byte_chunks.len() < 11 {
         return Err(Web3Error::BadInput(format!(
             "Empty or invalid array: {byte_chunks:?}"
@@ -506,7 +513,7 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
     // pass in each entry byte chunk to individual entry parser
     let index = 2;
     for i in index..index + num_entries {
-        let next_index_pos: Uint256 = Uint256::from_be_bytes(byte_chunks[i]) / WORD_SIZE.into();
+        let next_index_pos: Uint256 = Uint256::from_be_bytes(&byte_chunks[i]) / WORD_SIZE.into();
         let next_index_pos: usize = usize::from_be_bytes(
             match next_index_pos.to_be_bytes()[24..WORD_SIZE].try_into() {
                 Ok(a) => a,
@@ -521,7 +528,7 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
         );
 
         match parse_exit_identity_abi(match byte_chunks.get(index + next_index_pos..) {
-            Some(a) => (*a).to_vec(),
+            Some(a) => a.iter().map(|i| i.to_vec()).collect(),
             None => {
                 error!(
                     "Invalid indexing? trying to get {}, with byte chunks {:?}",
@@ -542,7 +549,7 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
 }
 
 // Parses a single entry of an abi encoded ExitIdentity
-pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, Web3Error> {
+pub fn parse_exit_identity_abi(byte_chunks: Vec<Vec<u8>>) -> Result<ExitIdentity, Web3Error> {
     /*Expected input:
     000000000000000000000000000000007bbab1ac348ee5be29ac57e2c3e052a1    // Second array entry mesh ip
     7bbab1ac348ee5be29ac57e2c3e052a164bc756beb5063743399fd08fdb6c5bb
@@ -568,7 +575,7 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
     // Parse first 3 entries to get identity struct. Already validated length
     let exit_id = parse_identity_abi(byte_chunks[0..3].to_vec())?;
 
-    let registration_port: Uint256 = Uint256::from_be_bytes(byte_chunks[3]);
+    let registration_port: Uint256 = Uint256::from_be_bytes(&byte_chunks[3]);
     let registration_port: u16 = u16::from_be_bytes(
         match registration_port.to_be_bytes()[30..WORD_SIZE].try_into() {
             Ok(a) => a,
@@ -582,7 +589,7 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
         },
     );
 
-    let wg_exit_listen_port: Uint256 = Uint256::from_be_bytes(byte_chunks[4]);
+    let wg_exit_listen_port: Uint256 = Uint256::from_be_bytes(&byte_chunks[4]);
     let wg_exit_listen_port: u16 = u16::from_be_bytes(
         match wg_exit_listen_port.to_be_bytes()[30..WORD_SIZE].try_into() {
             Ok(a) => a,
@@ -596,7 +603,7 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
         },
     );
 
-    let regions_start: Uint256 = Uint256::from_be_bytes(byte_chunks[5]) / WORD_SIZE.into();
+    let regions_start: Uint256 = Uint256::from_be_bytes(&byte_chunks[5]) / WORD_SIZE.into();
     let regions_start: usize = usize::from_be_bytes(
         match regions_start.to_be_bytes()[24..WORD_SIZE].try_into() {
             Ok(a) => a,
@@ -610,7 +617,7 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
         },
     );
 
-    let payment_start: Uint256 = Uint256::from_be_bytes(byte_chunks[6]) / WORD_SIZE.into();
+    let payment_start: Uint256 = Uint256::from_be_bytes(&byte_chunks[6]) / WORD_SIZE.into();
     let payment_start: usize = usize::from_be_bytes(
         match payment_start.to_be_bytes()[24..WORD_SIZE].try_into() {
             Ok(a) => a,
@@ -698,69 +705,173 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<&[u8]>) -> Result<ExitIdentity, 
     })
 }
 
-#[test]
-fn test_parse_abi() {
-    use clarity::utils::hex_str_to_bytes;
-    // test parsing an abi struct with various input types
-    let id = Identity {
-        mesh_ip: "e0b1:bf22:64ae:8e91:cc4e:5a1b:a0ef:8495".parse().unwrap(),
-        eth_address: "0x090502B2fd4dE198554511C0a6fd4da5D41E7C49"
-            .parse()
-            .unwrap(),
-        wg_public_key: "4LG/ImSujpHMTloboO+ElV7wgn2LRsUnZzoeZGMFO2Q="
-            .parse()
-            .unwrap(),
-        nickname: None,
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::{
+        distributions::{Distribution, Uniform},
+        rngs::ThreadRng,
+        thread_rng, Rng,
     };
-    let bytes = "\
+    use std::time::Instant;
+
+    /// How long we fuzz the input
+    const FUZZ_TIME: Duration = Duration::from_secs(30);
+
+    fn get_fuzz_bytes(rng: &mut ThreadRng) -> Vec<Vec<u8>> {
+        let outer_range = Uniform::from(1..200_000);
+        let inner_range = Uniform::from(1..10_000);
+        let outer_size: usize = outer_range.sample(rng);
+        let mut fuzz_bytes = Vec::with_capacity(outer_size);
+        for _ in 0..outer_size {
+            let inner_size: usize = inner_range.sample(rng);
+            let mut inner_bytes = Vec::with_capacity(inner_size);
+
+            for _ in 0..inner_size {
+                inner_bytes.push(rng.gen());
+            }
+
+            fuzz_bytes.push(inner_bytes);
+        }
+        fuzz_bytes
+    }
+
+    fn get_fuzz_bytes_flat(rng: &mut ThreadRng) -> Vec<u8> {
+        let range = Uniform::from(1..200_000);
+        let size: usize = range.sample(rng);
+        let event_bytes: Vec<u8> = (0..size)
+            .map(|_| {
+                let val: u8 = rng.gen();
+                val
+            })
+            .collect();
+        event_bytes
+    }
+
+    #[test]
+    fn fuzz_pase_identity_abi() {
+        let start = Instant::now();
+        let mut rng = thread_rng();
+        while Instant::now() - start < FUZZ_TIME {
+            let bytes = get_fuzz_bytes(&mut rng);
+
+            let res = parse_identity_abi(bytes);
+            match res {
+                Ok(_) => println!("Got valid output, this should happen very rarely!"),
+                Err(_e) => {}
+            }
+        }
+    }
+
+    #[test]
+    fn fuzz_pase_identity_array_abi() {
+        let start = Instant::now();
+        let mut rng = thread_rng();
+        while Instant::now() - start < FUZZ_TIME {
+            let bytes = get_fuzz_bytes_flat(&mut rng);
+
+            let res = parse_identity_array_abi(bytes);
+            match res {
+                Ok(_) => println!("Got valid output, this should happen very rarely!"),
+                Err(_e) => {}
+            }
+        }
+    }
+
+    #[test]
+    fn fuzz_pase_exit_identity_array() {
+        let start = Instant::now();
+        let mut rng = thread_rng();
+        while Instant::now() - start < FUZZ_TIME {
+            let bytes = get_fuzz_bytes(&mut rng);
+
+            let res = parse_exit_identity_abi(bytes);
+            match res {
+                Ok(_) => println!("Got valid output, this should happen very rarely!"),
+                Err(_e) => {}
+            }
+        }
+    }
+
+    #[test]
+    fn fuzz_pase_exit_identity_array_abi() {
+        let start = Instant::now();
+        let mut rng = thread_rng();
+        while Instant::now() - start < FUZZ_TIME {
+            let bytes = get_fuzz_bytes_flat(&mut rng);
+
+            let res = parse_exit_identity_array_abi(bytes);
+            match res {
+                Ok(_) => println!("Got valid output, this should happen very rarely!"),
+                Err(_e) => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_abi() {
+        use clarity::utils::hex_str_to_bytes;
+        // test parsing an abi struct with various input types
+        let id = Identity {
+            mesh_ip: "e0b1:bf22:64ae:8e91:cc4e:5a1b:a0ef:8495".parse().unwrap(),
+            eth_address: "0x090502B2fd4dE198554511C0a6fd4da5D41E7C49"
+                .parse()
+                .unwrap(),
+            wg_public_key: "4LG/ImSujpHMTloboO+ElV7wgn2LRsUnZzoeZGMFO2Q="
+                .parse()
+                .unwrap(),
+            nickname: None,
+        };
+        let bytes = "\
     00000000000000000000000000000000e0b1bf2264ae8e91cc4e5a1ba0ef8495\
     e0b1bf2264ae8e91cc4e5a1ba0ef84955ef0827d8b46c527673a1e6463053b64\
     000000000000000000000000090502b2fd4de198554511c0a6fd4da5d41e7c49";
 
-    let bytes = hex_str_to_bytes(bytes).unwrap();
-    assert_eq!(
-        parse_identity_abi(bytes.chunks(WORD_SIZE).collect()).unwrap(),
-        id
-    );
+        let bytes = hex_str_to_bytes(bytes).unwrap();
+        assert_eq!(
+            parse_identity_abi(to_evm_words(bytes)).unwrap(),
+            id
+        );
 
-    // invalid input
-    let bytes = "\
+        // invalid input
+        let bytes = "\
     00000000000000000000000000000000e0b1bf2264ae8e91cc4e5a1ba0ef8495\
     00000000000000000000000000000000e0b1bf2264ae8e91cc4e5a1ba0ef8495\
     e0b1bf2264ae8e91cc4e5a1ba0ef84955ef0827d8b46c527673a1e6463053b64\
     000000000000000000000000090502b2fd4de198554511c0a6fd4da5d41e7c49";
 
-    let bytes = hex_str_to_bytes(bytes).unwrap();
-    assert!(parse_identity_abi(bytes.chunks(WORD_SIZE).collect()).is_err());
+        let bytes = hex_str_to_bytes(bytes).unwrap();
+        assert!(parse_identity_abi(to_evm_words(bytes)).is_err());
 
-    // invalid input
-    let bytes = "\
+        // invalid input
+        let bytes = "\
     0000000000000000000000000000000000000000000000000000000000000000\
     00000000000000000000000000000000e0b1bf2264ae8e91cc4e5a1ba0ef8495\
     e0b1bf2264ae8e91cc4e5a1ba0ef84955ef0827d8b46c527673a1e6463053b64";
 
-    let bytes = hex_str_to_bytes(bytes).unwrap();
-    assert!(parse_identity_abi(bytes.chunks(WORD_SIZE).collect()).is_err());
+        let bytes = hex_str_to_bytes(bytes).unwrap();
+        assert!(parse_identity_abi(to_evm_words(bytes)).is_err());
 
-    // invalid input
-    let bytes = "\
+        // invalid input
+        let bytes = "\
     00000000000000000000000000000000e0b1bf2264ae8e91cc4e5a1ba0ef8495\
     e0b1bf2264ae8e91cc4e5a1ba0ef84955ef0827d8b46c527673a1e6463053b64";
 
-    let bytes = hex_str_to_bytes(bytes).unwrap();
-    assert!(parse_identity_abi(bytes.chunks(WORD_SIZE).collect()).is_err());
-}
+        let bytes = hex_str_to_bytes(bytes).unwrap();
+        assert!(parse_identity_abi(to_evm_words(bytes)).is_err());
+    }
 
-#[test]
-fn test_parse_abi_array() {
-    use clarity::utils::hex_str_to_bytes;
-    // empty string
-    let bytes = "";
-    let bytes = hex_str_to_bytes(bytes).unwrap();
-    assert!(parse_identity_array_abi(bytes).is_err());
+    #[test]
+    fn test_parse_abi_array() {
+        use clarity::utils::hex_str_to_bytes;
+        // empty string
+        let bytes = "";
+        let bytes = hex_str_to_bytes(bytes).unwrap();
+        assert!(parse_identity_array_abi(bytes).is_err());
 
-    // valid entry
-    let bytes = "\
+        // valid entry
+        let bytes = "\
     0000000000000000000000000000000000000000000000000000000000000020\
     0000000000000000000000000000000000000000000000000000000000000003\
     00000000000000000000000000000000e0b1bf2264ae8e91cc4e5a1ba0ef8495\
@@ -773,12 +884,12 @@ fn test_parse_abi_array() {
     3ef17d634ede32665e35816eda438a84aeeccf32f53327538f66d6ce859b2d23\
     000000000000000000000000d9474fa480aca506f14c439a738e6362bb66f654";
 
-    let bytes = hex_str_to_bytes(bytes).unwrap();
-    assert!(parse_identity_array_abi(bytes.clone()).is_ok());
-    assert!(parse_identity_array_abi(bytes).unwrap().len() == 3);
+        let bytes = hex_str_to_bytes(bytes).unwrap();
+        assert!(parse_identity_array_abi(bytes.clone()).is_ok());
+        assert!(parse_identity_array_abi(bytes).unwrap().len() == 3);
 
-    // Second entry invalid
-    let bytes = "\
+        // Second entry invalid
+        let bytes = "\
     0000000000000000000000000000000000000000000000000000000000000020\
     0000000000000000000000000000000000000000000000000000000000000003\
     00000000000000000000000000000000e0b1bf2264ae8e91cc4e5a1ba0ef8495\
@@ -791,25 +902,25 @@ fn test_parse_abi_array() {
     3ef17d634ede32665e35816eda438a84aeeccf32f53327538f66d6ce859b2d23\
     000000000000000000000000d9474fa480aca506f14c439a738e6362bb66f654";
 
-    let bytes = hex_str_to_bytes(bytes).unwrap();
-    assert!(parse_identity_array_abi(bytes.clone()).is_ok());
-    assert!(parse_identity_array_abi(bytes).unwrap().len() == 2);
+        let bytes = hex_str_to_bytes(bytes).unwrap();
+        assert!(parse_identity_array_abi(bytes.clone()).is_ok());
+        assert!(parse_identity_array_abi(bytes).unwrap().len() == 2);
 
-    // No valid entries
-    let bytes = "\
+        // No valid entries
+        let bytes = "\
     0000000000000000000000000000000000000000000000000000000000000020\
     0000000000000000000000000000000000000000000000000000000000000002\
     0000000000000000000000000000000000000000000000000000000000000000\
     ";
-    let bytes = hex_str_to_bytes(bytes).unwrap();
-    assert!(parse_identity_array_abi(bytes.clone()).is_err());
-}
+        let bytes = hex_str_to_bytes(bytes).unwrap();
+        assert!(parse_identity_array_abi(bytes.clone()).is_err());
+    }
 
-#[test]
-fn test_parse_exit_id_abi() {
-    use clarity::utils::hex_str_to_bytes;
+    #[test]
+    fn test_parse_exit_id_abi() {
+        use clarity::utils::hex_str_to_bytes;
 
-    let bytes = "\
+        let bytes = "\
     000000000000000000000000000000007bbab1ac348ee5be29ac57e2c3e052a1\
     7bbab1ac348ee5be29ac57e2c3e052a164bc756beb5063743399fd08fdb6c5bb\
     000000000000000000000000a970fab4bff2530005fdb65eeb4fe88d228aa9f8\
@@ -821,15 +932,15 @@ fn test_parse_exit_id_abi() {
     0000000000000000000000000000000000000000000000000000000000000006\
     0000000000000000000000000000000000000000000000000000000000000001\
     0000000000000000000000000000000000000000000000000000000000000003";
-    let bytes = hex_str_to_bytes(bytes).unwrap();
+        let bytes = hex_str_to_bytes(bytes).unwrap();
 
-    let res = parse_exit_identity_abi(bytes.chunks(WORD_SIZE).collect()).unwrap();
-    assert!(res.allowed_regions.contains(&Regions::Columbia));
-    assert!(res.payment_types.contains(&SystemChain::Rinkeby));
-    assert_eq!(res.allowed_regions.len(), 1);
-    assert_eq!(res.payment_types.len(), 1);
+        let res = parse_exit_identity_abi(to_evm_words(bytes)).unwrap();
+        assert!(res.allowed_regions.contains(&Regions::Columbia));
+        assert!(res.payment_types.contains(&SystemChain::Rinkeby));
+        assert_eq!(res.allowed_regions.len(), 1);
+        assert_eq!(res.payment_types.len(), 1);
 
-    let bytes = "\
+        let bytes = "\
     00000000000000000000000000000000d5ce8b4de8234789da53bddd707db3d5\
     d5ce8b4de8234789da53bddd707db3d589e00b5fce9d9b5f68cc7f3550d8944f\
     000000000000000000000000351634dbb20142a7f5ab996b96f71795e35e93f3\
@@ -844,14 +955,14 @@ fn test_parse_exit_id_abi() {
     0000000000000000000000000000000000000000000000000000000000000001\
     0000000000000000000000000000000000000000000000000000000000000002\
     0000000000000000000000000000000000000000000000000000000000000004";
-    let bytes = hex_str_to_bytes(bytes).unwrap();
+        let bytes = hex_str_to_bytes(bytes).unwrap();
 
-    let res = parse_exit_identity_abi(bytes.chunks(WORD_SIZE).collect()).unwrap();
-    assert_eq!(res.allowed_regions.len(), 2);
-    assert_eq!(res.payment_types.len(), 3);
+        let res = parse_exit_identity_abi(to_evm_words(bytes)).unwrap();
+        assert_eq!(res.allowed_regions.len(), 2);
+        assert_eq!(res.payment_types.len(), 3);
 
-    // Valid input with a bunch of cruft at the end
-    let bytes = "\
+        // Valid input with a bunch of cruft at the end
+        let bytes = "\
     00000000000000000000000000000000d5ce8b4de8234789da53bddd707db3d5\
     d5ce8b4de8234789da53bddd707db3d589e00b5fce9d9b5f68cc7f3550d8944f\
     000000000000000000000000351634dbb20142a7f5ab996b96f71795e35e93f3\
@@ -869,17 +980,17 @@ fn test_parse_exit_id_abi() {
     0000000000000000000000000000000000000000000000000000000000000002\
     0000000000000000000000000000000000000000000000000000000000000002\
     0000000000000000000000000000000000000000000000000000000000000002";
-    let bytes = hex_str_to_bytes(bytes).unwrap();
+        let bytes = hex_str_to_bytes(bytes).unwrap();
 
-    let res = parse_exit_identity_abi(bytes.chunks(WORD_SIZE).collect()).unwrap();
-    print!("{:?}", res);
-}
+        let res = parse_exit_identity_abi(to_evm_words(bytes)).unwrap();
+        print!("{:?}", res);
+    }
 
-#[test]
-fn test_exit_array_abi() {
-    use clarity::utils::hex_str_to_bytes;
+    #[test]
+    fn test_exit_array_abi() {
+        use clarity::utils::hex_str_to_bytes;
 
-    let bytes = "\
+        let bytes = "\
     0000000000000000000000000000000000000000000000000000000000000020\
     0000000000000000000000000000000000000000000000000000000000000002\
     0000000000000000000000000000000000000000000000000000000000000040\
@@ -907,8 +1018,9 @@ fn test_exit_array_abi() {
     0000000000000000000000000000000000000000000000000000000000000006\
     0000000000000000000000000000000000000000000000000000000000000001\
     0000000000000000000000000000000000000000000000000000000000000003";
-    let bytes = hex_str_to_bytes(bytes).unwrap();
+        let bytes = hex_str_to_bytes(bytes).unwrap();
 
-    let res = parse_exit_identity_array_abi(bytes).unwrap();
-    println!("{:?}", res);
+        let res = parse_exit_identity_array_abi(bytes).unwrap();
+        println!("{:?}", res);
+    }
 }
