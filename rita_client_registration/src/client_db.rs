@@ -32,7 +32,7 @@ pub async fn get_all_regsitered_clients(
     requester_address: Address,
     contract: Address,
 ) -> Result<Vec<Identity>, Web3Error> {
-    let payload = encode_call("get_all_registered_users()", &[])?;
+    let payload = encode_call("getAllRegisteredUsers()", &[])?;
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),
@@ -50,7 +50,7 @@ pub async fn get_registered_client_using_wgkey(
     web30: &Web3,
 ) -> Result<Identity, Web3Error> {
     let payload = encode_call(
-        "get_registered_client_with_wg_key(uint256)",
+        "getRegisteredClientWithWgKey(uint256)",
         &[AbiToken::Uint(key.into())],
     )?;
     let res = web30
@@ -77,7 +77,7 @@ pub async fn add_client_to_registered_list(
             .prepare_transaction(
                 contract,
                 encode_call(
-                    "add_registered_user((uint128,uint256,address))",
+                    "addRegisteredUser((uint128,uint256,address))",
                     &[AbiToken::Struct(vec![
                         AbiToken::Uint(u128::from(mesh_ip_v6).into()),
                         AbiToken::Uint(user.wg_public_key.into()),
@@ -119,7 +119,7 @@ pub async fn add_exit_to_exit_list(
             .prepare_transaction(
                 contract,
                 encode_call(
-                    "add_registered_exit((uint128,uint256,address,uint16,uint16,uint256[],uint256[]))",
+                    "addRegisteredExit((uint128,uint256,address,uint16,uint16,uint256[],uint256[]))",
                     &[AbiToken::Struct(vec![
                         AbiToken::Uint(u128::from(mesh_ip_v6).into()),
                         AbiToken::Uint(exit.wg_key.into()),
@@ -180,7 +180,7 @@ pub async fn add_user_admin(
     options: Vec<SendTxOption>,
 ) -> Result<(), Web3Error> {
     // Check if we are already a user admin
-    let payload = encode_call("is_user_admin(address)", &[AbiToken::Address(user_admin)])?;
+    let payload = encode_call("isUserAdmin(address)", &[AbiToken::Address(user_admin)])?;
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(our_private_key.to_address(), contract, payload),
@@ -195,7 +195,7 @@ pub async fn add_user_admin(
         let tx = web30
             .prepare_transaction(
                 contract,
-                encode_call("add_user_admin(address)", &[AbiToken::Address(user_admin)])?,
+                encode_call("addUserAdmin(address)", &[AbiToken::Address(user_admin)])?,
                 0u32.into(),
                 our_private_key,
                 options,
@@ -221,7 +221,7 @@ pub async fn add_exit_admin(
     wait_timeout: Option<Duration>,
     options: Vec<SendTxOption>,
 ) -> Result<(), Web3Error> {
-    let payload = encode_call("is_exit_admin(address)", &[AbiToken::Address(exit_admin)])?;
+    let payload = encode_call("isExitAdmin(address)", &[AbiToken::Address(exit_admin)])?;
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(our_private_key.to_address(), contract, payload),
@@ -236,7 +236,7 @@ pub async fn add_exit_admin(
         let tx = web30
             .prepare_transaction(
                 contract,
-                encode_call("add_exit_admin(address)", &[AbiToken::Address(exit_admin)])?,
+                encode_call("addExitAdmin(address)", &[AbiToken::Address(exit_admin)])?,
                 0u32.into(),
                 our_private_key,
                 options,
@@ -257,7 +257,7 @@ pub async fn get_client_exit_list(
     requester_address: Address,
     contract: Address,
 ) -> Result<Vec<ExitIdentity>, Web3Error> {
-    let payload = encode_call("get_all_registered_exits()", &[])?;
+    let payload = encode_call("getAllRegisteredExits()", &[])?;
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),

@@ -70,64 +70,64 @@ async function addUser(opts: {
   };
   const { althea_db } = await deployContracts(sender);
   if (opts.with_admin) {
-    await althea_db.add_user_admin(await sender?.getAddress());
+    await althea_db.addUserAdmin(await sender?.getAddress());
 
     if (opts.dup_admin) {
-      await althea_db.add_user_admin(await sender?.getAddress());
+      await althea_db.addUserAdmin(await sender?.getAddress());
     }
   }
   // add a bunch of admins to make sure we delete the right one
-  await althea_db.add_user_admin(await signers[1].getAddress());
-  await althea_db.add_user_admin(await signers[2].getAddress());
-  await althea_db.add_user_admin(await signers[3].getAddress());
+  await althea_db.addUserAdmin(await signers[1].getAddress());
+  await althea_db.addUserAdmin(await signers[2].getAddress());
+  await althea_db.addUserAdmin(await signers[3].getAddress());
 
-  await althea_db.add_registered_user(user1)
-  expectId(await althea_db.get_registered_client_with_eth_addr(user1.eth_addr), user1)
-  expectId(await althea_db.get_registered_client_with_wg_key(user1.wg_key), user1)
-  expectId(await althea_db.get_registered_client_with_mesh_ip(user1.mesh_ip), user1)
-  await althea_db.add_registered_user(user2)
-  expectId(await althea_db.get_registered_client_with_eth_addr(user2.eth_addr), user2)
-  expectId(await althea_db.get_registered_client_with_wg_key(user2.wg_key), user2)
-  expectId(await althea_db.get_registered_client_with_mesh_ip(user2.mesh_ip), user2)
-  await althea_db.add_registered_user(user3)
-  expectId(await althea_db.get_registered_client_with_eth_addr(user3.eth_addr), user3)
-  expectId(await althea_db.get_registered_client_with_wg_key(user3.wg_key), user3)
-  expectId(await althea_db.get_registered_client_with_mesh_ip(user3.mesh_ip), user3)
-  await althea_db.add_registered_user(user4)
-  expectId(await althea_db.get_registered_client_with_eth_addr(user4.eth_addr), user4)
-  expectId(await althea_db.get_registered_client_with_wg_key(user4.wg_key), user4)
-  expectId(await althea_db.get_registered_client_with_mesh_ip(user4.mesh_ip), user4)
-  await althea_db.add_registered_user(user5)
-  expectId(await althea_db.get_registered_client_with_eth_addr(user5.eth_addr), user5)
-  expectId(await althea_db.get_registered_client_with_wg_key(user5.wg_key), user5)
-  expectId(await althea_db.get_registered_client_with_mesh_ip(user5.mesh_ip), user5)
-  expect((await althea_db.get_all_registered_users()).length).to.equal(5)
+  await althea_db.addRegisteredUser(user1)
+  expectId(await althea_db.getRegisteredClientWithEthAddr(user1.eth_addr), user1)
+  expectId(await althea_db.getRegisteredClientWithWgKey(user1.wg_key), user1)
+  expectId(await althea_db.getRegisteredClientWithMeshIp(user1.mesh_ip), user1)
+  await althea_db.addRegisteredUser(user2)
+  expectId(await althea_db.getRegisteredClientWithEthAddr(user2.eth_addr), user2)
+  expectId(await althea_db.getRegisteredClientWithWgKey(user2.wg_key), user2)
+  expectId(await althea_db.getRegisteredClientWithMeshIp(user2.mesh_ip), user2)
+  await althea_db.addRegisteredUser(user3)
+  expectId(await althea_db.getRegisteredClientWithEthAddr(user3.eth_addr), user3)
+  expectId(await althea_db.getRegisteredClientWithWgKey(user3.wg_key), user3)
+  expectId(await althea_db.getRegisteredClientWithMeshIp(user3.mesh_ip), user3)
+  await althea_db.addRegisteredUser(user4)
+  expectId(await althea_db.getRegisteredClientWithEthAddr(user4.eth_addr), user4)
+  expectId(await althea_db.getRegisteredClientWithWgKey(user4.wg_key), user4)
+  expectId(await althea_db.getRegisteredClientWithMeshIp(user4.mesh_ip), user4)
+  await althea_db.addRegisteredUser(user5)
+  expectId(await althea_db.getRegisteredClientWithEthAddr(user5.eth_addr), user5)
+  expectId(await althea_db.getRegisteredClientWithWgKey(user5.wg_key), user5)
+  expectId(await althea_db.getRegisteredClientWithMeshIp(user5.mesh_ip), user5)
+  expect((await althea_db.getAllRegisteredUsers()).length).to.equal(5)
 
 
   if (opts.try_duplicate) {
-    await althea_db.add_registered_user(user1)
+    await althea_db.addRegisteredUser(user1)
   }
   if (opts.try_partial_dup) {
-    await althea_db.add_registered_user(partialDup)
+    await althea_db.addRegisteredUser(partialDup)
   }
   if (opts.remove_admin) {
-    await althea_db.remove_user_admin(await sender?.getAddress());
+    await althea_db.removeUserAdmin(await sender?.getAddress());
 
     // make sure the other admins are still there
-    assert(await althea_db.is_user_admin(await signers[1].getAddress()));
+    assert(await althea_db.isUserAdmin(await signers[1].getAddress()));
   }
   if (opts.cross_dup) {
-    await althea_db.add_exit_admin(await sender?.getAddress());
-    await althea_db.add_registered_exit(crossDup)
+    await althea_db.addExitAdmin(await sender?.getAddress());
+    await althea_db.addRegisteredExit(crossDup)
   }
 
-  await althea_db.remove_registered_user(user1)
-  expectId(await althea_db.get_registered_client_with_eth_addr(user1.eth_addr), nullUser)
-  expectId(await althea_db.get_registered_client_with_wg_key(user1.wg_key), nullUser)
-  expectId(await althea_db.get_registered_client_with_mesh_ip(user1.mesh_ip), nullUser)
-  expectId(await althea_db.get_registered_client_with_eth_addr(user2.eth_addr), user2)
-  expectId(await althea_db.get_registered_client_with_wg_key(user2.wg_key), user2)
-  expectId(await althea_db.get_registered_client_with_mesh_ip(user2.mesh_ip), user2)
+  await althea_db.removeRegisteredUser(user1)
+  expectId(await althea_db.getRegisteredClientWithEthAddr(user1.eth_addr), nullUser)
+  expectId(await althea_db.getRegisteredClientWithWgKey(user1.wg_key), nullUser)
+  expectId(await althea_db.getRegisteredClientWithMeshIp(user1.mesh_ip), nullUser)
+  expectId(await althea_db.getRegisteredClientWithEthAddr(user2.eth_addr), user2)
+  expectId(await althea_db.getRegisteredClientWithWgKey(user2.wg_key), user2)
+  expectId(await althea_db.getRegisteredClientWithMeshIp(user2.mesh_ip), user2)
 }
 
 async function addExit(opts: {
@@ -192,49 +192,49 @@ async function addExit(opts: {
   };
   const { althea_db } = await deployContracts(sender);
   if (opts.with_admin) {
-    await althea_db.add_exit_admin(await sender?.getAddress());
+    await althea_db.addExitAdmin(await sender?.getAddress());
 
     if (opts.dup_admin) {
-      await althea_db.add_exit_admin(await sender?.getAddress());
+      await althea_db.addExitAdmin(await sender?.getAddress());
     }
   }
-  await althea_db.add_exit_admin(await signers[1].getAddress());
-  await althea_db.add_exit_admin(await signers[2].getAddress());
-  await althea_db.add_exit_admin(await signers[3].getAddress());
+  await althea_db.addExitAdmin(await signers[1].getAddress());
+  await althea_db.addExitAdmin(await signers[2].getAddress());
+  await althea_db.addExitAdmin(await signers[3].getAddress());
 
-  await althea_db.add_registered_exit(user1)
-  expectId(await althea_db.get_registered_exit_with_eth_addr(user1.eth_addr), user1)
-  expectId(await althea_db.get_registered_exit_with_wg_key(user1.wg_key), user1)
-  expectId(await althea_db.get_registered_exit_with_mesh_ip(user1.mesh_ip), user1)
-  await althea_db.add_registered_exit(user2)
-  expectId(await althea_db.get_registered_exit_with_eth_addr(user2.eth_addr), user2)
-  expectId(await althea_db.get_registered_exit_with_wg_key(user2.wg_key), user2)
-  expectId(await althea_db.get_registered_exit_with_mesh_ip(user2.mesh_ip), user2)
+  await althea_db.addRegisteredExit(user1)
+  expectId(await althea_db.getRegisteredExitWithEthAddr(user1.eth_addr), user1)
+  expectId(await althea_db.getRegisteredExitWithWgKey(user1.wg_key), user1)
+  expectId(await althea_db.getRegisteredExitWithMeshIp(user1.mesh_ip), user1)
+  await althea_db.addRegisteredExit(user2)
+  expectId(await althea_db.getRegisteredExitWithEthAddr(user2.eth_addr), user2)
+  expectId(await althea_db.getRegisteredExitWithWgKey(user2.wg_key), user2)
+  expectId(await althea_db.getRegisteredExitWithMeshIp(user2.mesh_ip), user2)
 
   if (opts.try_duplicate) {
-    await althea_db.add_registered_exit(user1)
+    await althea_db.addRegisteredExit(user1)
   }
   if (opts.try_partial_dup) {
-    await althea_db.add_registered_exit(partialDup)
+    await althea_db.addRegisteredExit(partialDup)
   }
   if (opts.remove_admin) {
-    await althea_db.remove_exit_admin(await sender?.getAddress());
+    await althea_db.removeExitAdmin(await sender?.getAddress());
 
     // make sure the other admins are still there
-    assert(await althea_db.is_exit_admin(await signers[1].getAddress()));
+    assert(await althea_db.isExitAdmin(await signers[1].getAddress()));
   }
   if (opts.cross_dup) {
-    await althea_db.add_user_admin(await sender?.getAddress());
-    await althea_db.add_registered_user(crossDup)
+    await althea_db.addUserAdmin(await sender?.getAddress());
+    await althea_db.addRegisteredUser(crossDup)
   }
 
-  await althea_db.remove_registered_exit(user1ButDifferentRegions)
-  expectId(await althea_db.get_registered_exit_with_eth_addr(user1.eth_addr), nullUser)
-  expectId(await althea_db.get_registered_exit_with_wg_key(user1.wg_key), nullUser)
-  expectId(await althea_db.get_registered_exit_with_mesh_ip(user1.mesh_ip), nullUser)
-  expectId(await althea_db.get_registered_exit_with_eth_addr(user2.eth_addr), user2)
-  expectId(await althea_db.get_registered_exit_with_wg_key(user2.wg_key), user2)
-  expectId(await althea_db.get_registered_exit_with_mesh_ip(user2.mesh_ip), user2)
+  await althea_db.removeRegisteredExit(user1ButDifferentRegions)
+  expectId(await althea_db.getRegisteredExitWithEthAddr(user1.eth_addr), nullUser)
+  expectId(await althea_db.getRegisteredExitWithWgKey(user1.wg_key), nullUser)
+  expectId(await althea_db.getRegisteredExitWithMeshIp(user1.mesh_ip), nullUser)
+  expectId(await althea_db.getRegisteredExitWithEthAddr(user2.eth_addr), user2)
+  expectId(await althea_db.getRegisteredExitWithWgKey(user2.wg_key), user2)
+  expectId(await althea_db.getRegisteredExitWithMeshIp(user2.mesh_ip), user2)
 }
 
 

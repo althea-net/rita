@@ -179,7 +179,7 @@ pub async fn register_client_batch_internal(
         value: 0u32.into(),
         // populated later, using some dummy for now
         data: encode_call(
-            "add_registered_user((uint128,uint256,address))",
+            "addRegisteredUser((uint128,uint256,address))",
             &[AbiToken::Struct(vec![
                 AbiToken::Uint(0u8.into()),
                 AbiToken::Uint(0u8.into()),
@@ -237,7 +237,7 @@ pub async fn register_client_batch_internal(
             set_tx_data(
                 &mut prepared_tx_copy,
                 match encode_call(
-                    "add_registered_user((uint128,uint256,address))",
+                    "addRegisteredUser((uint128,uint256,address))",
                     &[AbiToken::Struct(vec![
                         AbiToken::Uint(u128::from(mesh_ip_v6).into()),
                         AbiToken::Uint(id.wg_public_key.into()),
