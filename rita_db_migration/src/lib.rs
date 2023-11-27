@@ -13,15 +13,12 @@ use std::{collections::HashSet, time::Duration};
 
 use crate::schema::clients::dsl::clients;
 use althea_types::Identity;
-use clarity::{Address, PrivateKey};
+use clarity::Address;
 use diesel::{r2d2::ConnectionManager, PgConnection, RunQueryDsl};
 use error::RitaDBMigrationError;
 use models::Client;
 use r2d2::PooledConnection;
-use rita_client_registration::{
-    add_client_to_reg_batch,
-    client_db::{add_user_admin, get_all_regsitered_clients},
-};
+use rita_client_registration::{add_client_to_reg_queue, client_db::get_all_regsitered_clients};
 use web30::client::Web3;
 
 const WEB3_TIMEOUT: Duration = Duration::from_secs(60);
@@ -105,7 +102,7 @@ async fn add_clients_to_reg_queue(
 
         if !existing_users.contains(&id) {
             info!("Adding user {}", id.mesh_ip);
-            add_client_to_reg_batch(id);
+            add_client_to_reg_queue(id);
         } else {
             warn!("User {} already exists!", id.mesh_ip);
         }
@@ -130,26 +127,4 @@ pub fn get_database_connection(
             ))
         }
     }
-}
-
-pub async fn db_migration_user_admin(
-    web3_url: String,
-    state_admin_key: PrivateKey,
-    user_to_add: Address,
-    db_addr: Address,
-) {
-    let contact = Web3::new(&web3_url, WEB3_TIMEOUT);
-
-    // We need to be a user admin to add users
-    let res = add_user_admin(
-        &contact,
-        db_addr,
-        user_to_add,
-        state_admin_key,
-        None,
-        vec![],
-    )
-    .await;
-
-    res.expect("Unable to register a user admin to migrate clients");
 }

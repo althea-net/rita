@@ -6,12 +6,12 @@ use std::{
 use clarity::{Address, PrivateKey};
 use diesel::{PgConnection, RunQueryDsl};
 use rita_client_registration::{
-    client_db::get_all_regsitered_clients, register_client_batch_loop::register_client_batch_loop,
+    client_db::{check_and_add_user_admin, get_all_regsitered_clients},
+    register_client_batch_loop::register_client_batch_loop,
 };
 use rita_common::usage_tracker::tests::test::random_identity;
 use rita_db_migration::{
-    db_migration_user_admin, get_database_connection, models::Client,
-    schema::clients::dsl::clients, start_db_migration,
+    get_database_connection, models::Client, schema::clients::dsl::clients, start_db_migration,
 };
 use web30::client::Web3;
 
@@ -49,13 +49,16 @@ pub async fn run_db_migration_test() {
     // Start registration loop
     info!("Registering user admin");
     // This request needs to be made with the state admin's key
-    db_migration_user_admin(
-        get_eth_node(),
-        MINER_PRIVATE_KEY.parse().unwrap(),
-        miner_private_key.to_address(),
+    check_and_add_user_admin(
+        &Web3::new(&get_eth_node(), WEB3_TIMEOUT),
         althea_db_addr,
+        MINER_PRIVATE_KEY.parse().unwrap(),
+        miner_private_key,
+        Some(WEB3_TIMEOUT),
+        vec![],
     )
-    .await;
+    .await
+    .expect("Failed to add user admin!");
 
     thread::sleep(Duration::from_secs(5));
 

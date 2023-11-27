@@ -1,12 +1,12 @@
-use std::collections::HashSet;
-
 use althea_types::{ExitIdentity, Regions, SystemChain};
 use clarity::{Address, PrivateKey};
 use rita_client_registration::client_db::{
-    add_client_to_registered_list, add_exit_admin, add_exit_to_exit_list, add_user_admin,
-    get_all_regsitered_clients, get_client_exit_list, get_registered_client_using_wgkey,
+    add_exit_admin, add_exits_to_registration_list, add_users_to_registered_list,
+    check_and_add_user_admin, get_all_regsitered_clients, get_exits_list,
+    get_registered_client_using_wgkey,
 };
 use rita_common::usage_tracker::tests::test::random_identity;
+use std::collections::HashSet;
 use web30::{client::Web3, types::SendTxOption};
 
 use crate::{
@@ -108,13 +108,13 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
     .await
     .unwrap();
 
-    let res = get_client_exit_list(&contact, miner_pub_key, db_addr).await;
+    let res = get_exits_list(&contact, miner_pub_key, db_addr).await;
 
     assert!(res.is_err());
 
-    let _res = add_exit_to_exit_list(
+    let _res = add_exits_to_registration_list(
         &contact,
-        exit_1.clone(),
+        vec![exit_1.clone()],
         db_addr,
         miner_private_key,
         Some(TX_TIMEOUT),
@@ -123,9 +123,9 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
     .await
     .unwrap();
 
-    let _res = add_exit_to_exit_list(
+    let _res = add_exits_to_registration_list(
         &contact,
-        exit_2.clone(),
+        vec![exit_2.clone()],
         db_addr,
         miner_private_key,
         Some(TX_TIMEOUT),
@@ -134,7 +134,7 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
     .await
     .unwrap();
 
-    let res = get_client_exit_list(&contact, miner_pub_key, db_addr)
+    let res = get_exits_list(&contact, miner_pub_key, db_addr)
         .await
         .unwrap();
 
@@ -142,9 +142,9 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
 
     assert_eq!(res, vec![exit_1.clone(), exit_2.clone()]);
 
-    let _res = add_exit_to_exit_list(
+    let _res = add_exits_to_registration_list(
         &contact,
-        exit_3.clone(),
+        vec![exit_3.clone()],
         db_addr,
         miner_private_key,
         Some(TX_TIMEOUT),
@@ -153,7 +153,7 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
     .await
     .unwrap();
 
-    let res = get_client_exit_list(&contact, miner_pub_key, db_addr)
+    let res = get_exits_list(&contact, miner_pub_key, db_addr)
         .await
         .unwrap();
 
@@ -176,7 +176,7 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     let user_5 = random_identity();
     let user_6 = random_identity();
 
-    add_user_admin(
+    check_and_add_user_admin(
         &contact,
         db_addr,
         miner_pub_key,
@@ -187,7 +187,7 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     .await
     .unwrap();
 
-    add_user_admin(
+    check_and_add_user_admin(
         &contact,
         db_addr,
         miner_pub_key,
@@ -210,10 +210,16 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     assert!(res.is_err());
 
     // Add the first user
-    let res =
-        add_client_to_registered_list(&contact, user_1, db_addr, miner_private_key, None, vec![])
-            .await
-            .unwrap();
+    let res = add_users_to_registered_list(
+        &contact,
+        vec![user_1],
+        db_addr,
+        miner_private_key,
+        None,
+        vec![],
+    )
+    .await
+    .unwrap();
 
     contact
         .wait_for_transaction(res, TX_TIMEOUT, None)
@@ -253,9 +259,9 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
         .unwrap();
 
     // Add the second user
-    let res1 = add_client_to_registered_list(
+    let res1 = add_users_to_registered_list(
         &contact,
-        user_2,
+        vec![user_2],
         db_addr,
         miner_private_key,
         None,
@@ -268,9 +274,9 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     .unwrap();
 
     // Add the third user
-    let res2 = add_client_to_registered_list(
+    let res2 = add_users_to_registered_list(
         &contact,
-        user_3,
+        vec![user_3],
         db_addr,
         miner_private_key,
         None,
@@ -282,9 +288,9 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     .await
     .unwrap();
 
-    let res3 = add_client_to_registered_list(
+    let res3 = add_users_to_registered_list(
         &contact,
-        user_4,
+        vec![user_4],
         db_addr,
         miner_private_key,
         None,
@@ -296,9 +302,9 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     .await
     .unwrap();
 
-    let res4 = add_client_to_registered_list(
+    let res4 = add_users_to_registered_list(
         &contact,
-        user_5,
+        vec![user_5],
         db_addr,
         miner_private_key,
         None,
@@ -310,9 +316,9 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     .await
     .unwrap();
 
-    let res5 = add_client_to_registered_list(
+    let res5 = add_users_to_registered_list(
         &contact,
-        user_6,
+        vec![user_6],
         db_addr,
         miner_private_key,
         None,

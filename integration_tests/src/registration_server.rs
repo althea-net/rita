@@ -8,7 +8,7 @@ use actix_web::{
 use althea_types::ExitClientIdentity;
 use clarity::{Address, PrivateKey};
 use rita_client_registration::{
-    client_db::add_user_admin, handle_sms_registration, register_client_batch_loop,
+    client_db::check_and_add_user_admin, handle_sms_registration, register_client_batch_loop,
 };
 use web30::client::Web3;
 
@@ -28,7 +28,7 @@ pub async fn start_registration_server(db_addr: Address) {
     let miner_pub_key = miner_private_key.to_address();
     let contact = Web3::new(&get_eth_node(), WEB3_TIMEOUT);
 
-    add_user_admin(
+    check_and_add_user_admin(
         &contact,
         db_addr,
         miner_pub_key,

@@ -22,7 +22,7 @@ use althea_types::{
 use althea_types::{EncryptedExitList, Identity};
 use althea_types::{ExitList, WgKey};
 use num256::Int256;
-use rita_client_registration::client_db::get_client_exit_list;
+use rita_client_registration::client_db::get_exits_list;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::payment_validator::calculate_unverified_payments;
@@ -318,7 +318,7 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
     let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
 
     let ret: ExitList = ExitList {
-        exit_list: match get_client_exit_list(&contact, our_addr, contract_addr).await {
+        exit_list: match get_exits_list(&contact, our_addr, contract_addr).await {
             Ok(a) => {
                 let exit_regions = rita_exit.network.allowed_countries;
                 let accepted_payments = rita_exit.network.payment_chains;
@@ -396,7 +396,7 @@ pub async fn get_exit_list_v2(request: Json<EncryptedExitClientIdentity>) -> Htt
     let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
 
     let ret: ExitListV2 = ExitListV2 {
-        exit_list: match get_client_exit_list(&contact, our_addr, contract_addr).await {
+        exit_list: match get_exits_list(&contact, our_addr, contract_addr).await {
             Ok(a) => a,
             Err(e) => {
                 error!(

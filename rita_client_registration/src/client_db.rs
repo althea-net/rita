@@ -1,3 +1,8 @@
+//! This file includes functions for interacting with the AltheaDB.sol contract in the solidity folder
+//! the purpose of this contract is to act as a registration database for users and exits, so that both
+//! exit and client routers can read it to coordinate user setup and two way key exchange with the blockchain
+//! as the trusted party
+
 use althea_types::{ExitIdentity, Identity, Regions, SystemChain, WgKey};
 use clarity::{
     abi::{encode_call, AbiToken},
@@ -64,92 +69,104 @@ pub async fn get_registered_client_using_wgkey(
     parse_identity_abi(res.chunks(WORD_SIZE).map(|i| i.to_vec()).collect())
 }
 
-pub async fn add_client_to_registered_list(
+/// Function for bulk adding exits to the exits list, while the contract also provides addRegisteredClient() this function uses
+/// addRegisteredClientsBulk() exclusively, simply pass a single client in if required.
+pub async fn add_users_to_registered_list(
     web30: &Web3,
-    user: Identity,
+    users: Vec<Identity>,
     contract: Address,
     sender_private_key: PrivateKey,
     wait_timeout: Option<Duration>,
     options: Vec<SendTxOption>,
 ) -> Result<Uint256, Web3Error> {
-    if let IpAddr::V6(mesh_ip_v6) = user.mesh_ip {
-        let tx = web30
-            .prepare_transaction(
-                contract,
-                encode_call(
-                    "addRegisteredUser((uint128,uint256,address))",
-                    &[AbiToken::Struct(vec![
-                        AbiToken::Uint(u128::from(mesh_ip_v6).into()),
-                        AbiToken::Uint(user.wg_public_key.into()),
-                        AbiToken::Address(user.eth_address),
-                    ])],
-                )?,
-                0u32.into(),
-                sender_private_key,
-                options,
-            )
-            .await?;
-
-        let tx_hash = web30.send_prepared_transaction(tx).await?;
-
-        if let Some(timeout) = wait_timeout {
-            future_timeout(timeout, web30.wait_for_transaction(tx_hash, timeout, None)).await??;
+    let mut encoded_clients = Vec::new();
+    for user in users {
+        if let IpAddr::V6(mesh_ip_v6) = user.mesh_ip {
+            encoded_clients.push(AbiToken::Struct(vec![
+                AbiToken::Uint(u128::from(mesh_ip_v6).into()),
+                AbiToken::Uint(user.wg_public_key.into()),
+                AbiToken::Address(user.eth_address),
+            ]))
+        } else {
+            return Err(Web3Error::BadInput(format!(
+                "Why is mesh ip a v4? {}",
+                user.mesh_ip
+            )));
         }
-
-        Ok(tx_hash)
-    } else {
-        error!("Why is mesh ip setup as a V4? {}", user.mesh_ip);
-        Err(Web3Error::BadInput(format!(
-            "Why is mesh ip a v4? {}",
-            user.mesh_ip
-        )))
     }
+
+    let tx = web30
+        .prepare_transaction(
+            contract,
+            encode_call(
+                "addRegisteredUsersBulk((uint128,uint256,address)[])",
+                &[AbiToken::Dynamic(encoded_clients)],
+            )?,
+            0u32.into(),
+            sender_private_key,
+            options,
+        )
+        .await?;
+
+    let tx_hash = web30.send_prepared_transaction(tx).await?;
+
+    if let Some(timeout) = wait_timeout {
+        future_timeout(timeout, web30.wait_for_transaction(tx_hash, timeout, None)).await??;
+    }
+
+    Ok(tx_hash)
 }
 
-pub async fn add_exit_to_exit_list(
+/// Function for bulk adding exits to the exits list, while the contract also provides addRegisteredExit() this function uses
+/// addRegisteredExitsBulk() exclusively, simply pass a single exit in if required.
+pub async fn add_exits_to_registration_list(
     web30: &Web3,
-    exit: ExitIdentity,
+    exits: Vec<ExitIdentity>,
     contract: Address,
     sender_private_key: PrivateKey,
     wait_timeout: Option<Duration>,
     options: Vec<SendTxOption>,
 ) -> Result<Uint256, Web3Error> {
-    if let IpAddr::V6(mesh_ip_v6) = exit.mesh_ip {
-        let tx = web30
-            .prepare_transaction(
-                contract,
-                encode_call(
-                    "addRegisteredExit((uint128,uint256,address,uint16,uint16,uint256[],uint256[]))",
-                    &[AbiToken::Struct(vec![
-                        AbiToken::Uint(u128::from(mesh_ip_v6).into()),
-                        AbiToken::Uint(exit.wg_key.into()),
-                        AbiToken::Address(exit.eth_addr),
-                        AbiToken::Uint(exit.registration_port.into()),
-                        AbiToken::Uint(exit.wg_exit_listen_port.into()),
-                        allowed_regions_abi_array(exit.allowed_regions).into(),
-                        payment_types_abi_array(exit.payment_types).into(),
-                    ])],
-                )?,
-                0u32.into(),
-                sender_private_key,
-                options,
-            )
-            .await?;
-
-        let tx_hash = web30.send_prepared_transaction(tx).await?;
-
-        if let Some(timeout) = wait_timeout {
-            future_timeout(timeout, web30.wait_for_transaction(tx_hash, timeout, None)).await??;
+    let mut encoded_exits = Vec::new();
+    for exit in exits {
+        if let IpAddr::V6(mesh_ip_v6) = exit.mesh_ip {
+            encoded_exits.push(AbiToken::Struct(vec![
+                AbiToken::Uint(u128::from(mesh_ip_v6).into()),
+                AbiToken::Uint(exit.wg_key.into()),
+                AbiToken::Address(exit.eth_addr),
+                AbiToken::Uint(exit.registration_port.into()),
+                AbiToken::Uint(exit.wg_exit_listen_port.into()),
+                allowed_regions_abi_array(exit.allowed_regions).into(),
+                payment_types_abi_array(exit.payment_types).into(),
+            ]))
+        } else {
+            return Err(Web3Error::BadInput(format!(
+                "Why is mesh ip a v4? {}",
+                exit.mesh_ip
+            )));
         }
-
-        Ok(tx_hash)
-    } else {
-        error!("Why is mesh ip setup as a V4? {}", exit.mesh_ip);
-        Err(Web3Error::BadInput(format!(
-            "Why is mesh ip a v4? {}",
-            exit.mesh_ip
-        )))
     }
+
+    let tx = web30
+        .prepare_transaction(
+            contract,
+            encode_call(
+                "addRegisteredExitsBulk((uint128,uint256,address,uint16,uint16,uint256[],uint256[])[])",
+                &[AbiToken::Dynamic(encoded_exits)],
+            )?,
+            0u32.into(),
+            sender_private_key,
+            options,
+        )
+        .await?;
+
+    let tx_hash = web30.send_prepared_transaction(tx).await?;
+
+    if let Some(timeout) = wait_timeout {
+        future_timeout(timeout, web30.wait_for_transaction(tx_hash, timeout, None)).await??;
+    }
+
+    Ok(tx_hash)
 }
 
 fn allowed_regions_abi_array(allowed_regions: HashSet<Regions>) -> Vec<AbiToken> {
@@ -170,15 +187,14 @@ fn payment_types_abi_array(payment_types: HashSet<SystemChain>) -> Vec<AbiToken>
     ret
 }
 
-/// A user admin has permissions to add and remove users from the registered list
-pub async fn add_user_admin(
+/// Checks if a given adress is an user admin, that is one of the addresses that is allowed to
+/// add and remove users from the contract
+pub async fn check_user_admin(
     web30: &Web3,
     contract: Address,
     user_admin: Address,
     our_private_key: PrivateKey,
-    wait_timeout: Option<Duration>,
-    options: Vec<SendTxOption>,
-) -> Result<(), Web3Error> {
+) -> Result<bool, Web3Error> {
     // Check if we are already a user admin
     let payload = encode_call("isUserAdmin(address)", &[AbiToken::Address(user_admin)])?;
     let res = web30
@@ -191,7 +207,20 @@ pub async fn add_user_admin(
     let is_admin = !res.is_empty()
         && Uint256::from_be_bytes(res.chunks(WORD_SIZE).collect::<Vec<_>>()[0]) == 1u8.into();
 
-    if !is_admin {
+    Ok(is_admin)
+}
+
+/// A user admin has permissions to add and remove users from the registered list
+/// this function adds them only if required
+pub async fn check_and_add_user_admin(
+    web30: &Web3,
+    contract: Address,
+    user_admin: Address,
+    our_private_key: PrivateKey,
+    wait_timeout: Option<Duration>,
+    options: Vec<SendTxOption>,
+) -> Result<(), Web3Error> {
+    if !check_user_admin(web30, contract, user_admin, our_private_key).await? {
         let tx = web30
             .prepare_transaction(
                 contract,
@@ -211,16 +240,14 @@ pub async fn add_user_admin(
     Ok(())
 }
 
-/// An exit admin has permissions to add and remove exits from the exit list. This is what is returned
-/// to clients to register to exits
-pub async fn add_exit_admin(
+/// Checks if a given address is an exit admin, that is one of the addresses that is allowed to
+/// add and remove exits from the contract
+pub async fn check_exit_admin(
     web30: &Web3,
     contract: Address,
     exit_admin: Address,
     our_private_key: PrivateKey,
-    wait_timeout: Option<Duration>,
-    options: Vec<SendTxOption>,
-) -> Result<(), Web3Error> {
+) -> Result<bool, Web3Error> {
     let payload = encode_call("isExitAdmin(address)", &[AbiToken::Address(exit_admin)])?;
     let res = web30
         .simulate_transaction(
@@ -232,7 +259,20 @@ pub async fn add_exit_admin(
     let is_admin =
         Uint256::from_be_bytes(res.chunks(WORD_SIZE).collect::<Vec<_>>()[0]) == 1u8.into();
 
-    if !is_admin {
+    Ok(is_admin)
+}
+
+/// An exit admin has permissions to add and remove exits from the exit list. This is what is returned
+/// to clients to register to exits
+pub async fn add_exit_admin(
+    web30: &Web3,
+    contract: Address,
+    exit_admin: Address,
+    our_private_key: PrivateKey,
+    wait_timeout: Option<Duration>,
+    options: Vec<SendTxOption>,
+) -> Result<(), Web3Error> {
+    if !check_exit_admin(web30, contract, exit_admin, our_private_key).await? {
         let tx = web30
             .prepare_transaction(
                 contract,
@@ -252,7 +292,8 @@ pub async fn add_exit_admin(
     Ok(())
 }
 
-pub async fn get_client_exit_list(
+/// Gets the list of exits from the smart contract
+pub async fn get_exits_list(
     web30: &Web3,
     requester_address: Address,
     contract: Address,
@@ -490,14 +531,20 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
     0000000000000000000000000000000000000000000000000000000000000001    // Num entries in payment
     0000000000000000000000000000000000000000000000000000000000000003    // Payment entry
     */
+    let byte_chunks = to_evm_words(bytes);
+
+    // An empty list, the first word has a type identifier, the second is empty
+    if byte_chunks.len() == 2 {
+        return Ok(vec![]);
+    }
 
     // A valid array with 1 entry will have atleast 11 lines
-    let byte_chunks = to_evm_words(bytes);
     if byte_chunks.len() < 11 {
         return Err(Web3Error::BadInput(format!(
             "Empty or invalid array: {byte_chunks:?}"
         )));
     }
+
 
     // Get number of entries in the array
     let num_entries: usize = usize::from_be_bytes(match byte_chunks[1][24..WORD_SIZE].try_into() {
@@ -705,7 +752,6 @@ pub fn parse_exit_identity_abi(byte_chunks: Vec<Vec<u8>>) -> Result<ExitIdentity
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -829,10 +875,7 @@ mod tests {
     000000000000000000000000090502b2fd4de198554511c0a6fd4da5d41e7c49";
 
         let bytes = hex_str_to_bytes(bytes).unwrap();
-        assert_eq!(
-            parse_identity_abi(to_evm_words(bytes)).unwrap(),
-            id
-        );
+        assert_eq!(parse_identity_abi(to_evm_words(bytes)).unwrap(), id);
 
         // invalid input
         let bytes = "\

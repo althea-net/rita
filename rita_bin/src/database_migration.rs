@@ -8,10 +8,11 @@
 
 use std::{thread, time::Duration};
 
+use clarity::PrivateKey;
 use docopt::Docopt;
 use log::{error, info};
 use rita_client_registration::register_client_batch_loop::register_client_batch_loop;
-use rita_db_migration::{db_migration_user_admin, start_db_migration};
+use rita_db_migration::start_db_migration;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -39,37 +40,37 @@ async fn main() {
         .flag_address
         .parse()
         .expect("Please provide a valid eth contract addr");
-    let web3_url = args.flag_web3url;
-    let private_key = args
+    let private_key: PrivateKey = args
         .flag_privatekey
         .parse()
         .expect("Please provide a valid eth private key with funds");
 
     info!("About to add user admin");
-    db_migration_user_admin(
-        web3_url.clone(),
-        private_key,
-        private_key.to_address(),
-        contract_addr,
-    )
-    .await;
 
     thread::sleep(Duration::from_secs(5));
 
     info!("About to add start registration loop");
     // Start registration loop
-    register_client_batch_loop(web3_url.clone(), contract_addr, private_key);
+    register_client_batch_loop(args.flag_web3url.clone(), contract_addr, private_key);
 
     thread::sleep(Duration::from_secs(3));
 
     info!("About to start db migration loop");
-    match start_db_migration(db_url, web3_url, private_key.to_address(), contract_addr).await {
-        Ok(_) => info!("Successfully migrated all clients!"),
+    match start_db_migration(
+        db_url,
+        args.flag_web3url,
+        private_key.to_address(),
+        contract_addr,
+    )
+    .await
+    {
+        Ok(_) => info!(
+            "Successfully queued all clients for migration! Close the program once this is done"
+        ),
         Err(e) => error!("Failed to migrate clients with {}", e),
     }
-    info!("Sleeping for 30 mins during migration");
 
-    thread::sleep(Duration::from_secs(60 * 30));
+    thread::sleep(Duration::from_secs(60000));
 }
 
 pub fn get_arg_usage() -> String {

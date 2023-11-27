@@ -84,11 +84,7 @@ contract AltheaDB {
         return Identity({mesh_ip: 0, wg_key: 0, eth_addr: address(0)});
     }
 
-    function getNullExitIdentity()
-        public
-        pure
-        returns (ExitIdentity memory)
-    {
+    function getNullExitIdentity() public pure returns (ExitIdentity memory) {
         uint256[] memory empty_array;
         return
             ExitIdentity({
@@ -201,9 +197,7 @@ contract AltheaDB {
         ExitIdentity[] memory array
     ) private pure returns (uint256) {
         for (uint256 i = 0; i < array.length; i++) {
-            if (
-                identitiesAreEqual(exitIdToId(array[i]), exitIdToId(id))
-            ) {
+            if (identitiesAreEqual(exitIdToId(array[i]), exitIdToId(id))) {
                 return i;
             }
         }
@@ -264,6 +258,13 @@ contract AltheaDB {
         }
     }
 
+    // Utility function that registers users in bulk within a single transaction
+    function addRegisteredUsersBulk(Identity[] calldata users) public {
+        for (uint256 i = 0; i < users.length; i++) {
+            addRegisteredUser(users[i]);
+        }
+    }
+
     // Remove a new registered user
     function removeRegisteredUser(Identity calldata entry) public {
         if (isUserAdmin(msg.sender)) {
@@ -277,6 +278,13 @@ contract AltheaDB {
             emit UserRemovedEvent(entry);
         } else {
             revert UnathorizedCaller();
+        }
+    }
+
+    // Utility function that removes exits in bulk within a single transaction
+    function removeRegisteredUsersBulk(Identity[] calldata users) public {
+        for (uint256 i = 0; i < users.length; i++) {
+            removeRegisteredUser(users[i]);
         }
     }
 
@@ -300,6 +308,13 @@ contract AltheaDB {
         }
     }
 
+    // Utility function that registers exits in bulk within a single transaction
+    function addRegisteredExitsBulk(ExitIdentity[] calldata exits) public {
+        for (uint256 i = 0; i < exits.length; i++) {
+            addRegisteredExit(exits[i]);
+        }
+    }
+
     // Remove a new registered exit
     function removeRegisteredExit(ExitIdentity calldata entry) public {
         if (isExitAdmin(msg.sender)) {
@@ -316,13 +331,16 @@ contract AltheaDB {
         }
     }
 
+    // Utility function that removes exits in bulk within a single transaction
+    function removeRegisteredExitsBulk(ExitIdentity[] calldata exits) public {
+        for (uint256 i = 0; i < exits.length; i++) {
+            removeRegisteredExit(exits[i]);
+        }
+    }
+
     // start user query functions
 
-    function getAllRegisteredUsers()
-        public
-        view
-        returns (Identity[] memory)
-    {
+    function getAllRegisteredUsers() public view returns (Identity[] memory) {
         return state_registeredUsers;
     }
 

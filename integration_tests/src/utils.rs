@@ -30,7 +30,7 @@ use nix::{
     sys::stat::Mode,
 };
 use phonenumber::PhoneNumber;
-use rita_client_registration::client_db::{add_exit_admin, add_exit_to_exit_list};
+use rita_client_registration::client_db::{add_exit_admin, add_exits_to_registration_list};
 use rita_common::{
     debt_keeper::GetDebtsResult,
     payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT},
@@ -1143,9 +1143,9 @@ pub async fn add_exits_contract_exit_list(db_addr: Address, rita_identities: Ins
         };
 
         info!("Adding exit {:?} to contract exit list", exit_id);
-        add_exit_to_exit_list(
+        add_exits_to_registration_list(
             &web3,
-            exit_id,
+            vec![exit_id],
             db_addr,
             miner_private_key,
             None,

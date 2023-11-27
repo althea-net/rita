@@ -2665,6 +2665,7 @@ dependencies = [
  "althea_kernel_interface",
  "althea_types",
  "arrayvec",
+ "clarity",
  "clu",
  "compressed_log",
  "ctrlc",
@@ -2681,7 +2682,6 @@ dependencies = [
  "openssl-probe",
  "phonenumber",
  "r2d2",
- "reqwest",
  "rita_client",
  "rita_client_registration",
  "rita_common",
@@ -2691,6 +2691,7 @@ dependencies = [
  "serde",
  "serde_json",
  "settings",
+ "web30",
 ]
 
 [[package]]
