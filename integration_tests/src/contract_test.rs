@@ -110,7 +110,7 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
 
     let res = get_exits_list(&contact, miner_pub_key, db_addr).await;
 
-    assert!(res.is_err());
+    assert_eq!(res.unwrap(), vec![]);
 
     let _res = add_exits_to_registration_list(
         &contact,
