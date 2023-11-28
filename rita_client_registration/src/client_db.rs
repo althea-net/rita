@@ -560,6 +560,11 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
     // pass in each entry byte chunk to individual entry parser
     let index = 2;
     for i in index..index + num_entries {
+        if i >= byte_chunks.len() {
+            let msg = format!("Encoded array length longer than data");
+            error!("{}", msg);
+            return Err(Web3Error::BadInput(msg));
+        }
         let next_index_pos: Uint256 = Uint256::from_be_bytes(&byte_chunks[i]) / WORD_SIZE.into();
         let next_index_pos: usize = usize::from_be_bytes(
             match next_index_pos.to_be_bytes()[24..WORD_SIZE].try_into() {
