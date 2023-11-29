@@ -35,12 +35,12 @@ use rita_common::dashboard::wallet::*;
 use rita_common::dashboard::wg_key::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::version;
+use std::path::PathBuf;
 use std::thread;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Args {
-    pub flag_config: String,
-    pub flag_future: bool,
+    pub flag_config: PathBuf,
 }
 
 pub fn get_exit_usage(version: &str, git_hash: &str) -> String {
@@ -48,7 +48,6 @@ pub fn get_exit_usage(version: &str, git_hash: &str) -> String {
         "Usage: rita_exit --config=<settings>
 Options:
     -c, --config=<settings>   Name of config file
-    --future                    Enable B side of A/B releases
 About:
     Version {READABLE_VERSION} - {version}
     git hash {git_hash}"

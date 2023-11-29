@@ -73,7 +73,9 @@ fn main() {
     // and populate the memory cache of settings used throughout the program
     let settings = {
         let settings_file = args.flag_config;
-        let settings = RitaExitSettingsStruct::new_watched(&settings_file).unwrap();
+        let settings = RitaExitSettingsStruct::new_watched(settings_file.clone()).unwrap();
+
+        settings::set_flag_config(settings_file.clone());
 
         let settings = clu::exit_init(settings);
         settings::set_rita_exit(settings.clone());

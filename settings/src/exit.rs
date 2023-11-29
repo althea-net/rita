@@ -7,7 +7,7 @@ use clarity::Address;
 use ipnetwork::IpNetwork;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -241,9 +241,11 @@ impl RitaExitSettingsStruct {
         Ok(ret)
     }
 
-    pub fn new_watched(file_name: &str) -> Result<Self, SettingsError> {
-        if !Path::new(file_name).exists() {
-            return Err(SettingsError::FileNotFoundError(file_name.to_string()));
+    pub fn new_watched(file_name: PathBuf) -> Result<Self, SettingsError> {
+        if !Path::new(&file_name).exists() {
+            return Err(SettingsError::FileNotFoundError(
+                file_name.as_os_str().to_string_lossy().to_string(),
+            ));
         }
 
         let config_toml = std::fs::read_to_string(file_name)?;

@@ -30,7 +30,7 @@ impl IdentityCallback {
 /// we now must attach to their tunnel entry. If we also return a bool for if the tunnel already
 /// exists
 pub fn tm_identity_callback(msg: IdentityCallback) -> Result<(Tunnel, bool), RitaCommonError> {
-    info!("Tm identity callback with msg: {:?}", msg);
+    trace!("Tm identity callback with msg: {:?}", msg);
     let tm_pin = &mut *TUNNEL_MANAGER.write().unwrap();
     let tunnel_manager = get_tunnel_manager_write_ref(tm_pin);
     tunnel_manager.open_tunnel(msg.local_identity, msg.peer)

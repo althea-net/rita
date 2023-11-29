@@ -144,13 +144,19 @@ pub fn write_config() -> Result<(), SettingsError> {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.write_config(),
         Some(Settings::Client(settings)) => {
             let filename = FLAG_CONFIG.read().unwrap();
-            let filename = filename.get(&netns).unwrap();
-            settings.write(filename.clone())
+            let filename = filename.get(&netns);
+            if let Some(filename) = filename {
+                settings.write(filename.clone())?
+            }
+            Ok(())
         }
         Some(Settings::Exit(settings)) => {
             let filename = FLAG_CONFIG.read().unwrap();
-            let filename = filename.get(&netns).unwrap();
-            settings.write(filename.clone())
+            let filename = filename.get(&netns);
+            if let Some(filename) = filename {
+                settings.write(filename.clone())?
+            }
+            Ok(())
         }
         None => panic!("expected settings but got none"),
     }
