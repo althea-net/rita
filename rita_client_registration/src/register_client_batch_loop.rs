@@ -73,7 +73,6 @@ pub fn register_client_batch_loop(
                                 }
                             }
                         }
-                        
                         // there is no one once we filter already registered users
                         if clients_to_register.is_empty() {
                             thread::sleep(WEB3_TIMEOUT);

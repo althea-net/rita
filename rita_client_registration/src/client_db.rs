@@ -545,7 +545,6 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
         )));
     }
 
-
     // Get number of entries in the array
     let num_entries: usize = usize::from_be_bytes(match byte_chunks[1][24..WORD_SIZE].try_into() {
         Ok(a) => a,
@@ -561,7 +560,7 @@ pub fn parse_exit_identity_array_abi(bytes: Vec<u8>) -> Result<Vec<ExitIdentity>
     let index = 2;
     for i in index..index + num_entries {
         if i >= byte_chunks.len() {
-            let msg = format!("Encoded array length longer than data");
+            let msg = "Encoded array length longer than data".to_string();
             error!("{}", msg);
             return Err(Web3Error::BadInput(msg));
         }
