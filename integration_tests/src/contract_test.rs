@@ -11,7 +11,7 @@ use web30::{client::Web3, types::SendTxOption};
 
 use crate::{
     payments_eth::WEB3_TIMEOUT,
-    utils::{deploy_contracts, get_eth_node, wait_for_txids, MINER_PRIVATE_KEY, TX_TIMEOUT},
+    utils::{deploy_contracts, get_eth_node, wait_for_txids, REGISTRATION_SERVER_KEY, TX_TIMEOUT},
 };
 
 pub async fn run_altheadb_contract_test() {
@@ -27,7 +27,7 @@ pub async fn run_altheadb_contract_test() {
 }
 
 pub async fn validate_contract_exit_functionality(db_addr: Address) {
-    let miner_private_key: PrivateKey = MINER_PRIVATE_KEY.parse().unwrap();
+    let miner_private_key: PrivateKey = REGISTRATION_SERVER_KEY.parse().unwrap();
     let miner_pub_key = miner_private_key.to_address();
 
     let contact = Web3::new(&get_eth_node(), WEB3_TIMEOUT);
@@ -163,7 +163,7 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
 }
 
 pub async fn validate_contract_user_functionality(db_addr: Address) {
-    let miner_private_key: PrivateKey = MINER_PRIVATE_KEY.parse().unwrap();
+    let miner_private_key: PrivateKey = REGISTRATION_SERVER_KEY.parse().unwrap();
     let miner_pub_key = miner_private_key.to_address();
 
     let contact = Web3::new(&get_eth_node(), WEB3_TIMEOUT);

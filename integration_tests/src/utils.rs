@@ -74,7 +74,7 @@ pub const MIN_GLOBAL_FEE_AMOUNT: u128 = 10;
 pub const TOTAL_TIMEOUT: Duration = Duration::from_secs(300);
 pub const DEBT_ACCURACY_THRES: u8 = 15;
 pub const ETH_NODE: &str = "http://localhost:8545";
-pub const MINER_PRIVATE_KEY: &str =
+pub const REGISTRATION_SERVER_KEY: &str =
     "0x34d97aaf58b1a81d3ed3068a870d8093c6341cf5d1ef7e6efa03fe7f7fc2c3a8";
 
 lazy_static! {
@@ -170,7 +170,7 @@ pub async fn deploy_contracts() -> Address {
         .args([
             "ts-node",
             "/althea_rs/solidity/contract-deployer.ts",
-            &format!("--eth-privkey={}", MINER_PRIVATE_KEY),
+            &format!("--eth-privkey={}", REGISTRATION_SERVER_KEY),
             &format!("--eth-node={}", ETH_NODE),
         ])
         .output()
@@ -1106,7 +1106,7 @@ pub async fn populate_routers_eth(rita_identities: InstanceData) {
 
 pub async fn add_exits_contract_exit_list(db_addr: Address, rita_identities: InstanceData) {
     let web3 = Web3::new("http://localhost:8545", WEB3_TIMEOUT);
-    let miner_private_key: clarity::PrivateKey = MINER_PRIVATE_KEY.parse().unwrap();
+    let miner_private_key: clarity::PrivateKey = REGISTRATION_SERVER_KEY.parse().unwrap();
     let miner_pub_key = miner_private_key.to_address();
 
     add_exit_admin(

@@ -16,9 +16,9 @@ use rita_db_migration::{
 use web30::client::Web3;
 
 use crate::{
-    payments_eth::{get_eth_miner_key, WEB3_TIMEOUT},
+    payments_eth::{TRASACTION_TIMEOUT, WEB3_TIMEOUT},
     setup_utils::database::start_postgres,
-    utils::{deploy_contracts, get_eth_node, MINER_PRIVATE_KEY},
+    utils::{deploy_contracts, get_eth_node, REGISTRATION_SERVER_KEY},
 };
 
 pub const DB_URI: &str = "postgres://postgres@localhost/test";
@@ -45,16 +45,16 @@ pub async fn run_db_migration_test() {
 
     info!("Run migration code");
 
-    let miner_private_key: PrivateKey = get_eth_miner_key();
+    let reg_server_key: PrivateKey = REGISTRATION_SERVER_KEY.parse().unwrap();
     // Start registration loop
     info!("Registering user admin");
     // This request needs to be made with the state admin's key
     check_and_add_user_admin(
         &Web3::new(&get_eth_node(), WEB3_TIMEOUT),
         althea_db_addr,
-        MINER_PRIVATE_KEY.parse().unwrap(),
-        miner_private_key,
-        Some(WEB3_TIMEOUT),
+        reg_server_key.to_address(),
+        reg_server_key,
+        Some(TRASACTION_TIMEOUT),
         vec![],
     )
     .await
@@ -63,13 +63,13 @@ pub async fn run_db_migration_test() {
     thread::sleep(Duration::from_secs(5));
 
     info!("Starting registration loop");
-    register_client_batch_loop(get_eth_node(), althea_db_addr, miner_private_key);
+    register_client_batch_loop(get_eth_node(), althea_db_addr, reg_server_key);
 
     info!("Running user migration");
     match start_db_migration(
         DB_URI.to_string(),
         get_eth_node(),
-        miner_private_key.to_address(),
+        reg_server_key.to_address(),
         althea_db_addr,
     )
     .await
@@ -81,7 +81,7 @@ pub async fn run_db_migration_test() {
     info!("Waiting for register loop to migrate all clients");
     thread::sleep(Duration::from_secs(10));
 
-    validate_db_migration(num_clients, althea_db_addr, miner_private_key).await;
+    validate_db_migration(num_clients, althea_db_addr, reg_server_key).await;
 }
 
 fn add_dummy_clients_to_db(num_of_entries: usize, conn: &PgConnection) {
@@ -122,9 +122,9 @@ fn random_db_client() -> Client {
 async fn validate_db_migration(
     num_clients: usize,
     althea_db_addr: Address,
-    miner_private_key: PrivateKey,
+    reg_server_key: PrivateKey,
 ) {
-    let miner_pub_key = miner_private_key.to_address();
+    let miner_pub_key = reg_server_key.to_address();
     let contact = Web3::new(&get_eth_node(), WEB3_TIMEOUT);
 
     let start = Instant::now();

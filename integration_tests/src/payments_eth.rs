@@ -34,6 +34,7 @@ pub fn eth_chain_id() -> Uint256 {
 }
 
 pub const WEB3_TIMEOUT: Duration = Duration::from_secs(1);
+pub const TRASACTION_TIMEOUT: Duration = Duration::from_secs(30);
 pub const ONE_ETH: u128 = 1_000_000_000_000_000_000;
 
 /// Runs a five node fixed network map test scenario

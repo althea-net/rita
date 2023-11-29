@@ -18,13 +18,13 @@ use crate::{
 };
 use crate::{
     registration_server::register_client_batch_loop::register_client_batch_loop,
-    utils::MINER_PRIVATE_KEY,
+    utils::REGISTRATION_SERVER_KEY,
 };
 
 pub const REGISTRATION_PORT_SERVER: u16 = 40400;
 
 pub async fn start_registration_server(db_addr: Address) {
-    let miner_private_key: PrivateKey = MINER_PRIVATE_KEY.parse().unwrap();
+    let miner_private_key: PrivateKey = REGISTRATION_SERVER_KEY.parse().unwrap();
     let miner_pub_key = miner_private_key.to_address();
     let contact = Web3::new(&get_eth_node(), WEB3_TIMEOUT);
 
