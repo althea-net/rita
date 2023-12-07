@@ -5,7 +5,7 @@ use std::net::IpAddr;
 use std::time::Duration;
 
 impl dyn KernelInterface {
-    //Pings a ipv6 address to determine if it's online
+    //Pings an address to determine if it's online
     pub fn ping_check(
         &self,
         ip: &IpAddr,
