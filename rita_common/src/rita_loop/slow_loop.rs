@@ -4,13 +4,11 @@ use crate::token_bridge::tick_token_bridge;
 use crate::tunnel_manager::tm_common_slow_loop_helper;
 use crate::KI;
 use actix_async::System as AsyncSystem;
-use althea_kernel_interface::hardware_info::get_hardware_info;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_interfaces;
 use babel_monitor::set_local_fee;
 use babel_monitor::set_metric_factor;
 use babel_monitor::structs::BabelMonitorError;
-use settings::get_rita_common;
 use std::net::TcpStream;
 use std::thread;
 use std::time::Duration;
@@ -35,8 +33,6 @@ pub fn start_rita_slow_loop() {
                 info!("Common Slow tick!");
                 let start = Instant::now();
 
-               check_for_hap_reboot();
-
                 // checks for and updates tunnel manager traffic shaper values
                 handle_shaping();
 
@@ -56,7 +52,7 @@ pub fn start_rita_slow_loop() {
                     Ok(mut stream) => {
                         // we really only need to run this on startup, but doing so periodically
                         // could catch the edge case where babel is restarted under us
-                        if let Err(e) = update_babel_price_and_metric_factor(&mut stream) {
+                        if let Err(e) = set_babel_price(&mut stream) {
                             warn!("Failed to set babel price with {:?}", e);
                             num_babel_failures += 1;
                         }
@@ -106,35 +102,18 @@ pub fn start_rita_slow_loop() {
         } {
             error!("Rita common slow loop thread panicked! Respawning {:?}", e);
             if Instant::now() - last_restart < Duration::from_secs(120) {
-                error!("Restarting too quickly, leaving it to auto rescue!");
-                let sys = AsyncSystem::current();
-                sys.stop_with_code(121);
+                error!("Restarting too quickly, rebooting instead!");
+                // only reboot if we are on openwrt, otherwise we are probably on a datacenter server rebooting that is a bad idea
+                if KI.is_openwrt() {
+                    let _res = KI.run_command("reboot", &[]);
+                }
             }
             last_restart = Instant::now();
         }
     });
 }
 
-/// This is a special handler for hAP routers which have a habit of getting locked up in
-/// runway cpu use cases, restarting them usually resolves it
-fn check_for_hap_reboot() {
-    let model = get_rita_common().network.device;
-    let hw_info = get_hardware_info(model.clone());
-    match (model, hw_info) {
-        (None, _) => error!("Model name not found?"),
-        (Some(mdl), Ok(info)) => {
-            if mdl.contains("mikrotik_hap-ac2") && info.load_avg_fifteen_minute > 4.0 {
-                info!("15 minute load average > 4, rebooting!");
-                let _res = KI.run_command("reboot", &[]);
-            }
-        }
-        (Some(_), Err(_)) => error!("Could not get hardware info!"),
-    }
-}
-
-/// This function updates the babeld price and metric factor by connecting to the babel instance and
-/// setting those values.
-fn update_babel_price_and_metric_factor(stream: &mut TcpStream) -> Result<(), BabelMonitorError> {
+fn set_babel_price(stream: &mut TcpStream) -> Result<(), BabelMonitorError> {
     let start = Instant::now();
     let common = settings::get_rita_common();
     let local_fee = common.network.babeld_settings.local_fee;
