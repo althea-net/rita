@@ -336,28 +336,23 @@ fn get_ethernet_stats() -> Option<Vec<EthernetStats>> {
 }
 
 fn get_wifi_devices() -> Vec<WifiDevice> {
-    let mut ret: Vec<WifiDevice> = Vec::new();
-    //get devices
-    let devices = parse_wifi_device_names();
-    if devices.is_err() {
-        warn!("Unable to get wifi devices: {:?}", devices);
-        return Vec::new();
+    match parse_wifi_device_names() {
+        Ok(devices) => devices
+            .into_iter()
+            .map(|dev| WifiDevice {
+                name: dev.clone(),
+                survey_data: get_wifi_survey_info(&dev),
+                station_data: get_wifi_station_info(&dev),
+                ssid: get_radio_ssid(&dev),
+                channel: get_radio_channel(&dev),
+                enabled: get_radio_enabled(&dev),
+            })
+            .collect(),
+        Err(err) => {
+            warn!("Unable to get wifi devices: {:?}", err);
+            Vec::new()
+        }
     }
-
-    for dev in devices.unwrap() {
-        let device = WifiDevice {
-            name: dev.clone(),
-            survey_data: get_wifi_survey_info(&dev),
-            station_data: get_wifi_station_info(&dev),
-            ssid: get_radio_ssid(&dev),
-            channel: get_radio_channel(&dev),
-            enabled: get_radio_enabled(&dev),
-        };
-        info!("Created the following wifi struct: {:?}", device.clone());
-        ret.push(device);
-    }
-
-    ret
 }
 
 /// This function parses files in /proc that contain conntrack info to send to ops
@@ -421,13 +416,19 @@ fn get_wifi_survey_info(dev: &str) -> Vec<WifiSurveyData> {
         .args([dev, "survey", "dump"])
         .stdout(Stdio::piped())
         .output();
-
-    if res.is_err() {
-        error!("Unable to run survey dump {:?}", res);
-        return Vec::new();
+    match res {
+        Ok(a) => match String::from_utf8(a.stdout) {
+            Ok(a) => extract_wifi_survey_data(&a, dev),
+            Err(e) => {
+                error!("Unable to parse iw survey dump {:?}", e);
+                return Vec::new();
+            }
+        },
+        Err(e) => {
+            error!("Unable to run survey dump {:?}", e);
+            Vec::new()
+        }
     }
-    let res = String::from_utf8(res.unwrap().stdout).unwrap();
-    extract_wifi_survey_data(&res, dev)
 }
 
 fn get_wifi_station_info(dev: &str) -> Vec<WifiStationData> {
@@ -435,14 +436,19 @@ fn get_wifi_station_info(dev: &str) -> Vec<WifiStationData> {
         .args([dev, "station", "dump"])
         .stdout(Stdio::piped())
         .output();
-
-    if res.is_err() {
-        error!("Unable to run station dump {:?}", res);
-        return Vec::new();
+    match res {
+        Ok(a) => match String::from_utf8(a.stdout) {
+            Ok(a) => extract_wifi_station_data(&a),
+            Err(e) => {
+                error!("Unable to parse iw station dump {:?}", e);
+                return Vec::new();
+            }
+        },
+        Err(e) => {
+            error!("Unable to run station dump {:?}", e);
+            Vec::new()
+        }
     }
-
-    let res = String::from_utf8(res.unwrap().stdout).unwrap();
-    extract_wifi_station_data(&res)
 }
 
 /// Expected input wlan0, wlan1, etc
