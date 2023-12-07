@@ -9,6 +9,7 @@ use crate::peer_listener::peerlistener_tick;
 use crate::traffic_watcher::watch;
 use crate::tunnel_manager::contact_peers::tm_contact_peers;
 use crate::tunnel_manager::tm_get_neighbors;
+use crate::KI;
 use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_neighs;
@@ -112,11 +113,10 @@ pub fn start_rita_fast_loop() {
             })
             .join()
         } {
-            error!("Rita common fast loop thread paniced! Respawning {:?}", e);
+            error!("Rita common fast loop thread panicked! Respawning {:?}", e);
             if Instant::now() - last_restart < Duration::from_secs(60) {
-                error!("Restarting too quickly, leaving it to auto rescue!");
-                let sys = AsyncSystem::current();
-                sys.stop_with_code(121);
+                error!("Restarting too quickly, rebooting instead!");
+                let _res = KI.run_command("reboot", &[]);
             }
             last_restart = Instant::now();
         }
@@ -173,9 +173,8 @@ pub fn peer_discovery_loop() {
                 e
             );
             if Instant::now() - last_restart < Duration::from_secs(60) {
-                error!("Restarting too quickly, leaving it to auto rescue!");
-                let sys = AsyncSystem::current();
-                sys.stop_with_code(121);
+                error!("Restarting too quickly, rebooting instead!");
+                let _res = KI.run_command("reboot", &[]);
             }
             last_restart = Instant::now();
         }

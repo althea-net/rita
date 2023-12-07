@@ -3,11 +3,10 @@
 use crate::operator_update::{operator_update, UPDATE_FREQUENCY};
 use actix_async::System as AsyncSystem;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// This function spawns a thread soley responsible for performing the operator update
 pub fn start_operator_update_loop() {
-    let mut last_restart = Instant::now();
     let rita_started = Instant::now();
     // outer thread is a watchdog inner thread is the runner
     thread::spawn(move || {
@@ -39,12 +38,6 @@ pub fn start_operator_update_loop() {
                 "Rita exit Operator Update loop thread paniced! Respawning {:?}",
                 e
             );
-            if Instant::now() - last_restart < Duration::from_secs(60) {
-                error!("Restarting too quickly, leaving it to auto rescue!");
-                let sys = AsyncSystem::current();
-                sys.stop_with_code(121);
-            }
-            last_restart = Instant::now();
         }
     });
 }

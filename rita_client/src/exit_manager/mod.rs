@@ -39,12 +39,9 @@ use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use std::collections::{HashMap, HashSet};
-use std::net::Ipv4Addr;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::time::Duration;
-use std::time::Instant;
 
 /// The number of times ExitSwitcher will try to connect to an unresponsive exit before blacklisting its ip
 const MAX_BLACKLIST_STRIKES: u16 = 100;
@@ -95,8 +92,6 @@ pub struct ExitManager {
     pub exit_list: ExitList,
     /// Store last exit here, when we see an exit change, we reset wg tunnels
     pub last_exit_state: LastExitStates,
-    /// Store exit connection status. If no update in > 10, perform a power cycle
-    pub last_connection_time: Instant,
 }
 
 impl Default for ExitManager {
@@ -105,7 +100,6 @@ impl Default for ExitManager {
             nat_setup: false,
             exit_list: ExitList::default(),
             last_exit_state: LastExitStates::default(),
-            last_connection_time: Instant::now(),
         }
     }
 }
@@ -778,19 +772,6 @@ pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
         }
     }
     None
-}
-
-/// Verifies ipv4 connectivity by pinging 1.1.1.1
-pub fn run_ping_test() -> bool {
-    let cloudflare: IpAddr = Ipv4Addr::new(1, 1, 1, 1).into();
-    let timeout = Duration::from_secs(5);
-    match KI.ping_check(&cloudflare, timeout, None) {
-        Ok(out) => out,
-        Err(e) => {
-            error!("ipv4 ping error: {:?}", e);
-            false
-        }
-    }
 }
 
 /// Verfies if exit has changed to reestablish wg tunnels

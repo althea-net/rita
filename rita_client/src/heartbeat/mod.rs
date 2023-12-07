@@ -13,6 +13,7 @@
 //! This packet is encrypted using the usual LibSodium box construction and sent to the heartbeat server in the following format
 //! WgKey, Nonce, Ciphertext for the HeartBeatMessage. This consumes 32 bytes, 24 bytes, and to the end of the message
 
+use althea_kernel_interface::KI;
 use althea_types::ExitDetails;
 
 use babel_monitor::parsing::get_installed_route;
@@ -113,9 +114,8 @@ pub fn send_heartbeat_loop() {
         } {
             error!("Heartbeat loop thread panicked! Respawning {:?}", e);
             if Instant::now() - last_restart < Duration::from_secs(60) {
-                error!("Restarting too quickly, leaving it to auto rescue!");
-                let sys = actix_async::System::current();
-                sys.stop_with_code(121);
+                error!("Restarting too quickly, rebooting instead!");
+                let _res = KI.run_command("reboot", &[]);
             }
             last_restart = Instant::now();
         }
