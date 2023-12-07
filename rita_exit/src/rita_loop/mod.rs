@@ -64,11 +64,8 @@ pub struct RitaExitCache {
 /// with actix are the most troublesome because the actix system may restart
 /// and crash this thread. To prevent that and other crashes we have a watchdog
 /// thread which simply restarts the billing.
-/// TODO remove futures on the non http endpoint / actix parts of this
-/// TODO remove futures on the actix parts of this by moving to thread local state
 pub fn start_rita_exit_loop() {
     setup_exit_wg_tunnel();
-    let mut last_restart = Instant::now();
     // outer thread is a watchdog, inner thread is the runner
     thread::spawn(move || {
         // this will always be an error, so it's really just a loop statement
@@ -85,12 +82,6 @@ pub fn start_rita_exit_loop() {
             .join()
         } {
             error!("Exit loop thread panicked! Respawning {:?}", e);
-            if Instant::now() - last_restart < Duration::from_secs(60) {
-                error!("Restarting too quickly, leaving it to systemd!");
-                let sys = AsyncSystem::current();
-                sys.stop_with_code(121);
-            }
-            last_restart = Instant::now();
         }
     });
 }

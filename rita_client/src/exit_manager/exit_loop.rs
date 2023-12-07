@@ -4,8 +4,7 @@ use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
 use crate::exit_manager::{
     correct_default_route, exit_general_details_request, exit_status_request, get_client_pub_ipv6,
     get_cluster_ip_list, get_full_selected_exit, get_routes_hashmap, has_exit_changed,
-    initialize_selected_exit_list, linux_setup_exit_tunnel, remove_nat, restore_nat, run_ping_test,
-    set_exit_list,
+    initialize_selected_exit_list, linux_setup_exit_tunnel, remove_nat, restore_nat, set_exit_list
 };
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
@@ -21,8 +20,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const EXIT_LOOP_SPEED: Duration = Duration::from_secs(5);
-const PING_TEST_SPEED: Duration = Duration::from_secs(100);
-const REBOOT_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// This asnyc loop runs functions related to Exit management.
 pub fn start_exit_manager_loop() {
@@ -74,17 +71,6 @@ pub fn start_exit_manager_loop() {
                                     }
                                 };
 
-                                // Run this ping test every PING_TEST_SPEED seconds
-                                if Instant::now() - em_state.last_connection_time > PING_TEST_SPEED {
-                                    if run_ping_test() {
-                                        em_state.last_connection_time = Instant::now();
-                                    } else {
-                                         // If this router has been in a bad state for >10 mins, reboot
-                                         if (Instant::now() - em_state.last_connection_time) > REBOOT_TIMEOUT {
-                                            let _res = KI.run_command("reboot", &[]);
-                                        }
-                                    }
-                                }
 
                                 // Get cluster exit list. This is saved locally and updated every tick depending on what exit we connect to.
                                 // When it is empty, it means an exit we connected to went down, and we use the list from memory to connect to a new instance
@@ -304,9 +290,8 @@ pub fn start_exit_manager_loop() {
                 e
             );
             if Instant::now() - last_restart < Duration::from_secs(60) {
-                error!("Restarting too quickly, leaving it to auto rescue!");
-                let sys = AsyncSystem::current();
-                sys.stop_with_code(121);
+                error!("Restarting too quickly, rebooting instead!");
+                let _res = KI.run_command("reboot", &[]);
             }
             last_restart = Instant::now();
         }
