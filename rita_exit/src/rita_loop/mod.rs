@@ -76,7 +76,6 @@ pub type ExitLock = Arc<RwLock<HashMap<WgKey, WgUsage>>>;
 /// thread which simply restarts the billing.
 pub fn start_rita_exit_loop() {
     setup_exit_wg_tunnel();
-    let mut last_restart = Instant::now();
 
     // the last usage of the wg tunnels, if an innner thread restarts this must be preserved to prevent
     // overbilling users
@@ -103,12 +102,6 @@ pub fn start_rita_exit_loop() {
             .join()
         } {
             error!("Exit loop thread panicked! Respawning {:?}", e);
-            if Instant::now() - last_restart < Duration::from_secs(60) {
-                error!("Restarting too quickly, leaving it to systemd!");
-                let sys = AsyncSystem::current();
-                sys.stop_with_code(121);
-            }
-            last_restart = Instant::now();
         }
     });
 }
