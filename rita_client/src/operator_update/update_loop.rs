@@ -3,6 +3,7 @@
 
 use crate::operator_update::{operator_update, TARGET_UPDATE_FREQUENCY, UPDATE_FREQUENCY_CAP};
 use actix_async::System as AsyncSystem;
+use althea_kernel_interface::KI;
 use rand::Rng;
 use std::cmp::{max, min};
 use std::thread;
@@ -72,9 +73,8 @@ pub fn start_operator_update_loop() {
                 e
             );
             if Instant::now() - last_restart < Duration::from_secs(60) {
-                error!("Restarting too quickly, leaving it to auto rescue!");
-                let sys = AsyncSystem::current();
-                sys.stop_with_code(121);
+                error!("Restarting too quickly, rebooting instead!");
+                let _res = KI.run_command("reboot", &[]);
             }
             last_restart = Instant::now();
         }

@@ -449,7 +449,7 @@ fn get_wifi_survey_info(dev: &str) -> Vec<WifiSurveyData> {
             Ok(a) => extract_wifi_survey_data(&a, dev),
             Err(e) => {
                 error!("Unable to parse iw survey dump {:?}", e);
-                return Vec::new();
+                Vec::new()
             }
         },
         Err(e) => {
@@ -469,7 +469,7 @@ fn get_wifi_station_info(dev: &str) -> Vec<WifiStationData> {
             Ok(a) => extract_wifi_station_data(&a),
             Err(e) => {
                 error!("Unable to parse iw station dump {:?}", e);
-                return Vec::new();
+                Vec::new()
             }
         },
         Err(e) => {
