@@ -370,7 +370,6 @@ pub fn get_default_settings(
 ) -> (RitaClientSettings, RitaExitSettingsStruct) {
     let mut exit_servers = HashMap::new();
     let mut exit = RitaExitSettingsStruct {
-        db_uri: "postgres://postgres@localhost/test".to_string(),
         client_registration_url: "https://7.7.7.1:40400/register_router".to_string(),
         workers: 2,
         remote_log: false,

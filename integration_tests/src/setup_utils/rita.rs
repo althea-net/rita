@@ -248,8 +248,6 @@ pub fn spawn_rita_exit(
         resettings.exit_network.exit_price = exit_fee;
         let veth_exit_to_native = format!("vout-{}-o", ns);
         resettings.network.external_nic = Some(veth_exit_to_native);
-        // each exit instance connects to one database in the default net namespace
-        resettings.db_uri = "postgresql://postgres@10.0.0.1/test".to_string();
 
         // mirrored from rita_bin/src/exit.rs
         let resettings = clu::exit_init(resettings);

@@ -155,8 +155,6 @@ pub struct EmailVerifSettings {
 /// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct RitaExitSettingsStruct {
-    /// starts with file:// or postgres://username:password@localhost/diesel_demo
-    pub db_uri: String,
     /// url exit uses to request a clients registration
     #[serde(default = "default_reg_url")]
     pub client_registration_url: String,
@@ -186,7 +184,6 @@ impl RitaExitSettingsStruct {
     /// default trait to prevent some future code from picking up on the 'default' implementation
     pub fn test_default() -> Self {
         RitaExitSettingsStruct {
-            db_uri: "".to_string(),
             client_registration_url: "".to_string(),
             workers: 1,
             remote_log: false,
