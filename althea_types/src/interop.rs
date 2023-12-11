@@ -607,7 +607,7 @@ where
     let s = String::deserialize(deserializer).unwrap_or_default();
     let value: Option<ContactType> = match serde_json::from_str(&s) {
         Ok(value) => value,
-        Err(e) => return Err(e).map_err(D::Error::custom),
+        Err(e) => return Err(D::Error::custom(e)),
     };
     Ok(value)
 }

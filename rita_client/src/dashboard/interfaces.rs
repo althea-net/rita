@@ -156,7 +156,6 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
 
 /// Set mode for an individual interface
 fn set_interface_mode(iface_name: String, mode: InterfaceMode) -> Result<(), RitaClientError> {
-    let iface_name = iface_name;
     let target_mode = mode;
     let interfaces = get_interfaces()?;
     let current_mode = get_current_interface_mode(&interfaces, &iface_name);

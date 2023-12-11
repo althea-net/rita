@@ -430,9 +430,7 @@ impl DebtKeeper {
     }
 
     fn get_debt_data_mut(&mut self, ident: &Identity) -> &mut NodeDebtData {
-        self.debt_data
-            .entry(*ident)
-            .or_insert_with(NodeDebtData::new)
+        self.debt_data.entry(*ident).or_default()
     }
 
     fn payment_failed(&mut self, to: &Identity) {

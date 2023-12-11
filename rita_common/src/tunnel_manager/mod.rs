@@ -675,7 +675,7 @@ pub mod tests {
         tunnel_manager
             .tunnels
             .entry(id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(get_test_tunnel("0.0.0.0".parse().unwrap()));
         {
             let existing_tunnel =

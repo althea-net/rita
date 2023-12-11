@@ -417,15 +417,13 @@ fn get_wifi_survey_info(dev: &str) -> Vec<WifiSurveyData> {
         .stdout(Stdio::piped())
         .output();
     match res {
-        Ok(a) => {
-            match String::from_utf8(a.stdout) {
-                Ok(a) => extract_wifi_survey_data(&a, dev),
-                Err(e) => {
-                    error!("Unable to parse iw survey dump {:?}", e);
-                    return Vec::new();
-                }
+        Ok(a) => match String::from_utf8(a.stdout) {
+            Ok(a) => extract_wifi_survey_data(&a, dev),
+            Err(e) => {
+                error!("Unable to parse iw survey dump {:?}", e);
+                Vec::new()
             }
-        }
+        },
         Err(e) => {
             error!("Unable to run survey dump {:?}", e);
             Vec::new()
@@ -439,15 +437,13 @@ fn get_wifi_station_info(dev: &str) -> Vec<WifiStationData> {
         .stdout(Stdio::piped())
         .output();
     match res {
-        Ok(a) => {
-            match String::from_utf8(a.stdout) {
-                Ok(a) => extract_wifi_station_data(&a),
-                Err(e) => {
-                    error!("Unable to parse iw station dump {:?}", e);
-                    return Vec::new();
-                }
+        Ok(a) => match String::from_utf8(a.stdout) {
+            Ok(a) => extract_wifi_station_data(&a),
+            Err(e) => {
+                error!("Unable to parse iw station dump {:?}", e);
+                Vec::new()
             }
-        }
+        },
         Err(e) => {
             error!("Unable to run station dump {:?}", e);
             Vec::new()

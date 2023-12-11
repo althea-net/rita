@@ -4,7 +4,7 @@ use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
 use crate::exit_manager::{
     correct_default_route, exit_general_details_request, exit_status_request, get_client_pub_ipv6,
     get_cluster_ip_list, get_full_selected_exit, get_routes_hashmap, has_exit_changed,
-    initialize_selected_exit_list, linux_setup_exit_tunnel, remove_nat, restore_nat, set_exit_list
+    initialize_selected_exit_list, linux_setup_exit_tunnel, remove_nat, restore_nat, set_exit_list,
 };
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
