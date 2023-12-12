@@ -14,8 +14,8 @@ name = "rita"
 path = "src/client.rs"
 
 [[bin]]
-name = "rita_db_migration"
-path = "src/database_migration.rs"
+name = "contract-util"
+path = "src/contract-util.rs"
 
 [[bin]]
 name = "rita_extender"

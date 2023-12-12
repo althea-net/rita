@@ -15,7 +15,7 @@ use web30::{client::Web3, types::SendTxOption};
 pub const MAX_BATCH_SIZE: usize = 75;
 
 /// Utility function used to easily perform O(1) lookups against the identities list
-fn get_clients_hashset(input: Vec<Identity>) -> HashSet<Identity> {
+pub fn get_clients_hashset(input: Vec<Identity>) -> HashSet<Identity> {
     let mut output = HashSet::new();
     for i in input {
         output.insert(i);
