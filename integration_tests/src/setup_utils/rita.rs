@@ -261,7 +261,7 @@ pub fn spawn_rita_exit(
         let system = actix_async::System::new();
 
         start_rita_common_loops();
-        start_rita_exit_loop();
+        start_rita_exit_loop(vec![]);
         start_operator_update_loop();
         save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(Box::new(
             settings::get_rita_exit(),

@@ -13,6 +13,11 @@
 #![allow(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
+use std::time::Duration;
+
+use actix_rt::time::Instant;
+use actix_rt::System;
+use althea_types::Identity;
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
 #[cfg(feature = "jemalloc")]
@@ -23,8 +28,10 @@ static GLOBAL: Jemalloc = Jemalloc;
 extern crate log;
 
 use docopt::Docopt;
+use rita_client_registration::client_db::get_all_regsitered_clients;
 use rita_common::debt_keeper::save_debt_on_shutdown;
 use rita_common::logging::enable_remote_logging;
+use rita_common::rita_loop::get_web3_server;
 use rita_common::rita_loop::start_core_rita_endpoints;
 use rita_common::rita_loop::start_rita_common_loops;
 use rita_common::rita_loop::write_to_disk::save_to_disk_loop;
@@ -123,10 +130,18 @@ fn main() {
     );
     trace!("Starting with Identity: {:?}", settings.get_identity());
 
+    // Exits require the ability to query the blockchain to setup the user list, they also need to
+    // have a backend database contract to store user data. This function checks that both of those
+    // are correct so that we can fail quickly if they are not.
+    let clients = check_startup_balance_and_contract();
+
+    // Now that we have migrated to async across the board I'm not actually sure if this is needed
+    // previously with pre-async actix this would initialize the thread that many actix functions required
+    // but now each individual thread spawns it's own system, this may simply be redundant.
     let system = actix_async::System::new();
 
     start_rita_common_loops();
-    start_rita_exit_loop();
+    start_rita_exit_loop(clients);
     start_operator_update_loop();
     save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(Box::new(
         settings::get_rita_exit(),
@@ -142,4 +157,56 @@ fn main() {
     }
 
     info!("Started rita Exit");
+}
+
+const STARTUP_RETRY_TIME: Duration = Duration::from_secs(10);
+
+/// This functions checks the Exits balance before starting, this is required since the exit must
+/// be able to query the blockchain to setup the user list.
+fn check_startup_balance_and_contract() -> Vec<Identity> {
+    let runner = System::new();
+    runner.block_on(async move {
+        let payment_settings = settings::get_rita_common().payment;
+        let our_address = payment_settings.eth_address.expect("No address!");
+        let full_node = get_web3_server();
+        let web3 = web30::client::Web3::new(&full_node, Duration::from_secs(5));
+        let mut res = web3.eth_get_balance(our_address).await;
+        let start = Instant::now();
+        while res.is_err() {
+            error!("Failed to get balance, trying again, we must check this before starting");
+            res = web3.eth_get_balance(our_address).await;
+
+            if Instant::now() - start > STARTUP_RETRY_TIME {
+                println!("Could not successfully query the ETH node {}", full_node);
+                std::process::exit(1);
+            }
+        }
+        let balance = res.unwrap();
+        if balance == 0u8.into() {
+            println!(
+                "Rita Exit requires a balance to start, please fund your address {} and restart",
+                our_address
+            );
+            std::process::exit(1);
+        }
+
+        let contract_address = settings::get_rita_exit()
+            .exit_network
+            .registered_users_contract_addr;
+        let mut users = get_all_regsitered_clients(&web3, our_address, contract_address).await;
+        let start = Instant::now();
+        while users.is_err() {
+            error!("Failed to get users, we must get these before starting!");
+            users = get_all_regsitered_clients(&web3, our_address, contract_address).await;
+
+            if Instant::now() - start > STARTUP_RETRY_TIME {
+                println!(
+                    "Could not successfully query contract {} check you are on the right chain!",
+                    contract_address
+                );
+                std::process::exit(1);
+            }
+        }
+        users.unwrap()
+    })
 }
