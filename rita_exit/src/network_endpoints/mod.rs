@@ -14,8 +14,8 @@ use actix::SystemService;
 use actix_web::AsyncResponder;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
 use althea_types::exit_identity_to_id;
+use althea_types::regions::Regions;
 use althea_types::ExitListV2;
-use althea_types::Regions;
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };
@@ -299,8 +299,11 @@ pub async fn get_exit_timestamp_http(_req: HttpRequest) -> HttpResponse {
     })
 }
 
-/// This function takes a list of exit ips in a cluster from its config, signs the list and
-/// sends it to the client
+/// This function takes a list of exit ips in the cluster from the exit registration smart
+/// contract, and returns a list of exit ips that are in the same region and currency as the client
+/// if this exit fits the region and currenty requirements it will always return a list containing itself
+/// even if this exit is not in the smart contract. If a client is speaking with this exit then the exit
+/// data is in the config and this is considered to be a key exchange in and of itself.
 pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
     let exit_settings = get_rita_exit();
     let our_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
@@ -310,6 +313,7 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
 
     let contact = Web3::new(&get_web3_server(), CLIENT_STATUS_TIMEOUT);
     let rita_exit = get_rita_exit();
+    let our_id = rita_exit.get_identity().unwrap();
     let our_addr = rita_exit
         .payment
         .eth_private_key
@@ -330,7 +334,7 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
                 for exit in a {
                     // Remove Exits that dont have proper regions defined
                     let mut exit_allowed_regions = exit.allowed_regions.clone();
-                    if exit_allowed_regions.remove(&Regions::UknownRegion) {
+                    if exit_allowed_regions.remove(&Regions::UnkownRegion) {
                         warn!("Found an uknown region in exit! {:?}", exit);
                     }
 
@@ -347,6 +351,7 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
                         ret.push(exit_identity_to_id(exit))
                     }
                 }
+                ret.push(our_id); // add ourselves to the list
                 ret
             }
             Err(e) => {
@@ -395,7 +400,7 @@ pub async fn get_exit_list_v2(request: Json<EncryptedExitClientIdentity>) -> Htt
         .to_address();
     let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
 
-    let ret: ExitListV2 = ExitListV2 {
+    let mut ret: ExitListV2 = ExitListV2 {
         exit_list: match get_exits_list(&contact, our_addr, contract_addr).await {
             Ok(a) => a,
             Err(e) => {
@@ -407,6 +412,7 @@ pub async fn get_exit_list_v2(request: Json<EncryptedExitClientIdentity>) -> Htt
             }
         },
     };
+    ret.exit_list.push(exit_settings.get_exit_identity()); // add ourselves to the list
 
     let plaintext = serde_json::to_string(&ret)
         .expect("Failed to serialize Vec of ips!")
