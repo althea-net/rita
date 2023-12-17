@@ -3,7 +3,7 @@
 //! exit and client routers can read it to coordinate user setup and two way key exchange with the blockchain
 //! as the trusted party
 
-use althea_types::{ExitIdentity, Identity, Regions, SystemChain, WgKey};
+use althea_types::{regions::Regions, ExitIdentity, Identity, SystemChain, WgKey};
 use clarity::{
     abi::{encode_call, AbiToken},
     utils::bytes_to_hex_str,
@@ -172,7 +172,7 @@ pub async fn add_exits_to_registration_list(
 fn allowed_regions_abi_array(allowed_regions: HashSet<Regions>) -> Vec<AbiToken> {
     let mut ret = vec![];
     for reg in allowed_regions.iter() {
-        let reg_int: u8 = reg.clone().into();
+        let reg_int: u8 = (*reg).into();
         ret.push(AbiToken::Uint(reg_int.into()));
     }
     ret
@@ -982,7 +982,7 @@ mod tests {
         let bytes = hex_str_to_bytes(bytes).unwrap();
 
         let res = parse_exit_identity_abi(to_evm_words(bytes)).unwrap();
-        assert!(res.allowed_regions.contains(&Regions::Columbia));
+        assert!(res.allowed_regions.contains(&Regions::Colombia));
         assert!(res.payment_types.contains(&SystemChain::Rinkeby));
         assert_eq!(res.allowed_regions.len(), 1);
         assert_eq!(res.payment_types.len(), 1);

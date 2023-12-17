@@ -5,6 +5,7 @@ pub mod contact_info;
 pub mod error;
 pub mod interop;
 pub mod monitoring;
+pub mod regions;
 pub mod user_info;
 pub mod wg_key;
 pub mod wifi_info;

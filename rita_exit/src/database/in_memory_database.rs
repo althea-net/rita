@@ -305,10 +305,10 @@ pub fn hash_wgkey(key: WgKey) -> u64 {
 }
 
 /// quick display function for a neat error
-pub fn display_hashset(input: &HashSet<String>) -> String {
+pub fn display_hashset<T: ToString>(input: &HashSet<T>) -> String {
     let mut out = String::new();
     for item in input.iter() {
-        write!(out, "{item}, ").unwrap();
+        write!(out, "{}, ", item.to_string()).unwrap();
     }
     out
 }

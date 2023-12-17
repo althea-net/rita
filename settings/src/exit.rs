@@ -2,7 +2,7 @@ use crate::localization::LocalizationSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_exit, setup_accepted_denoms, SettingsError};
-use althea_types::{FromStr, Identity, WgKey};
+use althea_types::{regions::Regions, ExitIdentity, FromStr, Identity, WgKey};
 use clarity::Address;
 use ipnetwork::IpNetwork;
 use std::collections::HashSet;
@@ -173,7 +173,7 @@ pub struct RitaExitSettingsStruct {
     /// Countries which the clients to the exit are allowed from, blank for no geoip validation.
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
-    pub allowed_countries: HashSet<String>,
+    pub allowed_countries: HashSet<Regions>,
     /// The save interval defaults to 5 minutes for exit settings represented in seconds
     #[serde(default = "default_save_interval")]
     pub save_interval: u64,
@@ -204,6 +204,19 @@ impl RitaExitSettingsStruct {
             self.network.wg_public_key?,
             self.network.nickname,
         ))
+    }
+
+    pub fn get_exit_identity(&self) -> ExitIdentity {
+        let id = self.get_identity().unwrap();
+        ExitIdentity {
+            mesh_ip: id.mesh_ip,
+            wg_key: id.wg_public_key,
+            eth_addr: id.eth_address,
+            registration_port: self.exit_network.exit_hello_port,
+            wg_exit_listen_port: self.exit_network.wg_v2_tunnel_port,
+            allowed_regions: self.allowed_countries.clone(),
+            payment_types: self.network.payment_chains.clone(),
+        }
     }
 
     pub fn get_client_subnet_size(&self) -> Option<u8> {

@@ -15,6 +15,7 @@ use crate::rita_loop::LEGACY_INTERFACE;
 use crate::IpAssignmentMap;
 use crate::RitaExitError;
 use althea_kernel_interface::ExitClient;
+use althea_types::regions::Regions;
 use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
@@ -42,7 +43,7 @@ pub mod in_memory_database;
 #[derive(Clone, Debug, Default)]
 pub struct RitaExitState {
     ip_assignment_map: IpAssignmentMap,
-    geoip_cache: HashMap<IpAddr, String>,
+    geoip_cache: HashMap<IpAddr, Regions>,
 }
 
 lazy_static! {

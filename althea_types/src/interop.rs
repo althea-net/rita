@@ -1,3 +1,4 @@
+use crate::regions::Regions;
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
 use crate::{ClientExtender, UsageTrackerFlat, UsageTrackerTransfer, WifiDevice};
 use arrayvec::ArrayString;
@@ -152,47 +153,6 @@ pub struct Denom {
     pub decimal: u64,
 }
 
-/// An enum representation of the Regions supported by althea exits
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
-pub enum Regions {
-    US,
-    Canada,
-    Ghana,
-    Nigeria,
-    Columbia,
-    Mexico,
-    UknownRegion,
-}
-
-/// Interal mapping of a region to an integer, used to store data in the db
-impl From<Regions> for u8 {
-    fn from(value: Regions) -> Self {
-        match value {
-            Regions::US => 1,
-            Regions::Canada => 2,
-            Regions::Ghana => 3,
-            Regions::Mexico => 4,
-            Regions::Nigeria => 5,
-            Regions::Columbia => 6,
-            Regions::UknownRegion => 0,
-        }
-    }
-}
-
-impl From<u8> for Regions {
-    fn from(value: u8) -> Self {
-        match value {
-            1 => Regions::US,
-            2 => Regions::Canada,
-            3 => Regions::Ghana,
-            4 => Regions::Mexico,
-            5 => Regions::Nigeria,
-            6 => Regions::Columbia,
-            _ => Regions::UknownRegion,
-        }
-    }
-}
-
 #[derive(Default, Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
 pub enum SystemChain {
     Ethereum,
@@ -249,7 +209,12 @@ impl FromStr for SystemChain {
             "Ethereum" => Ok(SystemChain::Ethereum),
             "Rinkeby" => Ok(SystemChain::Rinkeby),
             "Xdai" => Ok(SystemChain::Xdai),
+            "xdai" => Ok(SystemChain::Xdai),
+            "gnosis" => Ok(SystemChain::Xdai),
+            "gnosischain" => Ok(SystemChain::Xdai),
             "Althea" => Ok(SystemChain::Althea),
+            "althea" => Ok(SystemChain::Althea),
+            "altheachain" => Ok(SystemChain::Althea),
             _ => Err(()),
         }
     }

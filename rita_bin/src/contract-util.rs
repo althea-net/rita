@@ -6,9 +6,9 @@
 #![allow(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
+use althea_types::regions::Regions;
 use althea_types::ExitIdentity;
 use althea_types::Identity;
-use althea_types::Regions;
 use althea_types::SystemChain;
 use clarity::PrivateKey;
 use diesel::RunQueryDsl;
@@ -149,7 +149,7 @@ async fn main() {
         let mut xdai = HashSet::new();
         xdai.insert(SystemChain::Xdai);
         let mut usa = HashSet::new();
-        usa.insert(Regions::US);
+        usa.insert(Regions::UnitedStates);
 
         // This command helps generate the bytes for registering a set of exits
         let exits_to_register = vec![

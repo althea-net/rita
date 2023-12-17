@@ -1,3 +1,4 @@
+use althea_types::regions::Regions;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use ipnetwork::IpNetwork;
@@ -129,13 +130,13 @@ struct CountryDetails {
 }
 
 /// get ISO country code from ip, consults a in memory cache
-pub fn get_country(ip: IpAddr) -> Result<String, Box<RitaExitError>> {
+pub fn get_country(ip: IpAddr) -> Result<Regions, Box<RitaExitError>> {
     trace!("get GeoIP country for {}", ip.to_string());
 
-    // if allowed countries is not configured we don't care and will insert
-    // empty stings into the DB.
+    // if allowed countries is not configured we don't care and will use
+    // unkonwn region as a placeholder
     if settings::get_rita_exit().allowed_countries.is_empty() {
-        return Ok(String::new());
+        return Ok(Regions::UnkownRegion);
     }
 
     // in this case we have a gateway directly attached to the exit, so our
@@ -147,12 +148,11 @@ pub fn get_country(ip: IpAddr) -> Result<String, Box<RitaExitError>> {
     // above
     if let IpAddr::V6(val) = ip {
         if is_unicast_link_local(&val) {
-            return Ok(settings::get_rita_exit()
+            return Ok(*settings::get_rita_exit()
                 .allowed_countries
                 .iter()
                 .next()
-                .unwrap()
-                .clone());
+                .unwrap());
         }
     }
 
@@ -174,7 +174,7 @@ pub fn get_country(ip: IpAddr) -> Result<String, Box<RitaExitError>> {
         .unwrap()
         .geoip_cache
         .get(&ip)
-        .map(|val| val.to_string());
+        .copied();
 
     match cache_result {
         Some(code) => Ok(code),
@@ -195,13 +195,22 @@ pub fn get_country(ip: IpAddr) -> Result<String, Box<RitaExitError>> {
                 trace!("Got geoip result {:?}", res);
                 if let Ok(res) = res.json() {
                     let value: GeoIpRet = res;
-                    let code = value.country.iso_code;
+                    let code = match value.country.iso_code.parse() {
+                        Ok(r) => r,
+                        Err(_) => {
+                            error!(
+                                "Failed to parse geoip response {:?}",
+                                value.country.iso_code
+                            );
+                            Regions::UnkownRegion
+                        }
+                    };
                     trace!("Adding GeoIP value {:?} to cache", code);
                     RITA_EXIT_STATE
                         .write()
                         .unwrap()
                         .geoip_cache
-                        .insert(ip, code.clone());
+                        .insert(ip, code);
                     trace!("Added to cache, returning");
                     Ok(code)
                 } else {

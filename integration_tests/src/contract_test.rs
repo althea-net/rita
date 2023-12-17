@@ -1,4 +1,4 @@
-use althea_types::{ExitIdentity, Regions, SystemChain};
+use althea_types::{regions::Regions, ExitIdentity, SystemChain};
 use clarity::{Address, PrivateKey};
 use rita_client_registration::client_db::{
     add_exit_admin, add_exits_to_registration_list, add_users_to_registered_list,
@@ -72,8 +72,8 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
         wg_exit_listen_port: 60000,
         allowed_regions: {
             let mut ret = HashSet::new();
-            ret.insert(Regions::Columbia);
-            ret.insert(Regions::US);
+            ret.insert(Regions::Colombia);
+            ret.insert(Regions::UnitedStates);
             ret.insert(Regions::Canada);
             ret.insert(Regions::Mexico);
             ret

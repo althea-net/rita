@@ -1,5 +1,5 @@
 use althea_kernel_interface::DefaultRoute;
-use althea_types::{Regions, ShaperSettings, SystemChain};
+use althea_types::{regions::Regions, ShaperSettings, SystemChain};
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv6Addr};
 
@@ -29,7 +29,7 @@ fn default_shaper_settings() -> ShaperSettings {
 
 fn default_allowed_countries() -> HashSet<Regions> {
     let mut ret = HashSet::new();
-    ret.insert(Regions::US);
+    ret.insert(Regions::UnitedStates);
     ret
 }
 

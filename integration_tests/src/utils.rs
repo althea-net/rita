@@ -16,7 +16,9 @@ use althea_proto::{
         query_client::QueryClient, Metadata, QueryDenomMetadataRequest,
     },
 };
-use althea_types::{ContactType, Denom, ExitIdentity, Identity, Regions, SystemChain, WgKey};
+use althea_types::{
+    regions::Regions, ContactType, Denom, ExitIdentity, Identity, SystemChain, WgKey,
+};
 use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use clarity::{Address, Transaction, Uint256};
@@ -1130,7 +1132,7 @@ pub async fn add_exits_contract_exit_list(db_addr: Address, rita_identities: Ins
             wg_exit_listen_port: 59998,
             allowed_regions: {
                 let mut ret = HashSet::new();
-                ret.insert(Regions::US);
+                ret.insert(Regions::UnitedStates);
                 ret
             },
             payment_types: {
