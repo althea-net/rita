@@ -17,14 +17,11 @@ use crate::simulated_txfee_manager::add_tx_to_total;
 use crate::tunnel_manager::tm_tunnel_state_change;
 use crate::tunnel_manager::TunnelAction;
 use crate::tunnel_manager::TunnelChange;
-use crate::tunnel_manager::TunnelStateChange;
 use crate::RitaCommonError;
-
 use althea_types::{Identity, PaymentTx};
 use num256::{Int256, Uint256};
 use num_traits::identities::Zero;
 use num_traits::Signed;
-
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -278,9 +275,9 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
         }
     }
 
-    if let Err(e) = tm_tunnel_state_change(TunnelStateChange {
-        tunnels: debts_message,
-    }) {
+    // free the debt keeper lock before calling tunnel manager (and grabbing the lock there)
+    drop(dk);
+    if let Err(e) = tm_tunnel_state_change(debts_message) {
         warn!("Error during tunnel state change: {}", e);
     }
     Ok(())

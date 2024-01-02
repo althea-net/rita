@@ -275,6 +275,15 @@ pub fn tm_common_slow_loop_helper(babel_interfaces: Vec<Interface>) {
     tunnel_manager.tunnel_gc(TUNNEL_TIMEOUT, TUNNEL_HANDSHAKE_TIMEOUT, babel_interfaces);
 }
 
+/// Called by DebtKeeper with the updated billing status of every tunnel every round
+pub fn tm_tunnel_state_change(msg: Vec<TunnelChange>) -> Result<(), RitaCommonError> {
+    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
+    for tunnel in msg {
+        tunnel_manager.tunnel_payment_state_change(tunnel);
+    }
+    Ok(())
+}
+
 impl TunnelManager {
     pub fn new() -> Self {
         TunnelManager {
@@ -481,7 +490,6 @@ impl TunnelManager {
             id,
             action,
         );
-        let mut tunnel_bw_limits_need_change = false;
 
         // Find a tunnel
         match self.tunnels.get_mut(&id) {
@@ -501,7 +509,6 @@ impl TunnelManager {
                                         tunnel.neigh_id.global.wg_public_key
                                     );
                                     tunnel.payment_state = PaymentState::Paid;
-                                    tunnel_bw_limits_need_change = true;
                                     // latency detector probably got confused while enforcement
                                     // occurred
                                     tunnel.speed_limit = None;
@@ -517,7 +524,6 @@ impl TunnelManager {
                                         tunnel.neigh_id.global.wg_public_key
                                     );
                                     tunnel.payment_state = PaymentState::Overdue;
-                                    tunnel_bw_limits_need_change = true;
                                 }
                                 PaymentState::Overdue => {
                                     continue;
@@ -525,6 +531,13 @@ impl TunnelManager {
                             }
                         }
                     }
+                }
+                // update the bw limits if required, don't gate calling this function
+                // if payment issues are occuring it may fail to enforce, it must be called
+                // again later even if there are no changes to ensure everything is in a proper state
+                let res = tunnel_bw_limit_update(&tunnels);
+                if res.is_err() {
+                    error!("Bandwidth limiting failed with {:?}", res);
                 }
             }
             None => {
@@ -534,74 +547,36 @@ impl TunnelManager {
                 trace!("Couldn't find tunnel for identity {:?}", id);
             }
         }
-
-        // this is done outside of the match to make the borrow checker happy
-        if tunnel_bw_limits_need_change {
-            if potential_payment_issues_detected() {
-                warn!("Potential payment issue detected");
-                return;
-            }
-            let res = tunnel_bw_limit_update(&self.tunnels);
-            // if this fails consistently it could be a wallet draining attack
-            // TODO check for that case
-            if res.is_err() {
-                error!("Bandwidth limiting failed with {:?}", res);
-            }
-        }
     }
 }
 
+/// A single use internal struct used to flag what tunnels need to be updated
 pub struct TunnelChange {
     pub identity: Identity,
     pub action: TunnelAction,
 }
 
-pub struct TunnelStateChange {
-    pub tunnels: Vec<TunnelChange>,
-}
-
-/// Called by DebtKeeper with the updated billing status of every tunnel every round
-pub fn tm_tunnel_state_change(msg: TunnelStateChange) -> Result<(), RitaCommonError> {
-    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
-    for tunnel in msg.tunnels {
-        tunnel_manager.tunnel_payment_state_change(tunnel);
-    }
-    Ok(())
-}
-
-/// Takes the tunnels list and iterates over it to update all of the traffic control settings
-/// since we can't figure out how to combine interfaces bandwidth budgets we're subdividing it
-/// here with manual terminal commands whenever there is a change
-fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<(), RitaCommonError> {
+/// Takes a vec of tunnels and then updates the bandwidth limits on them. The calling functions
+/// ensure that this is only done when required. We further optimize by checking the qdisc before
+/// performing the update here
+fn tunnel_bw_limit_update(tunnels: &[Tunnel]) -> Result<(), RitaCommonError> {
     info!("Running tunnel bw limit update!");
-    // number of interfaces over which we will have to divide free tier BW
-    let mut limited_interfaces = 0u16;
-    for sublist in tunnels.iter() {
-        for tunnel in sublist.1.iter() {
-            if tunnel.payment_state == PaymentState::Overdue {
-                limited_interfaces += 1;
-            }
-        }
-    }
 
     let payment = settings::get_rita_common().payment;
-    let bw_per_iface = if limited_interfaces > 0 {
-        payment.free_tier_throughput / u32::from(limited_interfaces)
-    } else {
-        payment.free_tier_throughput
-    };
+    let bw_per_iface = payment.free_tier_throughput;
 
-    for sublist in tunnels.iter() {
-        for tunnel in sublist.1.iter() {
-            let payment_state = &tunnel.payment_state;
-            let iface_name = &tunnel.iface_name;
-            let has_limit = KI.has_limit(iface_name)?;
+    for tunnel in tunnels {
+        let payment_state = &tunnel.payment_state;
+        let iface_name = &tunnel.iface_name;
+        let has_limit = KI.has_limit(iface_name)?;
 
-            if *payment_state == PaymentState::Overdue {
-                KI.set_classless_limit(iface_name, bw_per_iface)?;
-            } else if *payment_state == PaymentState::Paid && has_limit {
-                KI.set_codel_shaping(iface_name, None)?;
-            }
+        if *payment_state == PaymentState::Overdue
+            && !has_limit
+            && !potential_payment_issues_detected()
+        {
+            KI.set_classless_limit(iface_name, bw_per_iface)?;
+        } else if *payment_state == PaymentState::Paid && has_limit {
+            KI.set_codel_shaping(iface_name, None)?;
         }
     }
     Ok(())
