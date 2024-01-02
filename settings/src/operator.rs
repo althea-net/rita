@@ -5,7 +5,7 @@
 //! simplifies things a lot (no need for complex trustless enforcement). If you find that both DAO settings and this exist at the same time
 //! that means the transition is still in prgress.
 
-use althea_types::{BillingDetails, InstallationDetails};
+use althea_types::{BillingDetails, InstallationDetails, ContactStorage};
 use clarity::Address;
 use num256::Uint256;
 
@@ -36,6 +36,11 @@ fn default_force_use_operator_price() -> bool {
     false
 }
 
+/// If this user wants low balance text messages or not
+fn default_low_balance_notification() -> bool {
+    true
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct OperatorSettings {
     /// The operator managing this router
@@ -59,6 +64,13 @@ pub struct OperatorSettings {
     /// If we should display the operator setup on the dashboard
     #[serde(default = "default_display_operator_setup")]
     pub display_operator_setup: bool,
+    /// ContactStorage is a TOML serialized representation of ContactType, use the .into()
+    /// traits to get ContactType for actual operations. This struct represents a full range
+    /// of possibilities for contact info.
+    pub contact_info: Option<ContactStorage>,
+    //// If this router wants low balance notifications or not
+    #[serde(default = "default_low_balance_notification")]
+    pub low_balance_notification: bool,
 }
 
 impl Default for OperatorSettings {
@@ -71,6 +83,8 @@ impl Default for OperatorSettings {
             installation_details: None,
             billing_details: None,
             display_operator_setup: true,
+            contact_info: None,
+            low_balance_notification: default_low_balance_notification(),
         }
     }
 }
