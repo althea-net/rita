@@ -17,10 +17,8 @@ use crate::simulated_txfee_manager::add_tx_to_total;
 use crate::tunnel_manager::tm_tunnel_state_change;
 use crate::tunnel_manager::TunnelAction;
 use crate::tunnel_manager::TunnelChange;
-use crate::tunnel_manager::TunnelStateChange;
 use crate::RitaCommonError;
 use crate::KI;
-
 use althea_types::Denom;
 use althea_types::Identity;
 use althea_types::SystemChain;
@@ -32,7 +30,6 @@ use num_traits::Signed;
 use settings::get_rita_common;
 use settings::DEBT_KEEPER_DENOM;
 use settings::DEBT_KEEPER_DENOM_DECIMAL;
-
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -357,9 +354,7 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
         }
     }
 
-    if let Err(e) = tm_tunnel_state_change(TunnelStateChange {
-        tunnels: debts_message,
-    }) {
+    if let Err(e) = tm_tunnel_state_change(debts_message) {
         warn!("Error during tunnel state change: {}", e);
     }
     Ok(())
