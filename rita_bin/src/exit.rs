@@ -33,6 +33,7 @@ use rita_common::rita_loop::start_rita_common_loops;
 use rita_common::rita_loop::write_to_disk::save_to_disk_loop;
 use rita_common::rita_loop::write_to_disk::SettingsOnDisk;
 use rita_common::usage_tracker::save_usage_on_shutdown;
+use rita_common::utils::apply_babeld_settings_defaults;
 use rita_common::utils::env_vars_contains;
 use rita_exit::database::sms::send_admin_notification_sms;
 use rita_exit::operator_update::update_loop::start_operator_update_loop;
@@ -109,6 +110,10 @@ fn main() {
         println!("Look the exit settings! {settings:?}");
         settings
     };
+    apply_babeld_settings_defaults(
+        settings.network.babel_port,
+        settings.network.babeld_settings,
+    );
 
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.

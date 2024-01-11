@@ -1848,9 +1848,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-src"
-version = "111.27.0+1.1.1v"
+version = "111.28.1+1.1.1w"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06e8f197c82d7511c5b014030c9b1efeda40d7d5f99d23b4ceed3524a5e63f02"
+checksum = "4bf7e82ffd6d3d6e6524216a0bfd85509f68b5b28354e8e7800057e44cefa9b4"
 dependencies = [
  "cc",
 ]
@@ -2538,6 +2538,7 @@ dependencies = [
  "althea_types",
  "arrayvec",
  "auto-bridge",
+ "babel_monitor",
  "clarity",
  "ipnetwork",
  "lazy_static",

@@ -191,7 +191,7 @@ impl Tunnel {
 
         // this operation blocks while opening and using a tcp stream
         let mut stream = open_babel_stream(babel_port, FAST_LOOP_TIMEOUT)?;
-        monitor(&mut stream, &iface_name)
+        monitor(&mut stream, &iface_name, None)
     }
 
     pub fn unmonitor(&self) -> Result<(), RitaCommonError> {

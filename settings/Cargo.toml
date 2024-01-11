@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 althea_types = { path = "../althea_types"}
+babel_monitor = { path = "../babel_monitor"}
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 auto-bridge = { path = "../auto_bridge" }
 num256 = "0.3"

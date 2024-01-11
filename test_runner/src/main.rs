@@ -521,7 +521,7 @@ fn spawn_rita(
         )));
         rcsettings.network.wg_private_key_path = wg_keypath;
         rcsettings.network.peer_interfaces = veth_interfaces;
-        rcsettings.payment.local_fee = local_fee;
+        rcsettings.network.babeld_settings.local_fee = local_fee;
 
         // mirrored from rita_bin/src/client.rs
         let s = clu::init("linux", rcsettings);

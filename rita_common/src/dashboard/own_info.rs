@@ -28,15 +28,15 @@ pub struct OwnInfo {
 pub async fn get_own_info(_req: HttpRequest) -> HttpResponse {
     debug!("Get own info endpoint hit!");
     let payment_settings = settings::get_rita_common().payment;
+    let network_settings = settings::get_rita_common().network;
     let eth_address = payment_settings.eth_address.unwrap();
     let balance = get_oracle_balance();
     let pay_threshold = get_pay_thresh();
     let close_threshold = calculate_close_thresh();
-    let local_fee = payment_settings.local_fee;
     let client_can_use_free_tier = payment_settings.client_can_use_free_tier;
+    let local_fee = network_settings.babeld_settings.local_fee;
+    let metric_factor = network_settings.babeld_settings.metric_factor;
 
-    let network_settings = settings::get_rita_common().network;
-    let metric_factor = network_settings.metric_factor;
     let device = network_settings.device;
     let is_gateway = is_gateway();
 

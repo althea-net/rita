@@ -39,6 +39,7 @@ use rita_common::rita_loop::start_rita_common_loops;
 use rita_common::rita_loop::write_to_disk::save_to_disk_loop;
 use rita_common::rita_loop::write_to_disk::SettingsOnDisk;
 use rita_common::usage_tracker::save_usage_on_shutdown;
+use rita_common::utils::apply_babeld_settings_defaults;
 use rita_common::utils::env_vars_contains;
 use settings::client::RitaClientSettings;
 use settings::save_settings_on_shutdown;
@@ -61,12 +62,6 @@ fn main() {
     })
     .expect("Error setting Ctrl-C handler");
 
-    // Because Rita clears and sets up new Wireguard Tunnels on every restart Babel, which was attached and listening to
-    // the old tunnels is now in an incorrect state. We must either restart babel or empty it's interfaces list so that the newly
-    // created wireguard tunnels can be re-added by this instance of Rita. Due to errors in babel (see git history there)
-    // restarting is the way to go as removing dead interfaces often does not work
-    KI.restart_babel();
-
     let args: Args = Docopt::new(get_client_usage(
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH"),
@@ -85,6 +80,21 @@ fn main() {
         RitaClientSettings::new_watched(&settings_file).unwrap();
         let mut s = settings::get_rita_client();
 
+        // start migrations //
+
+        // handle babel migration for old settings files
+        // this can be removed after all routers are upgraded paste Beta 21RC4 or Beta 20 RC31
+        if let Some(local_fee) = s.payment.local_fee {
+            s.network.babeld_settings.local_fee = local_fee;
+            s.payment.local_fee = None;
+        }
+        if let Some(metric_factor) = s.network.metric_factor {
+            s.network.babeld_settings.metric_factor = metric_factor;
+            s.network.metric_factor = None;
+        }
+
+        // end migrations //
+
         settings::set_flag_config(settings_file.to_string());
 
         settings::set_git_hash(env!("GIT_HASH").to_string());
@@ -99,11 +109,21 @@ fn main() {
         s
     };
 
+    // Because Rita clears and sets up new Wireguard Tunnels on every restart Babel, which was attached and listening to
+    // the old tunnels is now in an incorrect state. We must either restart babel or empty it's interfaces list so that the newly
+    // created wireguard tunnels can be re-added by this instance of Rita. Due to errors in babel (see git history there)
+    // restarting is the way to go as removing dead interfaces often does not work
+    KI.restart_babel();
+    apply_babeld_settings_defaults(
+        settings.network.babel_port,
+        settings.network.babeld_settings,
+    );
+
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
 
-    // we should remove log if there's an operator address or if logging is enabled
+    // we should remote log if there's an operator address or if logging is enabled
     let should_remote_log = settings.log.enabled || settings.operator.operator_address.is_some();
     // if remote logging is disabled, or the NO_REMOTE_LOG env var is set we should use the
     // local logger and log to std-out. Note we don't care what is actually set in NO_REMOTE_LOG

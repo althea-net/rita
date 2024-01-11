@@ -40,7 +40,7 @@ pub async fn set_local_fee(path: Path<u32>) -> HttpResponse {
             match babel_set_local_fee(&mut stream, new_fee) {
                 Ok(_) => {
                     let mut common = settings::get_rita_common();
-                    common.payment.local_fee = new_fee;
+                    common.network.babeld_settings.local_fee = new_fee;
                     settings::set_rita_common(common);
                     // try and save the config and fail if we can't
                     if let Err(e) = settings::write_config() {
@@ -76,7 +76,7 @@ pub async fn set_metric_factor(path: Path<u32>) -> HttpResponse {
             match babel_set_metric_factor(&mut stream, new_factor) {
                 Ok(_) => {
                     let mut common = settings::get_rita_common();
-                    common.network.metric_factor = new_factor;
+                    common.network.babeld_settings.metric_factor = new_factor;
                     settings::set_rita_common(common);
 
                     // try and save the config and fail if we can't

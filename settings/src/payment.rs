@@ -5,11 +5,8 @@ use clarity::{Address, PrivateKey};
 use num256::Int256;
 use num256::Uint256;
 
-fn default_local_fee() -> u32 {
-    0u32 // updated by oracle, denominated in wei/byte
-}
 fn default_max_fee() -> u32 {
-    200_000_000u32 // updated by oracle denominated in wei
+    200_000_000u32 // denominated in wei/byte
 }
 
 fn default_free_tier_throughput() -> u32 {
@@ -85,11 +82,9 @@ fn default_enable_enforcement() -> bool {
 pub struct PaymentSettings {
     /// What we charge other nodes, denominated in wei/byte, represented by a u32 because that is
     /// the field size of the price field in Babel
-    #[serde(default = "default_local_fee")]
-    pub local_fee: u32,
+    pub local_fee: Option<u32>,
     /// What we charge light client (phone) nodes specifically, denominated in wei/byte
-    #[serde(default = "default_local_fee")]
-    pub light_client_fee: u32,
+    pub light_client_fee: Option<u32>,
     /// A price limit, we will not pay more than this
     #[serde(default = "default_max_fee")]
     pub max_fee: u32,
@@ -168,8 +163,8 @@ pub struct PaymentSettings {
 impl Default for PaymentSettings {
     fn default() -> Self {
         PaymentSettings {
-            local_fee: default_local_fee(),
-            light_client_fee: default_local_fee(),
+            local_fee: None,
+            light_client_fee: None,
             max_fee: default_max_fee(),
             free_tier_throughput: default_free_tier_throughput(),
             client_can_use_free_tier: default_client_can_use_free_tier(),
