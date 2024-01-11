@@ -2,8 +2,8 @@ use crate::regions::Regions;
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
 use crate::{ClientExtender, UsageTrackerFlat, UsageTrackerTransfer, WifiDevice};
 use arrayvec::ArrayString;
-use babel_monitor::structs::Neighbor;
 use babel_monitor::structs::Route;
+use babel_monitor::structs::{BabeldConfig, Neighbor};
 use clarity::Address;
 use deep_space::Address as AltheaAddress;
 use ipnetwork::IpNetwork;
@@ -700,8 +700,9 @@ pub struct OperatorUpdateMessage {
     /// When a user hits 'update router', it updates to this version
     pub local_update_instruction_v2: Option<UpdateType>,
     /// settings for the device bandwidth shaper
-    #[serde(default = "default_shaper_settings")]
-    pub shaper_settings: ShaperSettings,
+    pub shaper_settings: Option<ShaperSettings>,
+    /// settings for babeld
+    pub babeld_settings: Option<BabeldConfig>,
     // Updated contact info from ops tools
     #[serde(
         serialize_with = "data_serialize",
@@ -768,14 +769,6 @@ pub struct CurExitInfo {
 pub struct ExitConnection {
     pub cur_exit: Option<CurExitInfo>,
     pub client_pub_ipv6: Option<IpNetwork>,
-}
-
-fn default_shaper_settings() -> ShaperSettings {
-    ShaperSettings {
-        max_speed: 1000,
-        min_speed: 50,
-        enabled: true,
-    }
 }
 
 fn default_ops_last_seen_usage_hour() -> u64 {

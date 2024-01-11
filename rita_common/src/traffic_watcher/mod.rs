@@ -68,7 +68,7 @@ pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32)
     let common = settings::get_rita_common();
     // we assume this matches what is actually set it babel because we
     // panic on startup if it does not get set correctly
-    let local_fee = common.payment.local_fee;
+    let local_fee = common.network.babeld_settings.local_fee;
     let max_fee = common.payment.max_fee;
     for route in &routes {
         // Only ip6

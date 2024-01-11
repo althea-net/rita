@@ -52,7 +52,7 @@ pub fn start_rita_slow_loop() {
                     Ok(mut stream) => {
                         // we really only need to run this on startup, but doing so periodically
                         // could catch the edge case where babel is restarted under us
-                        if let Err(e) = set_babel_price(&mut stream) {
+                        if let Err(e) = update_babel_price_and_metric_factor(&mut stream) {
                             warn!("Failed to set babel price with {:?}", e);
                             num_babel_failures += 1;
                         }
@@ -113,11 +113,13 @@ pub fn start_rita_slow_loop() {
     });
 }
 
-fn set_babel_price(stream: &mut TcpStream) -> Result<(), BabelMonitorError> {
+/// This function updates the babeld price and metric factor by connecting to the babel instance and
+/// setting those values.
+fn update_babel_price_and_metric_factor(stream: &mut TcpStream) -> Result<(), BabelMonitorError> {
     let start = Instant::now();
     let common = settings::get_rita_common();
-    let local_fee = common.payment.local_fee;
-    let metric_factor = common.network.metric_factor;
+    let local_fee = common.network.babeld_settings.local_fee;
+    let metric_factor = common.network.babeld_settings.metric_factor;
     let result = set_local_fee(stream, local_fee);
     if let Err(e) = result {
         warn!(
