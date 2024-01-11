@@ -152,7 +152,7 @@ pub fn spawn_rita(
         )));
         rcsettings.network.wg_private_key_path = wg_keypath;
         rcsettings.network.peer_interfaces = veth_interfaces;
-        rcsettings.payment.local_fee = local_fee;
+        rcsettings.network.babeld_settings.local_fee = local_fee;
 
         // mirrored from rita_bin/src/client.rs
         let s = clu::init("linux", rcsettings);
@@ -240,7 +240,7 @@ pub fn spawn_rita_exit(
         resettings.network.wg_public_key = Some(instance.wg_pub_key);
         resettings.network.wg_private_key_path = wg_keypath;
         resettings.network.peer_interfaces = veth_interfaces;
-        resettings.payment.local_fee = local_fee;
+        resettings.network.babeld_settings.local_fee = local_fee;
         resettings.exit_network.exit_price = exit_fee;
         let veth_exit_to_native = format!("vout-{}-o", ns);
         resettings.network.external_nic = Some(veth_exit_to_native);

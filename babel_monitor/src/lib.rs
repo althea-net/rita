@@ -30,7 +30,7 @@ use std::str::FromStr;
 use std::str::{self};
 use std::thread;
 use std::time::Duration;
-use structs::{Interface, Neighbor};
+use structs::{BabeldInterfaceConfig, Interface, Neighbor};
 
 /// we want to ceed the cpu just long enough for Babel
 /// to finish what it's doing and warp up it's write
@@ -196,6 +196,7 @@ pub fn parse_interfaces(stream: &mut TcpStream) -> Result<Vec<Interface>, BabelM
     parse_interfaces_sync(babel_output)
 }
 
+/// Gets this routers local fee, what the router charges for bandwidth. The unit is wei (1*10-18 of a dollar) per byte
 pub fn get_local_fee(stream: &mut TcpStream) -> Result<u32, BabelMonitorError> {
     let output = run_command(stream, "dump")?;
 
@@ -203,6 +204,7 @@ pub fn get_local_fee(stream: &mut TcpStream) -> Result<u32, BabelMonitorError> {
     get_local_fee_sync(babel_output)
 }
 
+/// Sets this routers local fee, what the router charges for bandwidth. The unit is wei (1*10-18 of a dollar) per byte
 pub fn set_local_fee(stream: &mut TcpStream, new_fee: u32) -> Result<(), BabelMonitorError> {
     let result = run_command(stream, &format!("fee {new_fee}"))?;
 
@@ -210,6 +212,9 @@ pub fn set_local_fee(stream: &mut TcpStream, new_fee: u32) -> Result<(), BabelMo
     Ok(())
 }
 
+/// Sets the metric factor for babel. This is a weighting value used to decide if this router should select
+/// routes based on price or quality of service. A higher value will cause the router to prefer routes with
+/// higher quailty of service, a lower value will cause the router to prefer routes with lower price.
 pub fn set_metric_factor(stream: &mut TcpStream, new_factor: u32) -> Result<(), BabelMonitorError> {
     let result = run_command(stream, &format!("metric-factor {new_factor}"))?;
 
@@ -217,10 +222,70 @@ pub fn set_metric_factor(stream: &mut TcpStream, new_factor: u32) -> Result<(), 
     Ok(())
 }
 
-pub fn monitor(stream: &mut TcpStream, iface: &str) -> Result<(), BabelMonitorError> {
-    let command = &format!("interface {iface} max-rtt-penalty 2000 enable-timestamps true");
-    let iface = iface.to_string();
-    let result = run_command(stream, command)?;
+/// Sets the interval at which Babel will update it's routes from the kernel routing table. If set to zero Babel will only recieve
+/// updates from the kernel as changes are made and will never perform a full dump.
+pub fn set_kernel_check_interval(
+    stream: &mut TcpStream,
+    kernel_check_interval: Option<Duration>,
+) -> Result<(), BabelMonitorError> {
+    let interval = match kernel_check_interval {
+        // unit is centiseconds
+        Some(d) => (d.as_millis() / 100) as u16,
+        None => 0,
+    };
+    let result = run_command(stream, &format!("kernel-check-interval {interval}"))?;
+
+    let _out = result;
+    Ok(())
+}
+
+/// Sets the default interface parameters for babel. These are applied at startup and can be overridden per interface, note if modified
+/// at runtime then existing interfaces will not be updated.
+pub fn set_interface_defaults(
+    stream: &mut TcpStream,
+    defaults: BabeldInterfaceConfig,
+) -> Result<(), BabelMonitorError> {
+    let mut command = "default ".to_string();
+    command.push_str(&build_interface_config_string(defaults));
+    let result = run_command(stream, &command)?;
+
+    let _out = result;
+    Ok(())
+}
+
+/// internal utility for building the configuration string
+fn build_interface_config_string(config: BabeldInterfaceConfig) -> String {
+    let mut command = String::new();
+    if config.link_quality {
+        command.push_str("link-quality yes ");
+    } else {
+        command.push_str("link-quality no ");
+    }
+    if config.split_horizon {
+        command.push_str("split-horizon yes ");
+    } else {
+        command.push_str("split-horizon no ");
+    }
+    command.push_str(&format!("max-rtt-penalty {} ", config.max_rtt_penalty));
+    command.push_str(&format!("rtt-min {} ", config.rtt_min));
+    command.push_str(&format!("rtt-max {} ", config.rtt_max));
+    command.push_str(&format!("hello-interval {} ", config.hello_interval));
+    command.push_str(&format!("update-interval {} ", config.update_interval));
+    command
+}
+
+/// Adds an interface to babel to monitor, neighbors will be discovered on this interface and routes will be advertised
+/// optionally this interface can have it's own configuration parameters
+pub fn monitor(
+    stream: &mut TcpStream,
+    iface: &str,
+    options: Option<BabeldInterfaceConfig>,
+) -> Result<(), BabelMonitorError> {
+    let mut command = format!("interface {iface} ");
+    if let Some(options) = options {
+        command.push_str(&build_interface_config_string(options));
+    }
+    let result = run_command(stream, &command)?;
 
     trace!("Babel started monitoring: {}", iface);
     let _out = result;

@@ -215,13 +215,13 @@ pub async fn operator_update(
 
     let network = rita_client.network.clone();
     trace!("Updating from operator settings");
-    let payment = update_payment_settings(
-        rita_client.payment,
+    update_payment_and_network_settings(
+        &mut rita_client.payment,
+        &mut rita_client.network,
         use_operator_price,
         is_gateway,
         new_settings.clone(),
     );
-    rita_client.payment = payment;
     trace!("Done with payment");
 
     // merge the new settings into the local settings
@@ -338,7 +338,12 @@ fn perform_operator_update(
         }
         None => {}
     }
-    network.shaper_settings = new_settings.shaper_settings;
+    if let Some(shaper_settings) = new_settings.shaper_settings {
+        network.shaper_settings = shaper_settings;
+    }
+    if let Some(babeld_settings) = new_settings.babeld_settings {
+        network.babeld_settings = babeld_settings;
+    }
     rita_client.network = network;
     settings::set_rita_client(rita_client);
     trace!("Successfully completed OperatorUpdate");
@@ -462,21 +467,22 @@ fn update_authorized_keys(
 
     Ok(())
 }
-/// Creates a payment settings from OperatorUpdateMessage to be returned and applied
-fn update_payment_settings(
-    mut payment: PaymentSettings,
+/// Updates payment settings from OperatorUpdateMessage
+fn update_payment_and_network_settings(
+    payment: &mut PaymentSettings,
+    network: &mut NetworkSettings,
     use_operator_price: bool,
     is_gateway: bool,
     new_settings: OperatorUpdateMessage,
-) -> PaymentSettings {
+) {
     if use_operator_price {
         // This will be true on devices that have integrated switches
         // and a wan port configured. Mostly not a problem since we stopped
         // shipping wan ports by default
         if is_gateway {
-            payment.local_fee = new_settings.gateway;
+            network.babeld_settings.local_fee = new_settings.gateway;
         } else {
-            payment.local_fee = new_settings.relay;
+            network.babeld_settings.local_fee = new_settings.relay;
         }
     } else {
         info!("User has disabled the OperatorUpdate!");
@@ -485,13 +491,12 @@ fn update_payment_settings(
     payment.balance_warning_level = new_settings.warning.into();
     if let Some(new_chain) = new_settings.system_chain {
         if payment.system_chain != new_chain {
-            set_system_blockchain(new_chain, &mut payment);
+            set_system_blockchain(new_chain, payment);
         }
     }
     if let Some(new_chain) = new_settings.withdraw_chain {
         payment.withdraw_chain = new_chain;
     }
-    payment
 }
 
 /// Returns true if the contact info sent through OperatorUpdateMessage have been more

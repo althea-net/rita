@@ -1,18 +1,53 @@
 use althea_kernel_interface::DefaultRoute;
 use althea_types::ShaperSettings;
+use althea_types::WgKey;
+use arrayvec::ArrayString;
+use babel_monitor::structs::{BabeldConfig, BabeldInterfaceConfig};
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv6Addr};
-
-use althea_types::WgKey;
-
-use arrayvec::ArrayString;
 
 fn default_discovery_ip() -> Ipv6Addr {
     Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8)
 }
 
-fn default_metric_factor() -> u32 {
-    1_900u32
+/// Sets the default configuration values for babeld
+fn default_babeld_config() -> BabeldConfig {
+    BabeldConfig {
+        // how often to update the Babeld routing table, by doing a full kernel dump
+        // this is useful to insert routes added to the table by other programs into the babel
+        // advertised route list. But this is not a property generally used in Althea. The risk of
+        // setting this to none is that in edge cases (such as an overloaded machine) babel may
+        // not get notified of a new route in the table added by another program.
+        kernel_check_interval: None,
+        // how much this router charges other routers for bandwidth, note that this value
+        // will be updated from operator tools defaults or the user dashboard
+        local_fee: 0,
+        // priority of quality versus price, this default value is an 'even' weight between the two
+        metric_factor: 1_900u32,
+        // the default interface config options
+        interface_defaults: BabeldInterfaceConfig {
+            // turning this off might break some of our quality monitoring code
+            // as we expect all links have packet loss monitoring + rtt monitoring
+            link_quality: true,
+            // the maximum route penalty for high latency, since babeld estimates latency
+            // by sending packets to the next hop and measuring the time it takes to get a response
+            // rtt can sometimes not match reality. So be careful with this value as it may cause irrational
+            // behavior there
+            max_rtt_penalty: 200u16,
+            // below this rtt no penalty is applied
+            rtt_min: 50u16,
+            // above this rtt only the max_rtt_penalty is applied
+            rtt_max: 500u16,
+            // how often in seconds to send hello messages, these are used to compute packet loss
+            hello_interval: 5u16,
+            // how often in seconds to send route updates, triggered updates are sent when a route changes
+            // so this can be safely set to a high value
+            update_interval: 20u16,
+            // When true routes are never re-advertised to the interface they were received from, this shoudl always
+            // be true for our use case since babel is always listening on a tunnel.
+            split_horizon: true,
+        },
+    }
 }
 
 fn default_usage_tracker_file() -> String {
@@ -29,11 +64,12 @@ fn default_shaper_settings() -> ShaperSettings {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
+    #[serde(default = "default_babeld_config")]
+    pub babeld_settings: BabeldConfig,
     /// How much non-financial metrics matter compared to a route's cost. By default a 2x more
     /// expensive route will only be chosen if it scores more than 2x better in other metrics. The
     /// value is expressed in 1/1000 increments, i.e. 1000 = 1.0, 500 = 0.5 and 1 = 0.001
-    #[serde(default = "default_metric_factor")]
-    pub metric_factor: u32,
+    pub metric_factor: Option<u32>,
     /// The static IP used on mesh interfaces
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mesh_ip: Option<IpAddr>,
@@ -44,6 +80,9 @@ pub struct NetworkSettings {
     #[serde(default = "default_discovery_ip")]
     pub discovery_ip: Ipv6Addr,
     /// Port on which we connect to a local babel instance (read-write connection required)
+    /// this is not in the babeld_settings section because everything else in that section is applied
+    /// and communicated to babel, this value is only used by rita and must be pre-configured in babel
+    /// as it can't be changed after startup
     pub babel_port: u16,
     /// Port on which rita starts the per hop tunnel handshake on (needs to be constant across an
     /// entire althea deployment)
@@ -111,7 +150,7 @@ impl Default for NetworkSettings {
         NetworkSettings {
             shaper_settings: default_shaper_settings(),
             backup_created: false,
-            metric_factor: default_metric_factor(),
+            metric_factor: None,
             mesh_ip: None,
             mesh_ip_v2: None,
             discovery_ip: default_discovery_ip(),
@@ -133,6 +172,7 @@ impl Default for NetworkSettings {
             nickname: None,
             usage_tracker_file: default_usage_tracker_file(),
             user_bandwidth_limit: None,
+            babeld_settings: default_babeld_config(),
         }
     }
 }
