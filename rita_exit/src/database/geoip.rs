@@ -1,7 +1,7 @@
+use crate::ip_increment::is_unicast_link_local;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use ipnetwork::IpNetwork;
-use rita_common::utils::ip_increment::is_unicast_link_local;
 use rita_common::KI;
 use std::collections::HashMap;
 use std::net::IpAddr;

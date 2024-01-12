@@ -61,7 +61,7 @@ fn get_babel_info(
 ) -> HashMap<WgKey, u64> {
     // we assume this matches what is actually set it babel becuase we
     // panic on startup if it does not get set correctly
-    let local_fee = settings::get_rita_exit().payment.local_fee;
+    let local_fee = settings::get_rita_exit().network.babeld_settings.local_fee;
 
     // insert ourselves as a destination, don't think this is actually needed
     let mut destinations = HashMap::new();

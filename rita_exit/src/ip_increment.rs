@@ -1,10 +1,8 @@
+use rita_common::RitaCommonError;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 
-use crate::RitaCommonError;
-
-#[allow(dead_code)]
 pub fn incrementv4(address: Ipv4Addr, netmask: u8) -> Result<Ipv4Addr, RitaCommonError> {
     let byte_vec = u32::from_be_bytes(address.octets());
     let mut mask = 0;
@@ -22,7 +20,6 @@ pub fn incrementv4(address: Ipv4Addr, netmask: u8) -> Result<Ipv4Addr, RitaCommo
     Ok(new_ip)
 }
 
-#[allow(dead_code)]
 pub fn incrementv6(address: Ipv6Addr, netmask: u8) -> Result<Ipv6Addr, RitaCommonError> {
     let byte_vec = u128::from_be_bytes(address.octets());
     let mut mask = 0;

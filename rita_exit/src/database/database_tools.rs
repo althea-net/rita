@@ -1,10 +1,7 @@
 use crate::database::secs_since_unix_epoch;
 use crate::database::struct_tools::client_to_new_db_client;
 use crate::database::ONE_DAY;
-use exit_db::models::AssignedIps;
-use ipnetwork::{IpNetwork, Ipv6Network, NetworkSize};
-use rita_common::utils::ip_increment::increment;
-
+use crate::ip_increment::increment;
 use crate::{RitaExitError, DB_POOL};
 use althea_kernel_interface::ExitClient;
 use althea_types::ExitClientIdentity;
@@ -13,7 +10,9 @@ use diesel::prelude::{ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl};
 use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::PooledConnection;
 use diesel::select;
+use exit_db::models::AssignedIps;
 use exit_db::{models, schema};
+use ipnetwork::{IpNetwork, Ipv6Network, NetworkSize};
 use std::convert::TryInto;
 use std::net::Ipv4Addr;
 use std::net::{IpAddr, Ipv6Addr};

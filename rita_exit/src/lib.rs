@@ -8,6 +8,7 @@ extern crate lazy_static;
 extern crate serde_derive;
 
 pub mod database;
+pub mod ip_increment;
 pub mod network_endpoints;
 pub mod operator_update;
 pub mod rita_loop;
