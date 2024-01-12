@@ -25,7 +25,6 @@ pub use crate::dashboard::auth::*;
 pub use crate::dashboard::backup_created::*;
 pub use crate::dashboard::bandwidth_limit::*;
 pub use crate::dashboard::contact_info::*;
-pub use crate::dashboard::contact_info::*;
 pub use crate::dashboard::eth_private_key::*;
 pub use crate::dashboard::exits::*;
 pub use crate::dashboard::extender_checkin::*;

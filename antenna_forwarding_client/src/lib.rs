@@ -110,7 +110,7 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
             ) {
                 Ok(messages) => {
                     // read messages will return a vec of at least one,
-                    match messages.get(0) {
+                    match messages.first() {
                         Some(ForwardingProtocolMessage::ForwardMessage {
                             ip,
                             server_port: _server_port,
