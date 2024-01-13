@@ -24,8 +24,8 @@ impl dyn KernelInterface {
     }
 
     /// checks the existing interfaces to find an interface name that isn't in use.
-    /// then calls iproute2 to set up a new interface.
-    pub fn setup_wg_if(&self) -> Result<String, Error> {
+    /// then calls iproute2 to set up a new interface with that name
+    pub fn create_blank_wg_numbered_wg_interface(&self) -> Result<String, Error> {
         // this is the maximum allowed retries for when an interface is claimed to have already existed
         // since we only setup interfaces once this can only happen if we have lost an interface or if
         // the kernel is acting strange, either way it's better just to skip that interface and wait
@@ -42,11 +42,11 @@ impl dyn KernelInterface {
 
         let mut count = 0;
         let mut interface = format!("wg{if_num}");
-        let mut res = self.setup_wg_if_named(&interface);
+        let mut res = self.create_blank_wg_interface(&interface);
         while let Err(KernelInterfaceError::WgExistsError) = res {
             if_num += 1;
             interface = format!("wg{if_num}");
-            res = self.setup_wg_if_named(&interface);
+            res = self.create_blank_wg_interface(&interface);
             count += 1;
             if count > MAX_RETRY {
                 break;
@@ -58,7 +58,7 @@ impl dyn KernelInterface {
     }
 
     /// calls iproute2 to set up a new interface with a given name.
-    pub fn setup_wg_if_named(&self, name: &str) -> Result<(), KernelInterfaceError> {
+    pub fn create_blank_wg_interface(&self, name: &str) -> Result<(), KernelInterfaceError> {
         let output = self.run_command("ip", &["link", "add", name, "type", "wireguard"])?;
         let stderr = String::from_utf8(output.stderr)?;
         if !stderr.is_empty() {

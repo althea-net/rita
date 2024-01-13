@@ -150,7 +150,7 @@ fn linux_setup_exit_tunnel(
     KI.update_settings_route(&mut network.last_default_route)?;
     info!("Updated settings route");
 
-    if let Err(KernelInterfaceError::RuntimeError(v)) = KI.setup_wg_if_named("wg_exit") {
+    if let Err(KernelInterfaceError::RuntimeError(v)) = KI.create_blank_wg_interface("wg_exit") {
         return Err(RitaClientError::MiscStringError(v));
     }
 
