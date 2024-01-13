@@ -153,29 +153,40 @@ impl Tunnel {
         neigh_id: LocalIdentity,
     ) -> Result<Tunnel, RitaCommonError> {
         let speed_limit = None;
-        let iface_name = KI.setup_wg_if()?;
         let mut network = settings::get_rita_common().network;
+        let own_ip = match network.mesh_ip {
+            Some(ip) => ip,
+            None => {
+                return Err(RitaCommonError::MiscStringError(
+                    "No mesh IP configured yet".to_string(),
+                ))
+            }
+        };
+        // after this step we have created a blank wg interface that we should clean up if we fail
+        let iface_name = KI.create_blank_wg_numbered_wg_interface()?;
+
         let args = TunnelOpenArgs {
             interface: iface_name.clone(),
             port: our_listen_port,
             endpoint: SocketAddr::new(ip, neigh_id.wg_port),
             remote_pub_key: neigh_id.global.wg_public_key,
             private_key_path: Path::new(&network.wg_private_key_path),
-            own_ip: match network.mesh_ip {
-                Some(ip) => ip,
-                None => {
-                    return Err(RitaCommonError::MiscStringError(
-                        "No mesh IP configured yet".to_string(),
-                    ))
-                }
-            },
+            own_ip,
             own_ip_v2: network.mesh_ip_v2,
             external_nic: network.external_nic.clone(),
             settings_default_route: &mut network.last_default_route,
         };
 
-        KI.open_tunnel(args)?;
-        KI.set_codel_shaping(&iface_name, speed_limit)?;
+        if let Err(e) = KI.open_tunnel(args) {
+            error!("Failed open tunnel! {:?}", e);
+            // cleanup after our failed attempt
+            KI.del_interface(&iface_name)?;
+            return Err(e.into());
+        }
+        // a failure here isn't fatal, we just won't have traffic shaping
+        if let Err(e) = KI.set_codel_shaping(&iface_name, speed_limit) {
+            error!("Failed to setup codel shaping on tunnel! {:?}", e);
+        }
 
         let now = Instant::now();
         let t = Tunnel {
@@ -191,8 +202,13 @@ impl Tunnel {
             payment_state: PaymentState::Paid,
         };
 
-        // attach to babel
-        t.monitor()?;
+        // If we fail to set this up in babeld we should try again in a moment
+        if let Err(e) = t.monitor() {
+            error!("Failed to monitor tunnel! {:?}", e);
+            // cleanup after our failed attempt
+            KI.del_interface(&t.iface_name)?;
+            return Err(e.into());
+        }
 
         Ok(t)
     }
@@ -412,8 +428,7 @@ impl TunnelManager {
         }
     }
 
-    /// Creates a new tunnel and inserts it into the tunnel index
-    fn create_new_tunnel(
+    fn add_new_tunnel_to_list(
         &mut self,
         peer_ip: IpAddr,
         ifidx: u32,
@@ -480,7 +495,7 @@ impl TunnelManager {
                     let our_tunnel = our_tunnel.clone();
                     self.del_tunnel(our_tunnel);
                     // create a new tunnel with details from this message
-                    let tunnel = self.create_new_tunnel(
+                    let tunnel = self.add_new_tunnel_to_list(
                         peer.contact_socket.ip(),
                         peer.ifidx,
                         their_localid,
@@ -494,8 +509,11 @@ impl TunnelManager {
                     peer.contact_socket.ip(),
                     peer.ifidx,
                 );
-                let tunnel =
-                    self.create_new_tunnel(peer.contact_socket.ip(), peer.ifidx, their_localid)?;
+                let tunnel = self.add_new_tunnel_to_list(
+                    peer.contact_socket.ip(),
+                    peer.ifidx,
+                    their_localid,
+                )?;
                 Ok((tunnel, false))
             }
         }

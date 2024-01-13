@@ -73,7 +73,8 @@ pub struct NetworkSettings {
     /// The static IP used on mesh interfaces
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mesh_ip: Option<IpAddr>,
-    /// MeshIp used by new routers to allow for exit switching
+    /// Essentially a second ip that can be added to this router on the Babel network
+    /// used only by exits so that they can advertise a second ip to the network
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mesh_ip_v2: Option<IpAddr>,
     /// Broadcast ip address used for peer discovery (in ff02::/8)

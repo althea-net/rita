@@ -87,21 +87,23 @@ pub struct TunnelOpenArgs<'a> {
 
 impl dyn KernelInterface {
     pub fn open_tunnel(&self, args: TunnelOpenArgs) -> Result<(), KernelInterfaceError> {
-        let external_peer;
-        let phy_name = match self.get_device_name(args.endpoint.ip()) {
-            Ok(phy_name) => {
-                external_peer = false;
-                Some(phy_name)
-            }
-            Err(_) => {
-                external_peer = true;
-                args.external_nic.clone()
-            }
+        let (phy_name, external_peer) = match is_link_local(args.endpoint.ip()) {
+            true => (self.get_device_name(args.endpoint.ip())?, false),
+            false => match args.external_nic.clone() {
+                Some(external_nic) => (external_nic, true),
+                None => {
+                    // external peers need to have an interface name to setup static routes for
+                    return Err(KernelInterfaceError::NoInterfaceError(format!(
+                        "Endpoint {} is not link local and should have an interaface name",
+                        args.endpoint
+                    )));
+                }
+            },
         };
 
         let allowed_addresses = "::/0".to_string();
 
-        let socket_connect_str = socket_to_string(&args.endpoint, phy_name)?;
+        let socket_connect_str = socket_to_string(&args.endpoint, Some(phy_name))?;
         trace!("socket connect string: {}", socket_connect_str);
         let output = self.run_command(
             "wg",
@@ -139,7 +141,7 @@ impl dyn KernelInterface {
             ],
         )?;
 
-        // Add second ip to tunnel for roaming
+        // Add second ip to tunnel used only by exits currently
         if let Some(ip) = args.own_ip_v2 {
             let _output = self.run_command(
                 "ip",
@@ -147,6 +149,7 @@ impl dyn KernelInterface {
             )?;
         }
 
+        // add ipv6 link local slacc address manually, this is required for peer discovery
         self.run_command(
             "ip",
             &[
