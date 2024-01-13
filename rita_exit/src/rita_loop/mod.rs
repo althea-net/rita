@@ -301,11 +301,11 @@ fn recompute_ipv6_if_needed(conn: &PgConnection) -> Result<(), Box<RitaExitError
 
 fn setup_exit_wg_tunnel() {
     // Setup legacy wg_exit
-    if let Err(e) = KI.setup_wg_if_named(LEGACY_INTERFACE) {
+    if let Err(e) = KI.create_blank_wg_interface(LEGACY_INTERFACE) {
         warn!("exit setup returned {}", e)
     }
     // Setup new wg_exit
-    if let Err(e) = KI.setup_wg_if_named(EXIT_INTERFACE) {
+    if let Err(e) = KI.create_blank_wg_interface(EXIT_INTERFACE) {
         warn!("new exit setup returned {}", e)
     }
 
