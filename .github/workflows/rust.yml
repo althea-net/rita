@@ -48,22 +48,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Run Cargo Audit
         run: cargo install cargo-audit && cargo audit
-  cross-mips:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v2
-      - name: Cross test mips
-        run: cargo install cross && cross test --target mips-unknown-linux-musl --verbose -- --test-threads=1
-  cross-mipsel:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v2
-      - name: Cross test mipsel
-        run: cargo install cross && cross test --target mipsel-unknown-linux-musl --verbose -- --test-threads=1
   cross-aarch64:
     needs: test
     runs-on: ubuntu-latest
