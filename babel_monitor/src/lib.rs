@@ -96,7 +96,7 @@ pub fn open_babel_stream(
 }
 
 /// Read function, you should always pass an empty string to the previous contents field
-/// it's used when the function does not find a babel terminator and needs to recuse to get
+/// it's used when the function does not find a babel terminator and needs to recurse to get
 /// the full message
 fn read_babel(
     stream: &mut TcpStream,
@@ -174,6 +174,9 @@ fn read_babel(
     Ok(babel_data)
 }
 
+/// Runs a command on the babeld management interface, returns the full return string of the command
+/// this function will return an error if the command fails to write to the socket, but the command itself
+/// may still fail, you should check the output using read_babel_sync in addition to other parse functions
 pub fn run_command(stream: &mut TcpStream, cmd: &str) -> Result<String, BabelMonitorError> {
     info!("Running babel command {}", cmd);
     let cmd = format!("{cmd}\n");
