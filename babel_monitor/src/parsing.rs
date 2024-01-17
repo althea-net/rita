@@ -11,6 +11,9 @@ use std::iter::Iterator;
 use std::net::IpAddr;
 use std::str::{self};
 
+/// Iterates over the output of a Babel dump and consumes the final line of output
+/// determing if the babel command was successful or not, returning the rest of the output
+/// for parsing by another function
 pub fn read_babel_sync(output: &str) -> Result<String, BabelMonitorError> {
     let mut ret = String::new();
     for line in output.lines() {
