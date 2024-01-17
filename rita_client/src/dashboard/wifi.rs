@@ -73,7 +73,6 @@ pub struct WifiDevice {
     pub channel: String,
     pub path: String,
     pub htmode: String,
-    pub hwmode: String,
     pub disabled: String,
     #[serde(default)]
     pub radio_type: String,
