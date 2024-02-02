@@ -4,7 +4,7 @@ description = "Gets information from and changes settings of kernel network stac
 license = "Apache-2.0"
 name = "althea_kernel_interface"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 oping = "0.3"

@@ -2,7 +2,7 @@
 authors = ["jkilpatr <jkilpatr@redhat.com>"]
 name = "babel_monitor"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ipnetwork = "0.20"

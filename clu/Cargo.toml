@@ -2,7 +2,7 @@
 authors = ["Justin <kilpatrickjustin@protonmail.ch>"]
 name = "clu"
 version = "0.0.1"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 settings = { path = "../settings" }

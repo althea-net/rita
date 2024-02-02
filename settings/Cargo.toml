@@ -2,7 +2,7 @@
 name = "settings"
 version = "0.1.0"
 authors = ["Ben <wangben3@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 althea_types = { path = "../althea_types"}
