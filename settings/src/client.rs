@@ -4,14 +4,14 @@ use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_client, SettingsError};
-use althea_types::{ExitState, Identity};
+use althea_types::exit_interop::ExitState;
+use althea_types::Identity;
 use std::collections::HashSet;
-use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
 pub const APP_NAME: &str = "rita";
 
-pub const DUMMY_ROOT_IP: &str = "1.1.1.1";
+pub const EXIT_CLIENT_LISTEN_PORT: u16 = 59999;
 
 pub fn default_app_name() -> String {
     APP_NAME.to_string()
@@ -44,48 +44,6 @@ pub struct ExitServer {
 
 fn default_registration_port() -> u16 {
     4875
-}
-
-/// Simple struct that keeps track of details related to the exit we are currently connected to, as well as the next potential exit to switch to
-#[derive(Default, Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct SelectedExit {
-    // Exit we currently forward to
-    pub selected_id: Option<IpAddr>,
-
-    // Advertised Metric of selected_id. This is different from that advertised by babel due to bias of metric being degraded by current traffic
-    pub selected_id_metric: Option<u16>,
-
-    // Since our advertised metric doesnt change through babel, we measure how much the average metric degrades over time and add this to sel_id_metric
-    pub selected_id_degradation: Option<u16>,
-
-    // This could be different from selected_id, we dont switch immediately to avoid route flapping
-    // This is what we keep track of in lazy static metric vector
-    pub tracking_exit: Option<IpAddr>,
-}
-
-/// This is the state machine for exit switching logic. Given there are three exits we track: current, best, and tracking, there are several situations we can be in
-/// Given that there are several scenarios to be in, We use this enum to tracking our state during every tick
-///
-/// InitialExitSetup: We have just connected to the first exit and tracking vector is empty
-///
-/// ContinueCurrentReset: Best exit, current exit and tracking exit are all the same. We continue with the same exit. However our tracking vector is full,
-/// so we reset it, with no change to exits
-///
-/// ContinueCurrent: Same as above, but vector is not full. We continue adding metrics to tracking vector.
-///
-/// SwitchExit: Current exit is different but tracking and best are same. Vec is full, we switch to best/tracking exit
-///
-/// ContinueTracking: Current exit is different but tracking == best. Vec is not full, so we dont switch yet, just continue updating the tracking vector
-///
-/// ResetTracking: tracking and best are diffrent. We reset timer/vector and start tracking new best
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub enum ExitSwitchingCode {
-    InitialExitSetup,
-    ContinueCurrentReset,
-    ContinueCurrent,
-    SwitchExit,
-    ContinueTracking,
-    ResetTracking,
 }
 
 fn exit_db_smart_contract_on_xdai() -> String {

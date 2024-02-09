@@ -9,6 +9,17 @@ use babel_monitor::structs::BabeldConfig;
 /// throw a dead code warning.
 pub mod ip_increment;
 
+/// Simple utility function to try and keep the loop running
+/// at a roughly consistent speed
+pub fn compute_next_loop_time(start: Instant, desired_speed: Duration) -> Duration {
+    let elapsed = start.elapsed();
+    if elapsed > desired_speed {
+        Duration::from_secs(0)
+    } else {
+        desired_speed - elapsed
+    }
+}
+
 #[allow(dead_code)]
 pub fn option_convert<B: std::convert::From<A>, A>(item: Option<A>) -> Option<B> {
     item.map(|val| val.into())

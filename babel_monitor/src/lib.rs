@@ -336,6 +336,31 @@ pub fn parse_routes(stream: &mut TcpStream) -> Result<Vec<Route>, BabelMonitorEr
     parse_routes_sync(babel_out)
 }
 
+pub fn parse_routes_and_neighs(stream: &mut TcpStream) -> Result<RoutesAndNeighbors, BabelMonitorError> {
+    let result = run_command(stream, "dump")?;
+
+    let babel_out = result;
+    let routes = parse_routes_sync(babel_out.clone())?;
+    let neighs = parse_neighs_sync(babel_out)?;
+    Ok(RoutesAndNeighbors { routes, neighs })
+}
+
+/// Return helper struct that contains both routes and neighbors
+pub struct RoutesAndNeighbors {
+    pub routes: Vec<Route>,
+    pub neighs: Vec<Neighbor>,
+}
+
+/// Simple helper function that opens a babel stream to get all routes
+pub fn get_babel_routes_and_neighbors(
+    babel_port: u16,
+    timeout: Duration,
+) -> Result<RoutesAndNeighbors, BabelMonitorError> {
+    let mut stream = open_babel_stream(babel_port, timeout)?;
+    parse_routes_and_neighs(&mut stream)
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
