@@ -1,4 +1,4 @@
-use althea_types::{ExitClientIdentity, Identity, WgKey};
+use althea_types::{exit_interop::ExitRegistrationIdentity, Identity, WgKey};
 use awc::error::SendRequestError;
 use phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
@@ -113,7 +113,7 @@ pub struct SmsRequest {
 
 /// Handles the minutia of phone registration states
 pub async fn handle_sms_registration(
-    client: ExitClientIdentity,
+    client: ExitRegistrationIdentity,
     api_key: String,
     verify_profile_id: String,
     magic_number: Option<PhoneNumber>,

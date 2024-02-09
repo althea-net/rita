@@ -339,6 +339,7 @@ version = "0.1.11"
 name = "althea_types"
 version = "0.1.0"
 dependencies = [
+ "althea_kernel_interface",
  "arrayvec",
  "babel_monitor",
  "base64 0.13.1",

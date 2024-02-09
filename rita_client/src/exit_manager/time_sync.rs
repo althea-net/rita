@@ -1,9 +1,6 @@
 use althea_kernel_interface::KI;
 use althea_types::ExitSystemTime;
-use settings::client::ExitServer;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-use crate::exit_manager::get_current_exit;
+use std::{net::Ipv6Addr, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 /// The max time difference between the local router's time and the exit's before resetting the local time to the exit's
 const MAX_DIFF_LOCAL_EXIT_TIME: Duration = Duration::from_secs(60);
@@ -13,10 +10,8 @@ const MAX_DIFF_LOCAL_EXIT_TIME: Duration = Duration::from_secs(60);
 const MAX_EXIT_TUNNEL_HANDSHAKE: Duration = Duration::from_secs(60 * 3);
 
 /// Retrieve a unix timestamp from the exit's mesh IPv6
-pub async fn get_exit_time(exit: ExitServer) -> Option<SystemTime> {
+pub async fn get_exit_time(exit_ip: Ipv6Addr) -> Option<SystemTime> {
     info!("Getting the exit time");
-    let exit_ip = get_current_exit().expect("There should be an exit ip here");
-    let exit_port = exit.registration_port;
     let url = format!("http://[{exit_ip}]:{exit_port}/time");
 
     let client = awc::Client::default();
@@ -57,7 +52,7 @@ pub fn get_latest_exit_handshake() -> Option<SystemTime> {
 /// Check for a handshake time for wg_exit. We might not get one if there's no tunnel
 /// if there's no handshake or the handshake is more than 10 mins old, then try to get the exit time
 /// if we do get the exit time and it's more than 60 secs different than local time, then set the local time to it
-pub async fn maybe_set_local_to_exit_time(exit: ExitServer) {
+pub async fn maybe_set_local_to_exit_time(exit_ip: Ipv6Addr) {
     let now = SystemTime::now();
 
     if let Some(last_handshake) = get_latest_exit_handshake() {
@@ -88,7 +83,7 @@ pub async fn maybe_set_local_to_exit_time(exit: ExitServer) {
     }
 
     // if we're here, then it means we didn't get a reasonable handshake
-    if let Some(exit_time) = get_exit_time(exit).await {
+    if let Some(exit_time) = get_exit_time(exit_ip).await {
         // if exit time is more than 60 secs later than our time, set ours to its
         if let Ok(diff) = exit_time.duration_since(now) {
             if diff > MAX_DIFF_LOCAL_EXIT_TIME {

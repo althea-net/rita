@@ -2,7 +2,7 @@ use crate::localization::LocalizationSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_exit, setup_accepted_denoms, SettingsError};
-use althea_types::{regions::Regions, ExitIdentity, FromStr, Identity, WgKey};
+use althea_types::{regions::Regions, exit_interop::ExitIdentity, FromStr, Identity, WgKey};
 use clarity::Address;
 use ipnetwork::IpNetwork;
 use std::collections::HashSet;
