@@ -1,6 +1,5 @@
 use std::collections::{HashMap, VecDeque};
 use std::net::Ipv4Addr;
-use std::time::SystemTime;
 
 /// Contains all the data you need for an American mailing address
 /// hopefully also compatible with a few other countries
@@ -58,9 +57,6 @@ pub struct InstallationDetails {
     /// Description of the installation and equipment at the
     /// location
     pub equipment_details: String,
-    /// Time of install, this is set by the operator tools when it accepts
-    /// the value because the router system clocks may be problematic.
-    pub install_date: Option<SystemTime>,
 }
 
 /// The old storage method for usage tracker data that stores flat data

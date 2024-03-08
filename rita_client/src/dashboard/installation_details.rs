@@ -93,7 +93,6 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
         relay_antennas: parsed_relay_antenna_ips,
         physical_address: input.physical_address,
         equipment_details: input.equipment_details,
-        install_date: None,
     };
     let new_billing_details = BillingDetails {
         user_first_name: input.first_name,
