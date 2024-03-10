@@ -40,7 +40,7 @@ pub const PAYMENT_RECEIVE_TIMEOUT: Duration = Duration::from_secs(259200u64);
 /// enforce upon us if we miss a payment and due to the implementation of DebtKeeper
 /// we will not send another payment while one is in flight. On Xdai the block time is
 /// once every 5 seconds, meaning a minimum of 20 seconds is required to ensure 4 confirms
-pub const PAYMENT_SEND_TIMEOUT: Duration = Duration::from_secs(60u64);
+pub const PAYMENT_SEND_TIMEOUT: Duration = Duration::from_secs(600u64);
 /// How many blocks before we assume finality
 const BLOCKS_TO_CONFIRM: u32 = 4;
 /// How old does a txid need to be before we don't accept it?
