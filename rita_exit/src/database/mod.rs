@@ -18,7 +18,7 @@ use althea_kernel_interface::ExitClient;
 use althea_types::regions::Regions;
 use althea_types::Identity;
 use althea_types::WgKey;
-use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
+use althea_types::exit_interop::{ExitClientDetails, ExitRegistrationIdentity, ExitDetails, ExitState, ExitVerifMode};
 use clarity::Address;
 use rita_client_registration::client_db::get_registered_client_using_wgkey;
 use rita_client_registration::ExitSignupReturn;
@@ -69,13 +69,15 @@ pub fn get_exit_info() -> ExitDetails {
         netmask: exit_settings.exit_network.netmask,
         description: exit_settings.description,
         verif_mode: ExitVerifMode::Phone,
+        server_mesh_ip: exit_settings.network.mesh_ip_v2.unwrap(),
+        server_wg_pubkey: exit_settings.exit_network.wg_public_key,
     }
 }
 
 /// Handles a new client registration api call. Performs a geoip lookup
 /// on their registration ip to make sure that they are coming from a valid gateway
 /// ip and then sends out an email of phone message
-pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<RitaExitError>> {
+pub async fn signup_client(client: ExitRegistrationIdentity) -> Result<ExitState, Box<RitaExitError>> {
     let exit_settings = get_rita_exit();
     info!("got setup request {:?}", client);
     let gateway_ip = get_gateway_ip_single(client.global.mesh_ip)?;
@@ -130,7 +132,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<
     }
 }
 
-pub async fn forward_client_signup_request(exit_client: ExitClientIdentity) -> ExitSignupReturn {
+pub async fn forward_client_signup_request(exit_client: ExitRegistrationIdentity) -> ExitSignupReturn {
     let url: &str;
     let reg_url = get_rita_exit().client_registration_url;
     if cfg!(feature = "dev_env") {
@@ -181,7 +183,7 @@ pub async fn forward_client_signup_request(exit_client: ExitClientIdentity) -> E
 
 /// Gets the status of a client and updates it in the database
 pub async fn client_status(
-    client: ExitClientIdentity,
+    client: ExitRegistrationIdentity,
     our_address: Address,
     contract_addr: Address,
     contact: &Web3,

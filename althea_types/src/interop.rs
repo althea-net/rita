@@ -1,4 +1,3 @@
-use crate::regions::Regions;
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
 use crate::{ClientExtender, UsageTrackerFlat, UsageTrackerTransfer, WifiDevice};
 use arrayvec::ArrayString;
@@ -11,14 +10,12 @@ use num256::Uint256;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
-use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 /// This is how nodes are identified.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -112,38 +109,6 @@ impl Hash for Identity {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExitIdentity {
-    pub mesh_ip: IpAddr,
-    pub wg_key: WgKey,
-    pub eth_addr: Address,
-    // The port the client uses to query exit endpoints
-    pub registration_port: u16,
-    // The port the clients uses for exit wg tunnel setup
-    pub wg_exit_listen_port: u16,
-    pub allowed_regions: HashSet<Regions>,
-    pub payment_types: HashSet<SystemChain>,
-}
-
-// Custom hash implementation that also ignores nickname. There should be no collding exits with
-// the same mesh, wgkey and ethaddr
-impl Hash for ExitIdentity {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.mesh_ip.hash(state);
-        self.eth_addr.hash(state);
-        self.wg_key.hash(state);
-    }
-}
-
-pub fn exit_identity_to_id(exit_id: ExitIdentity) -> Identity {
-    Identity {
-        mesh_ip: exit_id.mesh_ip,
-        eth_address: exit_id.eth_addr,
-        wg_public_key: exit_id.wg_key,
-        nickname: None,
-    }
-}
-
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct Denom {
     /// String representation of token, ex, ualthea, wei, from athea chain will be some unpredictable ibc/<hash>
@@ -198,7 +163,7 @@ impl Display for SystemChain {
     }
 }
 
-fn default_system_chain() -> SystemChain {
+pub fn default_system_chain() -> SystemChain {
     SystemChain::default()
 }
 
@@ -220,166 +185,6 @@ impl FromStr for SystemChain {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Default)]
-pub struct ExitRegistrationDetails {
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub email: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub email_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub phone: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub phone_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub sequence_number: Option<u32>,
-}
-
-/// This is the state an exit can be in
-#[derive(Default, Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
-#[serde(tag = "state")]
-pub enum ExitState {
-    /// the default state of the struct in the config
-    #[default]
-    New,
-    /// we have successfully contacted the exit and gotten basic info. This is
-    /// kept around for backwards compatitbility, it should be removed once all clients are
-    /// updated
-    GotInfo {
-        general_details: ExitDetails,
-        message: String,
-    },
-    /// We are awaiting user action to enter the phone or email code
-    Pending {
-        general_details: ExitDetails,
-        message: String,
-        #[serde(default)]
-        email_code: Option<String>,
-        phone_code: Option<String>,
-    },
-    /// we are currently registered and operating, update this state
-    /// incase the exit for example wants to assign us a new ip
-    Registered {
-        general_details: ExitDetails,
-        our_details: ExitClientDetails,
-        message: String,
-    },
-    /// we have been denied
-    Denied { message: String },
-}
-
-impl ExitState {
-    pub fn general_details(&self) -> Option<&ExitDetails> {
-        match *self {
-            ExitState::GotInfo {
-                ref general_details,
-                ..
-            } => Some(general_details),
-            ExitState::Pending {
-                ref general_details,
-                ..
-            } => Some(general_details),
-            ExitState::Registered {
-                ref general_details,
-                ..
-            } => Some(general_details),
-            _ => None,
-        }
-    }
-
-    pub fn our_details(&self) -> Option<&ExitClientDetails> {
-        match *self {
-            ExitState::Registered {
-                ref our_details, ..
-            } => Some(our_details),
-            _ => None,
-        }
-    }
-
-    pub fn message(&self) -> String {
-        match *self {
-            ExitState::New => "New exit".to_string(),
-            ExitState::GotInfo { ref message, .. } => message.clone(),
-            ExitState::Pending { ref message, .. } => message.clone(),
-            ExitState::Registered { ref message, .. } => message.clone(),
-            ExitState::Denied { ref message, .. } => message.clone(),
-        }
-    }
-}
-
-/// This is all the data we need to send to an exit
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct ExitClientIdentity {
-    pub wg_port: u16,
-    pub global: Identity,
-    pub reg_details: ExitRegistrationDetails,
-}
-
-/// Wrapper for secure box containing an exit client identity
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct EncryptedExitClientIdentity {
-    pub pubkey: WgKey,
-    pub nonce: [u8; 24],
-    pub encrypted_exit_client_id: Vec<u8>,
-}
-
-/// Wrapper for secure box containing an exit state
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct EncryptedExitState {
-    pub nonce: [u8; 24],
-    pub encrypted_exit_state: Vec<u8>,
-}
-
-/// Wrapper for secure box containing a list of ips
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct EncryptedExitList {
-    pub nonce: [u8; 24],
-    pub exit_list: Vec<u8>,
-}
-
-/// Struct returned when hitting exit_list endpoint
-#[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct ExitList {
-    pub exit_list: Vec<Identity>,
-    // All exits in a cluster listen on same port
-    pub wg_exit_listen_port: u16,
-}
-
-/// Struct returned when hitting exit_list_V2 endpoint
-#[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct ExitListV2 {
-    pub exit_list: Vec<ExitIdentity>,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum ExitVerifMode {
-    Phone,
-    Email,
-    Off,
-}
-
-fn default_verif_mode() -> ExitVerifMode {
-    ExitVerifMode::Off
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct ExitDetails {
-    pub server_internal_ip: IpAddr,
-    pub netmask: u8,
-    pub wg_exit_port: u16,
-    pub exit_price: u64,
-    #[serde(default = "default_system_chain")]
-    pub exit_currency: SystemChain,
-    pub description: String,
-    #[serde(default = "default_verif_mode")]
-    pub verif_mode: ExitVerifMode,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct ExitClientDetails {
-    pub client_internal_ip: IpAddr,
-    pub internet_ipv6_subnet: Option<IpNetwork>,
-}
-
 /// This is all the data we need to give a neighbor to open a wg connection
 /// this is also known as a "hello" packet or message
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
@@ -387,21 +192,6 @@ pub struct LocalIdentity {
     pub wg_port: u16,
     pub have_tunnel: Option<bool>, // If we have an existing tunnel, None if we don't know
     pub global: Identity,
-}
-
-/// This is all the data a light client needs to open a light client tunnel
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct LightClientLocalIdentity {
-    pub wg_port: u16,
-    /// If we have an existing tunnel, None if we don't know
-    pub have_tunnel: Option<bool>,
-    pub global: Identity,
-    /// we have to replicate dhcp ourselves due to the android vpn api
-    pub tunnel_address: Ipv4Addr,
-    /// the local_fee of the node passing light client traffic, much bigger
-    /// than the actual babel price field for ergonomics around downcasting
-    /// the number after upcasting when we compute it.
-    pub price: u128,
 }
 
 /// This represents a generic payment that may be to or from us
@@ -847,13 +637,6 @@ pub struct OperatorExitCheckinMessage {
     pub users_online: Option<u32>,
 }
 
-/// Operator update that we get from the operator server during our checkin
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct OperatorExitUpdateMessage {
-    /// List of routers for this exit to register
-    pub to_register: Vec<ExitClientIdentity>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// A set of info derived from /proc/ and /sys/ about the recent
 /// load on the system
@@ -1015,14 +798,6 @@ pub struct HeartbeatMessage {
     pub notify_balance: bool,
     /// The router version stored in semver format as found in the Cargo.toml
     pub version: String,
-}
-
-/// An exit's unix time stamp that can be queried by a downstream router
-/// Many routers have no built in clock and need to set their time at boot
-/// in order for wireguard tunnels to work correctly
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ExitSystemTime {
-    pub system_time: SystemTime,
 }
 
 #[derive(Hash, Eq, PartialEq, Debug)]
