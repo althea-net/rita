@@ -8,8 +8,8 @@ use std::{
 };
 
 use althea_types::{ExitClientIdentity, Identity, WgKey};
-use clarity::Address;
 use awc::error::SendRequestError;
+use clarity::Address;
 use phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use tokio::join;

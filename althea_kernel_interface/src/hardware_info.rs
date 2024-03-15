@@ -82,7 +82,7 @@ pub fn get_kernel_version() -> Result<String, Error> {
     let sys_kernel_ver_error = Err(Error::FailedToGetSystemKernelVersion);
 
     let lines = get_lines("/proc/version")?;
-    let line = match lines.get(0) {
+    let line = match lines.first() {
         Some(line) => line,
         None => return sys_kernel_ver_error,
     };
@@ -154,7 +154,7 @@ fn get_sys_uptime() -> Result<Duration, Error> {
     let sys_time_error = Err(Error::FailedToGetSystemTime);
 
     let lines = get_lines("/proc/uptime")?;
-    let line = match lines.get(0) {
+    let line = match lines.first() {
         Some(line) => line,
         None => return sys_time_error,
     };
@@ -179,7 +179,7 @@ fn get_load_avg() -> Result<(f32, f32, f32), Error> {
     // cpu load average
     let load_average_error = Err(Error::FailedToGetLoadAverage);
     let lines = get_lines("/proc/loadavg")?;
-    let load_avg = match lines.get(0) {
+    let load_avg = match lines.first() {
         Some(line) => line,
         None => return load_average_error,
     };
@@ -243,7 +243,7 @@ fn get_numcpus() -> Result<u32, Error> {
 fn maybe_get_single_line_u64(path: &str) -> Option<u64> {
     match get_lines(path) {
         Ok(line) => {
-            let var_name = line.get(0);
+            let var_name = line.first();
             match var_name {
                 Some(val) => match val.parse() {
                     Ok(res) => Some(res),
@@ -258,7 +258,7 @@ fn maybe_get_single_line_u64(path: &str) -> Option<u64> {
 
 pub fn maybe_get_single_line_string(path: &str) -> Option<String> {
     match get_lines(path) {
-        Ok(line) => line.get(0).map(|val| val.to_string()),
+        Ok(line) => line.first().map(|val| val.to_string()),
         Err(_e) => None,
     }
 }
