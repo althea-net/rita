@@ -390,7 +390,7 @@ pub fn update_dns_conf() {
             (Ok(dns_server_list), Ok(router_internal_ip)) => {
                 // an empty list uses the system resolver, this is acceptable since we just set the system resolver to
                 // point at the exit internal ip above
-                if let Some(first_server_list_entry) = dns_server_list.get(0) {
+                if let Some(first_server_list_entry) = dns_server_list.first() {
                     if *first_server_list_entry != router_internal_ip {
                         let mut dns_server_list = dns_server_list;
                         dns_server_list.insert(0, router_internal_ip);

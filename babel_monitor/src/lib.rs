@@ -436,7 +436,7 @@ ok\n";
     #[test]
     fn neigh_parse() {
         let neighs = parse_neighs_sync(TABLE.to_string()).unwrap();
-        let neigh = neighs.get(0);
+        let neigh = neighs.first();
         assert!(neigh.is_some());
         let neigh = neigh.unwrap();
         assert_eq!(neighs.len(), 4);
@@ -448,7 +448,7 @@ ok\n";
         let routes = parse_routes_sync(TABLE.to_string()).unwrap();
         assert_eq!(routes.len(), 5);
 
-        let route = routes.get(0).unwrap();
+        let route = routes.first().unwrap();
         assert_eq!(route.price, 3072);
     }
 
@@ -457,7 +457,7 @@ ok\n";
         let interfaces = parse_interfaces_sync(TABLE.to_string()).unwrap();
         assert_eq!(interfaces.len(), 5);
 
-        let iface = interfaces.get(0).unwrap();
+        let iface = interfaces.first().unwrap();
         assert!(!iface.up);
         let iface = interfaces.get(2).unwrap();
         assert_eq!(iface.ipv4, Some("10.0.236.201".parse().unwrap()));
@@ -481,7 +481,7 @@ ok\n";
         let routes = parse_routes_sync(input).unwrap();
         assert_eq!(routes.len(), 5);
 
-        let route = routes.get(0).unwrap();
+        let route = routes.first().unwrap();
         assert_eq!(route.price, 3072);
         // assert that these are equal within the minimum comparison difference
         // of float values

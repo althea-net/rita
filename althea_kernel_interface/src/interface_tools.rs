@@ -221,7 +221,7 @@ impl dyn KernelInterface {
     /// Gets the mtu from an interface
     pub fn get_mtu(&self, if_name: &str) -> Result<usize, Error> {
         let lines = get_lines(&format!("/sys/class/net/{if_name}/mtu"))?;
-        if let Some(mtu) = lines.get(0) {
+        if let Some(mtu) = lines.first() {
             Ok(mtu.parse()?)
         } else {
             Err(Error::NoInterfaceError(if_name.to_string()))
@@ -251,7 +251,7 @@ impl dyn KernelInterface {
             Ok(index.parse().unwrap())
         } else {
             let lines = get_lines(&format!("/sys/class/net/{if_name}/ifindex"))?;
-            if let Some(ifindex) = lines.get(0) {
+            if let Some(ifindex) = lines.first() {
                 Ok(ifindex.parse()?)
             } else {
                 Err(Error::NoInterfaceError(if_name.to_string()))
@@ -263,7 +263,7 @@ impl dyn KernelInterface {
     /// identical but if you have a virtual (say DSA) interface then this will be the physical interface name
     pub fn get_iflink(&self, if_name: &str) -> Result<usize, Error> {
         let lines = get_lines(&format!("/sys/class/net/{if_name}/iflink"))?;
-        if let Some(iflink) = lines.get(0) {
+        if let Some(iflink) = lines.first() {
             Ok(iflink.parse()?)
         } else {
             Err(Error::NoInterfaceError(if_name.to_string()))
