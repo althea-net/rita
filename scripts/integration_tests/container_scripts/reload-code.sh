@@ -14,7 +14,14 @@ do
     rm -rf "/validator$i"
 done
 
+# setup the solidity contracts
+pushd /althea_rs/solidity/
+npm install .
+npm run typechain
+popd
+# setup validators
 /althea_rs/scripts/integration_tests/container_scripts/setup-validators.sh $NODES
+# run the validators and keep the running in the background
 /althea_rs/scripts/integration_tests/container_scripts/run-testnet.sh $NODES
 
 sleep 10
