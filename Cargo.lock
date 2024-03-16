@@ -321,9 +321,9 @@ dependencies = [
 
 [[package]]
 name = "althea_proto"
-version = "0.5.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3952f3354a6c32a7b01028e2c4a53ca9854a4ee70dcaa5436afe84c07f595388"
+checksum = "d9e4e539cfe778498776bb300c6c507e6823e948736117d3ac78094a18f812a1"
 dependencies = [
  "cosmos-sdk-proto-althea",
  "prost",
@@ -924,9 +924,9 @@ dependencies = [
 
 [[package]]
 name = "deep_space"
-version = "2.23.3"
+version = "2.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d328025c921c4041231fe541711c0396ef4a39d8c86d51220b2595ca9b29f34"
+checksum = "ff5f0331927f701e2142333c7af97d45c1cb5e4fbab99065654d70bb2240ce6b"
 dependencies = [
  "althea_proto",
  "base64 0.21.7",
@@ -1329,9 +1329,9 @@ checksum = "4271d37baee1b8c7e4b708028c57d816cf9d2434acb33a549475f78c181f6253"
 
 [[package]]
 name = "h2"
-version = "0.3.24"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb2c4422095b67ee78da96fbb51a4cc413b3b25883c7717ff7ca1ab31022c9c9"
+checksum = "4fbd2820c5e49886948654ab546d0688ff24530286bdcf8fca3cefb16d4618eb"
 dependencies = [
  "bytes",
  "fnv",
