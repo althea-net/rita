@@ -53,4 +53,7 @@ pub async fn operator_update(rita_started: Instant) {
             })
             .await;
     }
+    else {
+        info!("No password set, not performing operator update");
+    }
 }

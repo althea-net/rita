@@ -129,12 +129,13 @@ async fn rita_exit_loop(rita_exit_cache: RitaExitCache, usage_history: ExitLock)
         match get_all_regsitered_clients(&contact, our_addr, contract_addr).await {
             Ok(a) => {
                 reg_clients_list = a;
+                info!("Got all registered clients from the exit");
                 break;
             }
             Err(e) => {
                 // Getting all clients is core functionality, we panic if fails
                 let message = format!(
-                "Failed to get all registered users with {}. Web3 url: {}, contract_addr: {}. This is required for exit to funciton correctly",
+                "Failed to get all registered users with {}. Web3 url: {}, contract_addr: {}. This is required for exit to function correctly",
                 e,
                 get_web3_server(),
                 contract_addr
@@ -142,9 +143,10 @@ async fn rita_exit_loop(rita_exit_cache: RitaExitCache, usage_history: ExitLock)
                 error!("{}", message);
                 thread::sleep(Duration::from_secs(10));
                 if Instant::now() - retry_start > GET_CLIENT_RETRY {
+                    info!("exit stopping!");
                     let sys = AsyncSystem::current();
                     sys.stop();
-                    panic!("{}", message);
+                    panic!("stopping the entire exit system! {}", message);
                 }
             }
         };

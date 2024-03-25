@@ -555,7 +555,9 @@ fn check_for_rescue_reboot(mut last_successful_ping: Instant) -> Instant {
     let model = get_rita_common().network.device;
     let hw_info = get_hardware_info(model.clone());
     match (model, hw_info) {
-        (None, _) => error!("Model name not found?"),
+        (None, _) => {
+            //error!("Model name not found?")
+        }
         (Some(mdl), Ok(info)) => {
             if mdl.contains("mikrotik_hap-ac2") && info.load_avg_fifteen_minute > 4.0 {
                 info!("15 minute load average > 4, rebooting!");

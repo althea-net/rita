@@ -260,6 +260,7 @@ pub fn spawn_rita_exit(
 
         start_rita_common_loops();
         start_rita_exit_loop();
+        info!("About to start operator update loop");
         start_operator_update_loop();
         save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(Box::new(
             settings::get_rita_exit(),
