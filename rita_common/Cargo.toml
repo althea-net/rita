@@ -39,6 +39,8 @@ althea_types = { path = "../althea_types" }
 deep_space = {workspace = true}
 prost-types ="0.12"
 cosmos-sdk-proto-althea = {package = "cosmos-sdk-proto-althea", version = "0.16", features = ["ethermint"]} 
+althea_proto = {workspace = true}
+crossbeam = "0.8"
 
 [dependencies.regex]
 version = "1.6"

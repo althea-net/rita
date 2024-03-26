@@ -8,13 +8,13 @@ use crate::blockchain_oracle::{
 };
 use crate::debt_keeper::normalize_payment_amount;
 use crate::debt_keeper::payment_failed;
-use crate::payment_validator::{get_payment_txids, validate_later, ToValidate};
+use crate::payment_validator::ToValidate;
 use crate::payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT};
 use crate::rita_loop::get_web3_server;
 use crate::KI;
 use althea_types::interop::UnpublishedPaymentTx;
-use althea_types::SystemChain;
 use althea_types::{Denom, PaymentTx};
+use althea_types::{Identity, SystemChain};
 use awc;
 use deep_space::{Coin, Contact, EthermintPrivateKey};
 use futures::future::{join, join_all};
@@ -23,7 +23,7 @@ use num_traits::Num;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
 use settings::{DEBT_KEEPER_DENOM, DEBT_KEEPER_DENOM_DECIMAL};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Result as DisplayResult;
 use std::fmt::{Display, Formatter};
@@ -136,7 +136,9 @@ impl Error for PaymentControllerError {}
 
 /// This function is called by the async loop in order to perform payment
 /// controller actions
-pub async fn tick_payment_controller() {
+pub async fn tick_payment_controller(
+    previously_sent_payments: HashMap<Identity, HashSet<PaymentTx>>,
+) -> Vec<ToValidate> {
     let outgoing_payments: Vec<UnpublishedPaymentTx>;
     let resend_queue: Vec<ResendInfo>;
 
@@ -161,13 +163,18 @@ pub async fn tick_payment_controller() {
         data.resend_queue = Vec::new();
     }
 
+    let mut payments_sent_this_round = Vec::new();
+
     // this creates a series of futures that we can use to perform
     // retires in parallel, this is helpful because retries may take
     // a long time to timeout, payments are done in series to reduce
     // nonce races
     let mut retry_futures = Vec::new();
     for pmt in outgoing_payments {
-        let _ = make_payment(pmt).await;
+        match make_payment(pmt, &previously_sent_payments).await {
+            Ok(pmt) => payments_sent_this_round.push(pmt),
+            Err(e) => warn!("Failed to send payment with {:?}!", e),
+        }
     }
     for resend in resend_queue {
         let fut = resend_txid(resend);
@@ -176,26 +183,39 @@ pub async fn tick_payment_controller() {
     // we log all errors in the functions themselves, we could print errors here
     // instead, but right now no action is needed either way.
     let _ = join_all(retry_futures).await;
+
+    payments_sent_this_round
 }
 
 /// This is called by debt_keeper to make payments. It sends a
-/// PaymentTx to the `mesh_ip` in its `to` field.
-async fn make_payment(pmt: UnpublishedPaymentTx) -> Result<(), PaymentControllerError> {
+/// PaymentTx to the `mesh_ip` in its `to` field. It returns a payment to validate
+async fn make_payment(
+    pmt: UnpublishedPaymentTx,
+    previously_sent_payments: &HashMap<Identity, HashSet<PaymentTx>>,
+) -> Result<ToValidate, PaymentControllerError> {
     let common = settings::get_rita_common();
     let network_settings = common.network;
     let payment_settings = common.payment;
     let system_chain = payment_settings.system_chain;
 
     match system_chain {
-        SystemChain::Althea => make_althea_payment(pmt, payment_settings, network_settings).await,
-        SystemChain::Xdai => make_xdai_payment(pmt, payment_settings, network_settings).await,
-        SystemChain::Rinkeby => {
-            warn!("Payments on Rinkeby not currently supported!");
-            Ok(())
+        SystemChain::Althea => {
+            make_althea_payment(
+                pmt,
+                payment_settings,
+                network_settings,
+                previously_sent_payments,
+            )
+            .await
         }
-        SystemChain::Ethereum => {
-            warn!("Payments on Ethereum not currently supported!");
-            Ok(())
+        SystemChain::Xdai | SystemChain::Rinkeby | SystemChain::Ethereum => {
+            make_xdai_payment(
+                pmt,
+                payment_settings,
+                network_settings,
+                previously_sent_payments,
+            )
+            .await
         }
     }
 }
@@ -204,7 +224,8 @@ async fn make_althea_payment(
     mut pmt: UnpublishedPaymentTx,
     payment_settings: PaymentSettings,
     network_settings: NetworkSettings,
-) -> Result<(), PaymentControllerError> {
+    previously_sent_payments: &HashMap<Identity, HashSet<PaymentTx>>,
+) -> Result<ToValidate, PaymentControllerError> {
     // On althea chain, we default to paying with usdc, config must specify this as an accepted denom
     let usdc_denom = match payment_settings
         .accepted_denoms
@@ -310,27 +331,30 @@ async fn make_althea_payment(
     // setup tx hash
     let pmt = pmt.publish(Uint256::from_str_radix(&transaction.txhash, 16).unwrap());
 
-    send_make_payment_endpoints(pmt, network_settings, None, Some(cosmos_node_grpc)).await;
+    send_make_payment_endpoints(
+        pmt,
+        network_settings,
+        None,
+        Some(cosmos_node_grpc),
+        previously_sent_payments,
+    )
+    .await;
 
     // place this payment in the validation queue to handle later.
     let ts = ToValidate {
         payment: pmt,
         received: Instant::now(),
-        checked: false,
     };
 
-    if let Err(e) = validate_later(ts.clone()) {
-        error!("Received error trying to validate {:?} Error: {:?}", ts, e);
-    }
-
-    Ok(())
+    Ok(ts)
 }
 
 async fn make_xdai_payment(
     pmt: UnpublishedPaymentTx,
     payment_settings: PaymentSettings,
     network_settings: NetworkSettings,
-) -> Result<(), PaymentControllerError> {
+    previously_sent_payments: &HashMap<Identity, HashSet<PaymentTx>>,
+) -> Result<ToValidate, PaymentControllerError> {
     let balance = get_oracle_balance();
     let nonce = get_oracle_nonce();
     let gas_price = get_oracle_latest_gas_price();
@@ -400,20 +424,22 @@ async fn make_xdai_payment(
             // add published txid to submission
             let pmt = pmt.publish(tx_id);
 
-            send_make_payment_endpoints(pmt, network_settings, Some(full_node), None).await;
+            send_make_payment_endpoints(
+                pmt,
+                network_settings,
+                Some(full_node),
+                None,
+                previously_sent_payments,
+            )
+            .await;
 
             // place this payment in the validation queue to handle later.
             let ts = ToValidate {
                 payment: pmt,
                 received: Instant::now(),
-                checked: false,
             };
 
-            if let Err(e) = validate_later(ts.clone()) {
-                error!("Received error trying to validate {:?} Error: {:?}", ts, e);
-            }
-
-            Ok(())
+            Ok(ts)
         }
         Err(e) => {
             error!(
@@ -468,6 +494,7 @@ async fn send_make_payment_endpoints(
     network_settings: NetworkSettings,
     full_node: Option<String>,
     cosmos_node_grpc: Option<String>,
+    previously_sent_payments: &HashMap<Identity, HashSet<PaymentTx>>,
 ) {
     // testing hack
     let neighbor_url = if cfg!(not(test)) {
@@ -489,9 +516,11 @@ async fn send_make_payment_endpoints(
         String::from("http://127.0.0.1:1234/make_payment_v2")
     };
 
-    // Get all txids to this client. Temporary add new payment to a copy of a list to send up to endpoint
-    // this pmt is actually recorded in memory after validator confirms it
-    let mut txid_history = get_payment_txids(pmt.to);
+    let mut txid_history = previously_sent_payments
+        .get(&pmt.to)
+        .cloned()
+        .unwrap_or_default();
+
     txid_history.insert(pmt);
 
     let actix_client = awc::Client::new();

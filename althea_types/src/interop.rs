@@ -14,7 +14,6 @@ use std::fmt;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
-use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 
@@ -315,21 +314,6 @@ pub struct LocalIdentity {
     pub wg_port: u16,
     pub have_tunnel: Option<bool>, // If we have an existing tunnel, None if we don't know
     pub global: Identity,
-}
-
-/// This is all the data a light client needs to open a light client tunnel
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct LightClientLocalIdentity {
-    pub wg_port: u16,
-    /// If we have an existing tunnel, None if we don't know
-    pub have_tunnel: Option<bool>,
-    pub global: Identity,
-    /// we have to replicate dhcp ourselves due to the android vpn api
-    pub tunnel_address: Ipv4Addr,
-    /// the local_fee of the node passing light client traffic, much bigger
-    /// than the actual babel price field for ergonomics around downcasting
-    /// the number after upcasting when we compute it.
-    pub price: u128,
 }
 
 /// This represents a generic payment that may be to or from us

@@ -1,9 +1,9 @@
 //! Network endptoints for common Rita functionality (such as exchanging hello messages)
 
-use crate::payment_validator::{validate_later, ToValidate};
+use crate::payment_validator::{add_to_incoming_transaction_queue, ToValidate};
 use crate::peer_listener::structs::Peer;
+use crate::tm_identity_callback;
 use crate::tunnel_manager::id_callback::IdentityCallback;
-use crate::{tm_identity_callback, RitaCommonError};
 
 use actix_web_async::http::StatusCode;
 use actix_web_async::web::Json;
@@ -20,40 +20,29 @@ pub async fn make_payments(item: Json<PaymentTx>) -> HttpResponse {
     let ts = ToValidate {
         payment: pmt,
         received: Instant::now(),
-        checked: false,
     };
+    add_to_incoming_transaction_queue(ts);
 
-    match validate_later(ts) {
-        Ok(()) | Err(RitaCommonError::DuplicatePayment) => {
-            HttpResponse::Ok().json("Payment Received!")
-        }
-        Err(e) => HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(&format!("{e}")),
-    }
+    // we can't actually check validity here so we simply return Ok
+    // in any case it's not possible to return if the payment was invalid
+    // as we may find a validation condition only after making many other checks
+    HttpResponse::Ok().json("Payment Received!")
 }
 
 /// The recieve side of the make payments v2 call. This processes a list of payments instead of a single payment
 pub async fn make_payments_v2(item: Json<HashSet<PaymentTx>>) -> HttpResponse {
     let pmt_list = item.into_inner();
-    let mut build_err = String::new();
     for pmt in pmt_list {
         let ts = ToValidate {
             payment: pmt,
             received: Instant::now(),
-            checked: false,
         };
-
-        // Duplicates will be removed here
-        match validate_later(ts) {
-            Ok(()) | Err(RitaCommonError::DuplicatePayment) => {}
-            Err(e) => {
-                build_err.push_str(&format!("{e}\n"));
-            }
-        }
+        add_to_incoming_transaction_queue(ts);
     }
 
-    if !build_err.is_empty() {
-        return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(&build_err);
-    }
+    // we can't actually check validity here so we simply return Ok
+    // in any case it's not possible to return if the payment was invalid
+    // as we may find a validation condition only after making many other checks
     HttpResponse::Ok().json("Payment Received!")
 }
 
