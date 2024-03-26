@@ -13,7 +13,6 @@ use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
 use crate::RitaCommonError;
-use crate::KI;
 use althea_types::Denom;
 use althea_types::Identity;
 use althea_types::PaymentTx;
@@ -37,8 +36,6 @@ use std::fmt;
 use std::fmt::Write as _;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::sync::Arc;
-use std::sync::RwLock;
 use std::time::{Duration, Instant};
 use web30::client::Web3;
 use web30::types::TransactionResponse;
@@ -64,34 +61,6 @@ const BLOCKS_TO_OLD: u32 = 1440;
 // These parameters are used to set up a contact with althea chain
 pub const ALTHEA_CHAIN_PREFIX: &str = "althea";
 pub const ALTHEA_CONTACT_TIMEOUT: Duration = Duration::from_secs(30);
-
-lazy_static! {
-    static ref HISTORY: Arc<RwLock<HashMap<u32, PaymentValidator>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-}
-
-/// Gets Payment validator copy from the static ref, or default if no value has been set
-pub fn get_payment_validator() -> PaymentValidator {
-    let netns = KI.check_integration_test_netns();
-    HISTORY
-        .read()
-        .unwrap()
-        .clone()
-        .get(&netns)
-        .cloned()
-        .unwrap_or_default()
-}
-
-/// Gets a write ref for the payment validator lock, since this is a mutable reference
-/// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
-/// but still hold the lock in the local thread to prevent parallel modification
-pub fn get_payment_validator_write_ref(
-    input: &mut HashMap<u32, PaymentValidator>,
-) -> &mut PaymentValidator {
-    let netns = KI.check_integration_test_netns();
-    input.entry(netns).or_default();
-    input.get_mut(&netns).unwrap()
-}
 
 /// Details we pass into handle_tx_handling while validating a transaction
 /// These are made options in case althea chain parsing fails
@@ -145,45 +114,6 @@ pub struct PaymentValidator {
     successful_transactions_sent: HashMap<Identity, HashSet<PaymentTx>>,
     /// All successful txids this router has verified, used to check for duplicate payments
     successful_transactions: HashSet<PaymentTx>,
-}
-
-// Setters and getters HISTORY lazy static
-pub fn add_unvalidated_transaction(tx: ToValidate) {
-    let writer = &mut *HISTORY.write().unwrap();
-    get_payment_validator_write_ref(writer)
-        .unvalidated_transactions
-        .insert(tx);
-}
-
-pub fn remove_unvalidated_transaction(tx: ToValidate) -> bool {
-    let writer = &mut *HISTORY.write().unwrap();
-    get_payment_validator_write_ref(writer)
-        .unvalidated_transactions
-        .remove(&tx)
-}
-
-pub fn get_unvalidated_transactions() -> HashSet<ToValidate> {
-    get_payment_validator().unvalidated_transactions
-}
-
-pub fn get_successful_tx_sent() -> HashMap<Identity, HashSet<PaymentTx>> {
-    get_payment_validator().successful_transactions_sent
-}
-
-pub fn set_successful_tx_sent(v: HashMap<Identity, HashSet<PaymentTx>>) {
-    let writer = &mut *HISTORY.write().unwrap();
-    get_payment_validator_write_ref(writer).successful_transactions_sent = v;
-}
-
-pub fn get_all_successful_tx() -> HashSet<PaymentTx> {
-    get_payment_validator().successful_transactions
-}
-
-pub fn add_successful_tx(v: PaymentTx) {
-    let writer = &mut *HISTORY.write().unwrap();
-    get_payment_validator_write_ref(writer)
-        .successful_transactions
-        .insert(v);
 }
 
 impl PaymentValidator {
@@ -305,12 +235,12 @@ fn remove(msg: Remove) {
 /// Marks a transaction as 'checked' in that we have talked to a full node about it
 /// if we fail to talk to a full node about a transaction for the full duration of
 /// the timeout we attempt to restart our node.
-fn checked(msg: ToValidate) {
-    if remove_unvalidated_transaction(msg.clone()) {
+fn checked(payment_validator: &mut PaymentValidator, msg: ToValidate) {
+    if payment_validator.unvalidated_transactions.contains(&msg) {
         let mut checked_tx = msg;
         checked_tx.checked = true;
         info!("We successfully checked tx {:?}", checked_tx);
-        add_unvalidated_transaction(checked_tx);
+        payment_validator.unvalidated_transactions.replace(checked_tx);
     } else {
         error!("Tried to mark a tx {:?} we don't have as checked!", msg);
         #[cfg(feature = "development")]
@@ -318,7 +248,7 @@ fn checked(msg: ToValidate) {
     }
 }
 
-pub async fn validate() {
+pub async fn tick_payment_validator(payment_validator: &mut PaymentValidator) {
     // we panic on a failed receive so it should always be longer than the minimum
     // time we expect payments to take to enter the blockchain (the send timeout)
     assert!(PAYMENT_RECEIVE_TIMEOUT > PAYMENT_SEND_TIMEOUT);
@@ -326,15 +256,14 @@ pub async fn validate() {
     let our_address = settings::get_rita_common().payment.eth_address.unwrap();
     let mut to_delete = Vec::new();
 
-    let unvalidated_transactions = get_unvalidated_transactions();
     info!(
         "Attempting to validate {} transactions {}",
-        unvalidated_transactions.len(),
-        print_txids(&unvalidated_transactions)
+        payment_validator.unvalidated_transactions.len(),
+        print_txids(&payment_validator.unvalidated_transactions)
     );
 
     let mut futs = Vec::new();
-    for item in unvalidated_transactions {
+    for item in payment_validator.unvalidated_transactions.iter() {
         let elapsed = Instant::now().checked_duration_since(item.received);
         let from_us = item.payment.from.eth_address == our_address;
 
@@ -371,7 +300,7 @@ pub async fn validate() {
             // we take all these futures and put them onto an array that we will execute
             // in parallel, this is essential on the exit where in the worst case scenario
             // we could have a thousand or more payments in the queue
-            let fut = validate_transaction(item);
+            let fut = validate_transaction(item.clone());
             futs.push(fut);
         }
     }
@@ -394,7 +323,7 @@ pub async fn validate() {
     join_all(buf).await;
 
     for item in to_delete.iter() {
-        remove_unvalidated_transaction(item.clone());
+        payment_validator.unvalidated_transactions.remove(item);
     }
 }
 
