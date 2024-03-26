@@ -128,7 +128,7 @@ pub fn generate_exit_config_file(path: String) -> Result<(), KernelInterfaceErro
     wg_private_key = \"ALxcZm2r58gY0sB4vIfnjShc86qBoVK3f32H9VrwqWU=\"\n
     wg_private_key_path = \"/tmp/exit-priv\"\n
     registered_users_contract_addr = \"0xb9b674D720F96995ca033ec347df080d500c2230\"\n
-    pass = \"Some pass here\"\n"
+    pass = \"testpass\"\n"
         .to_string();
     lines.push(exit_network);
 
