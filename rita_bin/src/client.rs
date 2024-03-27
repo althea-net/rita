@@ -92,6 +92,15 @@ fn main() {
             s.network.metric_factor = None;
         }
 
+        // update the Althea L1 chain rpc url, this can be removed after all routers are upgraded past Beta 21 RC6
+        // replace routine is used so we don't blast any local config changes to use different rpc urls
+        s.payment.althea_grpc_list = s
+            .payment
+            .althea_grpc_list
+            .iter()
+            .map(|url| url.replace("http://althea.zone", "http://rpc.althea.zone"))
+            .collect();
+
         // end migrations //
 
         let s = clu::init(s);
