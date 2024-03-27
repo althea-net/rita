@@ -63,7 +63,7 @@ const BLOCKS_TO_OLD: u32 = 1440;
 
 // These parameters are used to set up a contact with althea chain
 pub const ALTHEA_CHAIN_PREFIX: &str = "althea";
-pub const ALTHEA_CONTACT_TIMEOUT: Duration = Duration::from_secs(30);
+pub const ALTHEA_CONTACT_TIMEOUT: Duration = FAST_LOOP_TIMEOUT;
 
 lazy_static! {
     static ref HISTORY: Arc<RwLock<HashMap<u32, PaymentValidator>>> =
