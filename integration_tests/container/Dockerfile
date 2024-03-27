@@ -12,7 +12,7 @@ RUN mkdir /var/babeld && cd /var/babeld && git clone -b master https://github.co
 RUN cd /var/babeld/babeld && make install
 # Install Althea for Althea blockchain operations, also used to test eth blockchain operations
 # but in that case the test runs entierly on the evm environment contained in the althea chain
-ADD https://github.com/althea-net/althea-L1/releases/download/v0.5.5/althea-linux-amd64 /usr/bin/althea
+ADD https://github.com/althea-net/althea-L1/releases/download/v1.1.0/althea-linux-amd64 /usr/bin/althea
 RUN chmod +x /usr/bin/althea
 # we pull in the git tar instead of the local folder becuase the raw code is much much smaller
 # note that changes have to be checked in to be pulled in and tested! we pull this in near
