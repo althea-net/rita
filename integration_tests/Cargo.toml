@@ -30,7 +30,7 @@ awc = {workspace = true}
 actix-rt = "2.8"
 deep_space = {workspace = true}
 clarity = {workspace = true}
-althea_proto = "0.3.0"
+althea_proto = "0.6.0"
 futures = { version = "0.3", features = ["compat"] }
 num256 = "0.5"
 num-traits="0.2"
