@@ -2842,6 +2842,7 @@ dependencies = [
  "actix-web",
  "actix-web-httpauth",
  "althea_kernel_interface",
+ "althea_proto",
  "althea_types",
  "arrayvec",
  "auto-bridge",
