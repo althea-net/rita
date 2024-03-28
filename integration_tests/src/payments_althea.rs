@@ -1,3 +1,4 @@
+use futures::future::join;
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
@@ -44,7 +45,9 @@ pub async fn run_althea_payments_test_scenario() {
     let expected_routes = node_config.1;
 
     info!("Waiting to deploy contracts");
-    let db_addr = deploy_contracts().await;
+    info!("Registering USDC as ERC20");
+    // execute these in parallel to speed up the test
+    let (db_addr, _) = join(deploy_contracts(), register_erc20_usdc_token()).await;
 
     info!("Starting registration server");
     start_registration_server(db_addr).await;
@@ -68,7 +71,20 @@ pub async fn run_althea_payments_test_scenario() {
     // Add exits to the contract exit list so clients get the propers exits they can migrate to
     add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
 
-    populate_routers_eth(rita_identities.clone()).await;
+    let mut to_topup = Vec::new();
+    for ident in rita_identities.client_identities.iter() {
+        to_topup.push(ident.get_althea_address());
+    }
+
+    info!(
+        "Sending aalthea in evm and sdk bank to all nodes with address {:?}",
+        to_topup.clone()
+    );
+    let _ = join(
+        send_althea_tokens(to_topup.clone()),
+        populate_routers_eth(rita_identities),
+    )
+    .await;
 
     // Test for network convergence
     test_reach_all(namespaces.clone());
@@ -86,20 +102,6 @@ pub async fn run_althea_payments_test_scenario() {
     let from_node: Option<Namespace> = namespaces.get_namespace(1);
     let forward_node: Option<Namespace> = namespaces.get_namespace(3);
     let end_node: Option<Namespace> = namespaces.get_namespace(6);
-
-    let mut to_topup = Vec::new();
-    for ident in rita_identities.client_identities {
-        to_topup.push(ident.get_althea_address());
-    }
-
-    info!("Registering USDC as ERC20");
-    register_erc20_usdc_token().await;
-
-    info!(
-        "Sending aalthea to all nodes with address {:?}",
-        to_topup.clone()
-    );
-    send_althea_tokens(to_topup.clone()).await;
 
     let balances = print_althea_balances(to_topup.clone(), "uUSDC".to_string()).await;
     info!("USDC Balances are {:?}", balances);
