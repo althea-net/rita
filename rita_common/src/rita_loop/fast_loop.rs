@@ -2,7 +2,7 @@ use crate::blockchain_oracle::update as BlockchainOracleUpdate;
 use crate::debt_keeper::send_debt_update;
 use crate::network_monitor::update_network_info;
 use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
-use crate::payment_controller::tick_payment_controller;
+use crate::payment_controller::PaymentController;
 use crate::payment_validator::PaymentValidator;
 use crate::peer_listener::peerlistener_tick;
 use crate::peer_listener::structs::PeerListener;
@@ -46,6 +46,7 @@ pub fn start_rita_fast_loop() {
                 let system_chain = settings::get_rita_common().payment.system_chain;
                 runner.block_on(async move {
                     let mut payment_validator_state = PaymentValidator::new();
+                    let mut payment_controller_state = PaymentController::new();
                     let mut outgoing_payments = Vec::new();
                     loop {
                         trace!("Common tick!");
@@ -79,10 +80,14 @@ pub fn start_rita_fast_loop() {
                             }
                         }
 
-                        // Update debts
-                        if let Err(e) = send_debt_update() {
-                            warn!("Debt keeper update failed! {:?}", e);
-                        }
+                        // Update debts, returns payments that need to be sent this round
+                        let payments_to_send = match send_debt_update() {
+                            Ok(payments_to_send) => payments_to_send,
+                            Err(e) => {
+                                error!("Debt keeper update failed! {:?}", e);
+                                Vec::new()
+                            }
+                        };
 
                         // updating blockchain info often is easier than dealing with edge cases
                         // like out of date nonces or balances, also users really really want fast
@@ -99,7 +104,9 @@ pub fn start_rita_fast_loop() {
                         // Process payments queued for sending, needs to be run often for
                         // the same reason as the validate code, during high throughput periods
                         // payments must be sent quickly to avoid enforcement
-                        outgoing_payments = tick_payment_controller(previously_sent_payments).await;
+                        outgoing_payments = payment_controller_state
+                            .tick_payment_controller(payments_to_send, previously_sent_payments)
+                            .await;
                         info!("Finished tick payment controller!");
                     }
                 });

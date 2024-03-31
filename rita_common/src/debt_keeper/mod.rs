@@ -11,7 +11,6 @@
 use crate::blockchain_oracle::calculate_close_thresh;
 use crate::blockchain_oracle::get_pay_thresh;
 use crate::blockchain_oracle::potential_payment_issues_detected;
-use crate::payment_controller::queue_payment;
 use crate::payment_validator::PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;
 use crate::tunnel_manager::tm_tunnel_state_change;
@@ -306,13 +305,14 @@ pub enum DebtAction {
     MakePayment { to: Box<Identity>, amount: Uint256 },
 }
 
-pub fn send_debt_update() -> Result<(), RitaCommonError> {
+pub fn send_debt_update() -> Result<Vec<UnpublishedPaymentTx>, RitaCommonError> {
     let dk_pin = &mut *DEBT_DATA.write().unwrap();
     let dk = get_debt_keeper_write_ref(dk_pin);
 
     // in order to keep from overloading actix when we have thousands of debts to process
     // (mainly on exits) we batch tunnel change operations before sending them over
     let mut debts_message = Vec::new();
+    let mut payments_to_send = Vec::new();
 
     for (k, _) in dk.debt_data.clone() {
         match dk.send_update(&k)? {
@@ -338,7 +338,7 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
                         ));
                     }
                 }
-                queue_payment(UnpublishedPaymentTx {
+                payments_to_send.push(UnpublishedPaymentTx {
                     to: *to,
                     from: match settings::get_rita_common().get_identity() {
                         Some(id) => id,
@@ -357,7 +357,7 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
     if let Err(e) = tm_tunnel_state_change(debts_message) {
         warn!("Error during tunnel state change: {}", e);
     }
-    Ok(())
+    Ok(payments_to_send)
 }
 
 /// deserialize debt data from bincode format
