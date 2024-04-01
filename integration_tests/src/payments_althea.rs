@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::thread;
-use std::time::Duration;
-
 use crate::five_nodes::five_node_config;
 use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
@@ -18,6 +14,8 @@ use deep_space::{EthermintPrivateKey, PrivateKey};
 use rita_common::debt_keeper::GetDebtsResult;
 use settings::client::RitaClientSettings;
 use settings::exit::RitaExitSettingsStruct;
+use std::thread;
+use std::time::Duration;
 
 const USDC_TO_WEI_DECIMAL: u64 = 1_000_000_000_000u64;
 
@@ -136,22 +134,20 @@ fn althea_payments_map(
     c_set: &mut RitaClientSettings,
     exit_set: &mut RitaExitSettingsStruct,
 ) -> (RitaClientSettings, RitaExitSettingsStruct) {
-    let mut accept_de = HashMap::new();
-    accept_de.insert(
-        "usdc".to_string(),
-        Denom {
-            denom: "uUSDC".to_string(),
-            decimal: 1_000_000u64,
-        },
-    );
+    let denom = Denom {
+        denom: "uUSDC".to_string(),
+        decimal: 1_000_000u64,
+    };
 
     c_set.payment.system_chain = SystemChain::Althea;
     exit_set.payment.system_chain = SystemChain::Althea;
     // set pay thres to a smaller value
     c_set.payment.payment_threshold = TEST_PAY_THRESH.into();
     exit_set.payment.payment_threshold = TEST_PAY_THRESH.into();
-    c_set.payment.accepted_denoms = Some(accept_de.clone());
-    exit_set.payment.accepted_denoms = Some(accept_de.clone());
+    c_set.payment.althea_l1_accepted_denoms = vec![denom.clone()];
+    c_set.payment.althea_l1_payment_denom = denom.clone();
+    exit_set.payment.althea_l1_accepted_denoms = vec![denom.clone()];
+    exit_set.payment.althea_l1_payment_denom = denom;
 
     (c_set.clone(), exit_set.clone())
 }

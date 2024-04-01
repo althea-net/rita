@@ -15,6 +15,7 @@ use althea_types::interop::UnpublishedPaymentTx;
 use althea_types::{Denom, PaymentTx};
 use althea_types::{Identity, SystemChain};
 use awc;
+use deep_space::client::ChainStatus;
 use deep_space::{Coin, Contact, EthermintPrivateKey};
 use futures::future::{join, join_all};
 use num256::Uint256;
@@ -34,6 +35,9 @@ use web30::types::SendTxOption;
 
 pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
 pub const MAX_TXID_RETRIES: u8 = 15u8;
+/// How many blocks after submission a MicroTX will be valid for. If we wait this many blocks after submitting the
+/// tx we can be sure that it will not be included in a block and we can safely retry it
+pub const ALTHEA_L1_MICROTX_TIMEOUT: u64 = 25;
 
 #[derive(Default, Clone)]
 pub struct PaymentController {
@@ -199,17 +203,7 @@ async fn make_althea_payment(
     previously_sent_payments: &HashMap<Identity, HashSet<PaymentTx>>,
 ) -> Result<(ToValidate, Option<ResendInfo>), PaymentControllerError> {
     // On althea chain, we default to paying with usdc, config must specify this as an accepted denom
-    let usdc_denom = match payment_settings
-        .accepted_denoms
-        .unwrap_or_default()
-        .get("usdc")
-    {
-        Some(a) => a.clone(),
-        None => {
-            error!("No USDC denom found");
-            return Err(PaymentControllerError::FailedToSendPayment);
-        }
-    };
+    let payment_denom = payment_settings.althea_l1_payment_denom;
 
     let our_address = pmt.from.get_althea_address();
 
@@ -226,14 +220,17 @@ async fn make_althea_payment(
 
     let cosmos_node_grpc = payment_settings.althea_grpc_list[0].clone();
 
-    // Convert Debt keeper denom to USDC
+    // Payments are tracked by debt keeper in wei (1*10^18) = $1 this is becuase
+    // on xdai the native token is DAI which is pegged to the dollar and it uses 18 decimals
+    // of precision. We need to convert this to the correct denomination for USDC on Althea L1
+    // which is a 6 decimal precision coin.
     pmt.amount = normalize_payment_amount(
         pmt.amount,
         Denom {
             denom: DEBT_KEEPER_DENOM.to_string(),
             decimal: DEBT_KEEPER_DENOM_DECIMAL,
         },
-        usdc_denom.clone(),
+        payment_denom.clone(),
     );
 
     // Create a contact object and get our balance
@@ -245,7 +242,7 @@ async fn make_althea_payment(
     .unwrap();
 
     let balance = match althea_contact
-        .get_balance(our_address, usdc_denom.denom.clone())
+        .get_balance(our_address, payment_denom.denom.clone())
         .await
     {
         Ok(a) => match a {
@@ -264,19 +261,28 @@ async fn make_althea_payment(
         }
     };
 
+    let block_height = match althea_contact.get_chain_status().await {
+        Ok(ChainStatus::Moving { block_height }) => block_height,
+        // if the chain is halted for whatever reason our payment isn't going anywhere
+        _ => {
+            error!("Chain status is not moving, can not make payment!");
+            return Err(PaymentControllerError::FailedToSendPayment);
+        }
+    };
+
     match sanity_check_balance(Some(balance.amount), &pmt) {
         Ok(_) => {}
         Err(e) => return Err(e),
     }
 
     info!(
-        "current USDC balance on Althea Chain: {:?}, payment of {:?}, from address {} to address {}",
+        "current Payment Token balance on Althea Chain: {:?}, payment of {:?}, from address {} to address {}",
         balance, pmt.amount, our_address, to_address
     );
 
     let coin = Coin {
         amount: pmt.amount,
-        denom: usdc_denom.denom.clone(),
+        denom: payment_denom.denom.clone(),
     };
     // Make microtx transaction.
     let transaction = match althea_contact
@@ -285,6 +291,7 @@ async fn make_althea_payment(
             None,
             to_address,
             Some(Duration::from_secs(30)),
+            Some(ALTHEA_L1_MICROTX_TIMEOUT),
             our_private_key,
         )
         .await
@@ -316,6 +323,10 @@ async fn make_althea_payment(
     let ts = ToValidate {
         payment: pmt,
         received: Instant::now(),
+        // add 5 blocks as 'slop' since we're passing a block offset if the send_microtx
+        // for some reason takes a very long time (each response just shy of it's own timeout)
+        // we don't want to timeout a still valid transaction
+        timeout_block: Some(block_height + ALTHEA_L1_MICROTX_TIMEOUT + 5),
     };
 
     Ok((ts, retry))
@@ -411,6 +422,7 @@ async fn make_xdai_payment(
             let ts = ToValidate {
                 payment: pmt,
                 received: Instant::now(),
+                timeout_block: None,
             };
 
             Ok((ts, resend))

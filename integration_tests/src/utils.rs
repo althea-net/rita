@@ -427,15 +427,12 @@ pub fn althea_system_chain_client(settings: RitaClientSettings) -> RitaClientSet
     let mut settings = settings;
     settings.payment.system_chain = SystemChain::Althea;
     settings.payment.payment_threshold = TEST_PAY_THRESH.into();
-    let mut accept_de = HashMap::new();
-    accept_de.insert(
-        "usdc".to_string(),
-        Denom {
-            denom: "uUSDC".to_string(),
-            decimal: 1_000_000u64,
-        },
-    );
-    settings.payment.accepted_denoms = Some(accept_de);
+    let denom = Denom {
+        denom: "uUSDC".to_string(),
+        decimal: 1_000_000u64,
+    };
+    settings.payment.althea_l1_payment_denom = denom.clone();
+    settings.payment.althea_l1_accepted_denoms = vec![denom];
     settings
 }
 
@@ -445,15 +442,12 @@ pub fn althea_system_chain_exit(settings: RitaExitSettingsStruct) -> RitaExitSet
 
     // set pay thres to a smaller value
     settings.payment.payment_threshold = TEST_PAY_THRESH.into();
-    let mut accept_de = HashMap::new();
-    accept_de.insert(
-        "usdc".to_string(),
-        Denom {
-            denom: "uUSDC".to_string(),
-            decimal: 1_000_000u64,
-        },
-    );
-    settings.payment.accepted_denoms = Some(accept_de);
+    let denom = Denom {
+        denom: "uUSDC".to_string(),
+        decimal: 1_000_000u64,
+    };
+    settings.payment.althea_l1_payment_denom = denom.clone();
+    settings.payment.althea_l1_accepted_denoms = vec![denom];
     settings
 }
 
@@ -914,6 +908,7 @@ pub async fn send_althea_tokens(addresses: Vec<AltheaAddress>) {
                 None,
                 router_address,
                 Some(Duration::from_secs(30)),
+                None,
                 get_althea_evm_priv(),
             )
             .await;
@@ -931,6 +926,7 @@ pub async fn send_althea_tokens(addresses: Vec<AltheaAddress>) {
                 None,
                 router_address,
                 Some(Duration::from_secs(30)),
+                None,
                 get_althea_evm_priv(),
             )
             .await;

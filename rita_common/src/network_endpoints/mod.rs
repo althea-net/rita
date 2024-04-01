@@ -20,6 +20,7 @@ pub async fn make_payments(item: Json<PaymentTx>) -> HttpResponse {
     let ts = ToValidate {
         payment: pmt,
         received: Instant::now(),
+        timeout_block: None,
     };
     add_to_incoming_transaction_queue(ts);
 
@@ -36,6 +37,7 @@ pub async fn make_payments_v2(item: Json<HashSet<PaymentTx>>) -> HttpResponse {
         let ts = ToValidate {
             payment: pmt,
             received: Instant::now(),
+            timeout_block: None,
         };
         add_to_incoming_transaction_queue(ts);
     }

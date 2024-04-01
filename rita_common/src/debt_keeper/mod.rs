@@ -11,7 +11,7 @@
 use crate::blockchain_oracle::calculate_close_thresh;
 use crate::blockchain_oracle::get_pay_thresh;
 use crate::blockchain_oracle::potential_payment_issues_detected;
-use crate::payment_validator::PAYMENT_SEND_TIMEOUT;
+use crate::payment_validator::ETH_PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;
 use crate::tunnel_manager::tm_tunnel_state_change;
 use crate::tunnel_manager::TunnelAction;
@@ -735,7 +735,7 @@ impl DebtKeeper {
                 // But for the sake of parinoia we provide a handler here which will time out in such a situation
                 match debt_data.payment_in_flight_start {
                     Some(start_time) => {
-                        if Instant::now() - start_time > PAYMENT_SEND_TIMEOUT {
+                        if Instant::now() - start_time > ETH_PAYMENT_SEND_TIMEOUT {
                             error!("Payment in flight for more than payment timeout! Resetting!");
                             debt_data.payment_in_flight = false;
                             debt_data.payment_in_flight_start = None;

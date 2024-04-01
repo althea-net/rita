@@ -18,7 +18,7 @@ extern crate log;
 extern crate arrayvec;
 
 use althea_kernel_interface::KI;
-use althea_types::{Denom, Identity};
+use althea_types::Identity;
 use network::NetworkSettings;
 use payment::PaymentSettings;
 use serde::Serialize;
@@ -160,18 +160,6 @@ pub fn write_config() -> Result<(), SettingsError> {
         }
         None => panic!("expected settings but got none"),
     }
-}
-
-/// Sets up default accepts denoms, by default we need to add the debt keeper denom
-/// As we add more accepted denoms, they will be added during bridge of funds
-pub fn setup_accepted_denoms() -> HashMap<String, Denom> {
-    let mut map = HashMap::new();
-    let wei = Denom {
-        denom: DEBT_KEEPER_DENOM.to_string(),
-        decimal: DEBT_KEEPER_DENOM_DECIMAL,
-    };
-    map.insert("xdai".to_string(), wei);
-    map
 }
 
 /// On an interupt (SIGTERM), saving settings before exiting
