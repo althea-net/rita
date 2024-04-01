@@ -271,6 +271,7 @@ fn build_interface_config_string(config: BabeldInterfaceConfig) -> String {
     command.push_str(&format!("rtt-max {} ", config.rtt_max));
     command.push_str(&format!("hello-interval {} ", config.hello_interval));
     command.push_str(&format!("update-interval {} ", config.update_interval));
+    command.push_str("enable-timestamps true");
     command
 }
 
