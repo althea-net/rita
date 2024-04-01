@@ -3,7 +3,7 @@ use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
-use crate::{json_merge, set_rita_client, setup_accepted_denoms, SettingsError};
+use crate::{json_merge, set_rita_client, SettingsError};
 use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
 use clarity::Address;
@@ -185,11 +185,6 @@ impl RitaClientSettings {
 
         let config_toml = std::fs::read_to_string(file_name)?;
         let ret: Self = toml::from_str(&config_toml)?;
-
-        let mut ret = Self::convert_subnet_to_root_ip(&ret);
-        // Setup accepted denoms for payment validator, this is for routers during opkg updates,
-        // this can be removed once all router are updated to the version that handles althea chain
-        ret.payment.accepted_denoms = Some(setup_accepted_denoms());
 
         set_rita_client(ret.clone());
 

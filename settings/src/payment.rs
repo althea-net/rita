@@ -5,7 +5,6 @@ use auto_bridge::TokenBridgeAddresses;
 use clarity::{Address, PrivateKey};
 use num256::Int256;
 use num256::Uint256;
-use std::collections::HashMap;
 
 fn default_max_fee() -> u32 {
     200_000_000u32 // denominated in wei/byte
@@ -113,8 +112,14 @@ pub struct PaymentSettings {
     pub eth_private_key: Option<PrivateKey>,
     /// Our own eth Address, derived from the private key on startup and not stored
     pub eth_address: Option<Address>,
-    /// Payment denoms that payment validator accepts. Ex usdc -> Denom {ibc/hash, 1_000_000}
-    pub accepted_denoms: Option<HashMap<String, Denom>>,
+    /// Payment denoms that payment validator accepts on Althea L1. Ex usdc -> Denom {ibc/hash, 1_000_000}
+    /// the nubmer is the multiplier to convert one unit of this denom to $1 since these are all
+    /// assumed to be stable coins
+    #[serde(default)]
+    pub althea_l1_accepted_denoms: Vec<Denom>,
+    /// By default when this node makes a payment it will use this denom
+    #[serde(default = "default_althea_l1_payment_denom")]
+    pub althea_l1_payment_denom: Denom,
     /// GRPC Node used to create a contact object to interact with althea blockchain
     #[serde(default = "default_node_grpc")]
     pub althea_grpc_list: Vec<String>,
@@ -166,6 +171,15 @@ pub struct PaymentSettings {
     pub min_gas: Uint256,
 }
 
+/// TODO this is currently a testnet only placeholder it should be replaced
+/// with a real IBC denom post Althea L1 launch
+fn default_althea_l1_payment_denom() -> Denom {
+    Denom {
+        denom: "uUSDC".to_string(),
+        decimal: 1_000_000u64,
+    }
+}
+
 impl Default for PaymentSettings {
     fn default() -> Self {
         PaymentSettings {
@@ -175,7 +189,6 @@ impl Default for PaymentSettings {
             client_can_use_free_tier: default_client_can_use_free_tier(),
             balance_warning_level: default_balance_warning_level(),
             payment_threshold: default_payment_threshold(),
-            accepted_denoms: None,
             enable_enforcement: true,
             eth_private_key: None,
             eth_address: None,
@@ -192,6 +205,8 @@ impl Default for PaymentSettings {
             simulated_transaction_fee: default_simulated_transaction_fee(),
             forgive_on_reboot: default_forgive_on_reboot(),
             min_gas: default_min_gas(),
+            althea_l1_accepted_denoms: vec![default_althea_l1_payment_denom()],
+            althea_l1_payment_denom: default_althea_l1_payment_denom(),
         }
     }
 }

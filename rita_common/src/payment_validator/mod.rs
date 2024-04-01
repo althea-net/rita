@@ -56,7 +56,9 @@ pub const PAYMENT_RECEIVE_TIMEOUT: Duration = Duration::from_secs(259200u64);
 /// enforce upon us if we miss a payment and due to the implementation of DebtKeeper
 /// we will not send another payment while one is in flight. On Xdai the block time is
 /// once every 5 seconds, meaning a minimum of 20 seconds is required to ensure 4 confirms
-pub const PAYMENT_SEND_TIMEOUT: Duration = Duration::from_secs(600u64);
+/// This only applies to ETH based chains as Althea chain transactions will be impossible to
+/// submit after ALTHEA_L1_MICROTX_TIMEOUT blocks have elapsed, so there's no need to guess
+pub const ETH_PAYMENT_SEND_TIMEOUT: Duration = Duration::from_secs(600u64);
 /// How many blocks before we assume finality
 const BLOCKS_TO_CONFIRM: u32 = 4;
 /// How old does a txid need to be before we don't accept it?
@@ -118,6 +120,11 @@ pub struct ToValidate {
     pub payment: PaymentTx,
     /// When we got this tx
     pub received: Instant,
+    /// The timeout block for this transaction, only set on transactions we send
+    /// this is used as a more reliable timeout than the recieved field since it is
+    /// actually not possible for the transaction to be included once this timeout has passed
+    /// versus the recieved field which is just a guess
+    pub timeout_block: Option<u64>,
 }
 
 // Ensure that duplicate txid are always treated as the same object
@@ -279,7 +286,7 @@ impl PaymentValidator {
     ) -> HashMap<Identity, HashSet<PaymentTx>> {
         // we panic on a failed receive so it should always be longer than the minimum
         // time we expect payments to take to enter the blockchain (the send timeout)
-        assert!(PAYMENT_RECEIVE_TIMEOUT > PAYMENT_SEND_TIMEOUT);
+        assert!(PAYMENT_RECEIVE_TIMEOUT > ETH_PAYMENT_SEND_TIMEOUT);
         if !self.is_consistent() {
             warn!("Inconsistent payment validator! {:?}", self);
             // in a development env we want to draw attention to this case
@@ -321,9 +328,13 @@ impl PaymentValidator {
 
                 to_delete.push((item.clone(), false));
             }
-            // no penalties for failure here, we expect to overpay one out of every few hundred
-            // transactions
-            else if elapsed.is_some() && from_us && elapsed.unwrap() > PAYMENT_SEND_TIMEOUT {
+            // timeout eth based transactions after the timeout time has passed, in this case it's possible that our tx will be included
+            // after the timeout and we will overpay
+            else if elapsed.is_some()
+                && from_us
+                && elapsed.unwrap() > ETH_PAYMENT_SEND_TIMEOUT
+                && chain != SystemChain::Althea
+            {
                 error!(
                     "Outgoing transaction {:#066x} has timed out, payment failed!",
                     item.payment.txid
@@ -406,22 +417,28 @@ async fn handle_althea_tx_checking(ts: ToValidate) -> Option<(ToValidate, bool)>
     let althea_transaction = althea_contact.get_tx_by_hash(txhash.clone()).await;
 
     match (althea_transaction, althea_status) {
-        (Ok(transaction), Ok(ChainStatus::Moving { block_height })) => {
+        // if we have the transaction response we don't care about the chain status
+        // it could be syncing or not moving, or moving we have sufficient information
+        // to judge this specific transaction
+        (Ok(transaction), _) => {
             let txs = decode_althea_microtx(transaction);
-            handle_tx_messaging_althea(txs, ts.clone(), block_height)
+            handle_tx_messaging_althea(txs, ts.clone())
         }
-        (Ok(_), Ok(status)) => {
-            error!(
-                "Failed to check transaction due to chain status! {:?} {:?}",
-                txhash, status
-            );
-            if cfg!(feature = "development") || cfg!(feature = "integration_test") {
-                panic!(
-                    "Failed to check transaction due to chain status! {:?} {:?}",
-                    txhash, status
-                );
+        (_, Ok(ChainStatus::Moving { block_height })) => {
+            // now we check if maybe the tx has timed out
+            if let Some(timeout_block) = ts.timeout_block {
+                if block_height > timeout_block {
+                    error!(
+                        "Transaction {:#066x} has timed out, payment failed!",
+                        ts.payment.txid
+                    );
+                    Some((ts, false))
+                } else {
+                    None
+                }
+            } else {
+                None
             }
-            None
         }
         _ => {
             trace!("Failed to check transaction {:?}", txhash);
@@ -440,7 +457,6 @@ async fn handle_althea_tx_checking(ts: ToValidate) -> Option<(ToValidate, bool)>
 fn handle_tx_messaging_althea(
     transactions: Vec<MsgMicrotx>,
     ts: ToValidate,
-    _current_block: u64,
 ) -> Option<(ToValidate, bool)> {
     if transactions.is_empty() {
         error!("Microtx payment with no transactions!");
@@ -485,13 +501,10 @@ fn handle_tx_messaging_althea(
 
     // Verify that denom is valid
     let mut denom: Option<Denom> = None;
-    for d in get_rita_common()
-        .payment
-        .accepted_denoms
-        .unwrap_or_default()
-    {
-        if amount.denom == d.1.denom {
-            denom = Some(d.1);
+    for d in get_rita_common().payment.althea_l1_accepted_denoms {
+        if amount.denom == d.denom {
+            denom = Some(d);
+            break;
         }
     }
     if denom.is_none() {
@@ -859,6 +872,7 @@ mod tests {
         ToValidate {
             payment: tx,
             received: Instant::now(),
+            timeout_block: None,
         }
     }
 
