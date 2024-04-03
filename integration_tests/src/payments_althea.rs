@@ -3,15 +3,13 @@ use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_default_settings,
-    populate_routers_eth, print_althea_balances, register_all_namespaces_to_exit,
-    register_erc20_usdc_token, send_althea_tokens, test_all_internet_connectivity, test_reach_all,
-    test_routes, validate_debt_entry, TEST_PAY_THRESH,
+    add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_althea_grpc, get_default_settings, populate_routers_eth, print_althea_balances, register_all_namespaces_to_exit, register_erc20_usdc_token, send_althea_tokens, test_all_internet_connectivity, test_reach_all, test_routes, validate_debt_entry, TEST_PAY_THRESH
 };
 use althea_types::{Denom, SystemChain, ALTHEA_PREFIX};
-use deep_space::Address as AltheaAddress;
+use deep_space::{Address as AltheaAddress, Contact};
 use deep_space::{EthermintPrivateKey, PrivateKey};
 use rita_common::debt_keeper::GetDebtsResult;
+use rita_common::payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT};
 use settings::client::RitaClientSettings;
 use settings::exit::RitaExitSettingsStruct;
 use std::thread;
@@ -36,6 +34,10 @@ pub fn get_althea_evm_pub() -> AltheaAddress {
 
 pub async fn run_althea_payments_test_scenario() {
     info!("Starting althea payments test");
+
+    info!("Registering USDC as ERC20");
+    // note we don't wait for this to finish in order to speed up the test
+    register_erc20_usdc_token(false).await;
 
     let node_config = five_node_config();
     let namespaces = node_config.0;
@@ -90,9 +92,6 @@ pub async fn run_althea_payments_test_scenario() {
         to_topup.push(ident.get_althea_address());
     }
 
-    info!("Registering USDC as ERC20");
-    register_erc20_usdc_token().await;
-
     info!(
         "Sending aalthea to all nodes with address {:?}",
         to_topup.clone()
@@ -104,6 +103,19 @@ pub async fn run_althea_payments_test_scenario() {
     let balances = print_althea_balances(to_topup, "aalthea".to_string()).await;
     info!("Althea Balances are {:?}", balances);
 
+    // make sure the proposal we asynce'd at the start of test is done
+    let althea_contact = Contact::new(
+        &get_althea_grpc(),
+        ALTHEA_CONTACT_TIMEOUT,
+        ALTHEA_CHAIN_PREFIX,
+    ).unwrap();
+    let proposals = althea_contact
+        .get_governance_proposals_in_voting_period()
+        .await
+        .unwrap();
+    assert!(proposals.proposals.is_empty());
+
+    // generate some traffic to trigger payments
     info!("Trying to generate traffic");
     generate_traffic(
         from_node.clone().unwrap(),
