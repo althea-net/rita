@@ -787,6 +787,8 @@ pub async fn execute_register_coin_proposal(
     keys: &[ValidatorKeys],
     timeout: Option<Duration>,
     coin_params: RegisterCoinProposalParams,
+    // true if we should wait for the proposal to execute
+    wait: bool
 ) {
     let duration = match timeout {
         Some(dur) => dur,
@@ -811,7 +813,9 @@ pub async fn execute_register_coin_proposal(
     info!("Gov proposal executed with {:?}", res.raw_log);
 
     vote_yes_on_proposals(contact, keys, None).await;
-    wait_for_proposals_to_execute(contact).await;
+    if wait {
+        wait_for_proposals_to_execute(contact).await;
+    }
 }
 
 fn parse_phrases(filename: &str) -> (Vec<CosmosPrivateKey>, Vec<String>) {
@@ -853,7 +857,7 @@ pub fn get_keys() -> Vec<ValidatorKeys> {
     ret
 }
 
-pub async fn register_erc20_usdc_token() {
+pub async fn register_erc20_usdc_token(wait: bool) {
     let althea_contact = Contact::new(
         &get_althea_grpc(),
         ALTHEA_CONTACT_TIMEOUT,
@@ -884,6 +888,7 @@ pub async fn register_erc20_usdc_token() {
         &get_keys(),
         Some(TOTAL_TIMEOUT),
         coin_params,
+        wait,
     )
     .await;
 }
