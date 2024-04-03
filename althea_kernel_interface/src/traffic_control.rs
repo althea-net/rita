@@ -178,11 +178,25 @@ impl dyn KernelInterface {
             )?;
 
             if !output.status.success() {
-                let res = String::from_utf8(output.stderr)?;
-                error!("Cake and fallback fq_codel have both failed!");
-                return Err(Error::TrafficControlError(format!(
-                    "Failed to create new qdisc limit! {res:?}"
-                )));
+                // final fallback on FIFO this is a very old machine indeed
+                trace!(
+                "No support for the fq codel qdisc is detected, falling back to fifo. Error: {}",
+                String::from_utf8(output.stderr)?
+                );
+                trace!("Command was tc {}", crate::print_str_array(&cake_args));
+                let output = self.run_command(
+                    "tc",
+                    &[
+                        "qdisc", operator, "dev", iface_name, "root", "handle", "1:", "fifo",
+                    ],
+                )?;
+                if !output.status.success() {
+                    let res = String::from_utf8(output.stderr)?;
+                    error!("Cake, fq_codel and fallback FIFO have all failed!");
+                    return Err(Error::TrafficControlError(format!(
+                        "Failed to create new qdisc limit! {res:?}"
+                    )));
+                }
             }
         }
 
