@@ -91,7 +91,7 @@ pub async fn run_eth_payments_test_scenario() {
     generate_traffic(
         from_node.clone().unwrap(),
         end_node.clone(),
-        "1G".to_string(),
+        "10G".to_string(),
     );
 
     validate_debt_entry(

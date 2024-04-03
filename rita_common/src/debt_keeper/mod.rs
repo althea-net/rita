@@ -45,6 +45,16 @@ lazy_static! {
     static ref DEBT_DATA: Arc<RwLock<HashMap<u32,DebtKeeper>>> = Arc::new(RwLock::new(HashMap::new()));
 }
 
+/// Returns the default denomination for the debt keeper
+/// this is used for all internal bandwidth accounting becuase it provides the highest
+/// level of precision which is importnat when communicating prices through babel
+pub fn wei_denom() -> Denom {
+    Denom {
+        denom: DEBT_KEEPER_DENOM.to_string(),
+        decimal: DEBT_KEEPER_DENOM_DECIMAL,
+    }
+}
+
 /// Gets DebtKeeper copy from the static ref, or default if no value has been set
 pub fn get_debt_keeper() -> DebtKeeper {
     let netns = KI.check_integration_test_netns();
@@ -216,7 +226,11 @@ pub fn payment_received(
     dk.payment_received(&from, amount)
 }
 
-/// Currency conversion from_denom -> to_denom
+/// Currency conversion from_denom -> to_denom, this is required for any target chain or token with less than
+/// 18 decimals of precision. Take for example USDC on Althea L1, it has 6 decimals of precision, but the way
+/// we specify bandwidth prices in the babel protocol is smallest unit of payment / byte (smallest unit of billed data)
+/// with a 6 decimal token that's a minimum bandwidth price of $1000/GB so totally unusable. We need to scale up the internal
+/// accounting to deal with wei (18 decimals) only then scale it back down on payment out
 pub fn normalize_payment_amount(amount: Uint256, from_denom: Denom, to_denom: Denom) -> Uint256 {
     let mut amount = amount;
     if from_denom.denom != to_denom.denom {
@@ -227,8 +241,7 @@ pub fn normalize_payment_amount(amount: Uint256, from_denom: Denom, to_denom: De
                 amount, to_denom.decimal
             ),
         };
-        // Pay 1 more unit amount to account for loss from integer division
-        amount = (unit_factor / from_denom.decimal.into()) + 1u64.into();
+        amount = unit_factor / from_denom.decimal.into();
     };
     amount
 }
@@ -1411,5 +1424,21 @@ mod tests {
         // let reader = BufReader::new(File::open(file_path).unwrap());
         // let mut x: Vec<(Identity, NodeDebtData)> = deserialize_from(reader).unwrap();
         // println!("{:?}", x);
+    }
+
+    #[test]
+    fn test_normalize_payment_amount() {
+        // this is $6 in a 6 decimal of precision token where 1 unit = $1
+        let start_amount = Uint256::from(6_000_000u64);
+        // this is $6 in a 18 decimal of precision token where 1 unit = $1
+        let end_amount = Uint256::from(6_000_000_000_000_000_000u64);
+        let usdc = Denom {
+            denom: "uUSDC".to_string(),
+            decimal: 1_000_000,
+        };
+        let res = normalize_payment_amount(start_amount, usdc.clone(), wei_denom());
+        assert_eq!(res, end_amount);
+        let res = normalize_payment_amount(end_amount, wei_denom(), usdc);
+        assert_eq!(res, start_amount)
     }
 }

@@ -19,55 +19,10 @@ use std::time::Instant;
 
 /// This is the value pay_threshold is multiplied by to determine the close threshold
 /// the close pay_threshold is when one router will pay another, the close_threshold is when
-/// one router will throttle the connection of a peer that has not paid. It is obviously highly
-/// important for these values to be 'convergent' between routers so that bandwidth can continue to flow
-/// This comment concerns exactly how this value takes into account gas prices, as gas prices increase our
-/// pay_threshold changes to prevent fees from being to large a portion of the payment, it's critical that
-/// routers do not come to disagree about when to pay versus close given these changes.
-///
-/// This value is determined as follows
-///
-/// In the new averaging scheme, consider these constraints and assumptions:
-/// 1.) The largest time difference between two routers running is 10x
-/// Ex. We have two routers a fast router running every 5sec and a slow running every 50 sec
-/// 2.) After EIP1559, the max gas can increase each block is 12.5% of previous block (we take 15% for simplicity)
-/// 3.) The total number of entries in our circular array is M  = 100
-/// 4.) Let the starting gas that the two nodes are synced on is s
-///
-/// We need to find the maximum value of CLOSE_THRESH_MULT in the worse case such that the slow router
-/// does not enforce the fast router because of disagreeing gas prices. Consdier these cases:
-///
-/// (I) Right on startup, the array is not filled, only the first 9 blocks have been registered. Lets look at the respective arrays
-/// FastRouter: [s, 1.15s, (1.15^2)s, ...., (1.15^9)s]. The average gas here would be = ~20s/10 ~ 2s
-/// SlowRouter: [s]. The average here would be s
-///
-/// Pay_thres for fast = D*T*(2s) (Where D is dynamic fee mult and T is average gas for a transaction)
-/// Pay_thres for slow = D*T*s
-/// To prevent enforcement, Close_thres of slow > pay_thres of fast
-/// D*T*s * CLOSE_THRES_MULT > D*T*(2s) => CLOSE_THRES_MULT > 2
-///
-/// Without averaging
-/// CLOSE_THRES_MULT > (1.15^9) > 3
-///
-/// (II) Gas price is relatively stable, but sudden jump in price (More realistic)
-/// FastRouter: [s, s, s, ... 1.15s, ... (1.15^9)s]. Average is 110s/100 = ~s
-/// SlowRouter: [s, s, s, .... s]. Average is s
-/// CLOSE_THRES_MULT > 1
-///
-/// Without Averaging
-/// CLOSE_THRES_MULT > (1.15)^9 > 3
-///
-/// (III) Gas price continues to increase non stop over the course of 50 * M seconds (absolute worst case):
-/// FastRouter: [(1.15^9M)s, (1.15^(9M+1))s, .... (1.15^10M)s].
-///     Average here would be: s * (1.15^9M) * (1.15^M  -  1)/(1.15  -  1). For M = 100, average = ~3.3s * 10^59
-/// SlowRouter: [s, (1.15^10)s, (1.15^20)s ... (1.15^M)s ... (1.15^10M)s].
-///     Average here would be s * (1.15^10M  -  1)/(1.15^10  -  1) for M = 100, average = ~1.66s * 10^58
-/// So in this case CLOSE_THRES_MULT > 33/1.66 > 20
-///
-/// Without Averaging
-/// CLOSE_THRES_MULT > (1.15^(999))/(1.15^(990)) > 1.15^9 > 3
-///
-/// In the worst cases, No averaging does better. To conservative we set this Multiplier higher than 3
+/// one router will throttle the connection of a peer that has not paid. A higher value here
+/// indicates more 'debt' being allowed before enforcement. It's important this value be long enough
+/// to allow for the payment to be made before enforcement, but short enough to prevent a router from
+/// running up a large debt.
 const CLOSE_THRESH_MULT: i32 = 10;
 
 /// How long we wait for a response from the full node

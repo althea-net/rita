@@ -78,49 +78,51 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     */
     let testa = Namespace {
         id: 1,
-        cost: 25,
+        // two and a half cents / gb in wei / byte
+        cost: 25_000_000,
         node_type: NodeType::Client {
             cluster_name: "test".to_string(),
         },
     };
     let testb = Namespace {
         id: 2,
-        cost: 500,
+        // 20 cents / gb in wei / byte
+        cost: 500_000_000,
         node_type: NodeType::Client {
             cluster_name: "test".to_string(),
         },
     };
     let testc = Namespace {
         id: 3,
-        cost: 15,
+        cost: 15_000_000,
         node_type: NodeType::Client {
             cluster_name: "test".to_string(),
         },
     };
     let testd = Namespace {
         id: 4,
-        cost: 10,
+        cost: 10_000_000,
         node_type: NodeType::Exit {
             instance_name: "test_4".to_string(),
         },
     };
     let teste = Namespace {
         id: 5,
-        cost: 40,
+        cost: 40_000_000,
         node_type: NodeType::Client {
             cluster_name: "test".to_string(),
         },
     };
     let testf = Namespace {
         id: 6,
-        cost: 20,
+        cost: 20_000_000,
         node_type: NodeType::Client {
             cluster_name: "test".to_string(),
         },
     };
     let testg = Namespace {
         id: 7,
-        cost: 15,
+        cost: 15_000_000,
         node_type: NodeType::Client {
             cluster_name: "test".to_string(),
         },
@@ -155,10 +157,34 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
         destination: [
             (2, PriceId { price: 0, id: 2 }),
             (3, PriceId { price: 0, id: 3 }),
-            (4, PriceId { price: 35, id: 3 }),
-            (5, PriceId { price: 15, id: 3 }),
-            (6, PriceId { price: 15, id: 3 }),
-            (7, PriceId { price: 45, id: 3 }),
+            (
+                4,
+                PriceId {
+                    price: 35_000_000,
+                    id: 3,
+                },
+            ),
+            (
+                5,
+                PriceId {
+                    price: 15_000_000,
+                    id: 3,
+                },
+            ),
+            (
+                6,
+                PriceId {
+                    price: 15_000_000,
+                    id: 3,
+                },
+            ),
+            (
+                7,
+                PriceId {
+                    price: 45_000_000,
+                    id: 3,
+                },
+            ),
         ]
         .iter()
         .cloned()
@@ -167,11 +193,35 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     let testb_routes = RouteHop {
         destination: [
             (1, PriceId { price: 0, id: 1 }),
-            (3, PriceId { price: 25, id: 1 }),
+            (
+                3,
+                PriceId {
+                    price: 25_000_000,
+                    id: 1,
+                },
+            ),
             (4, PriceId { price: 0, id: 4 }),
-            (5, PriceId { price: 40, id: 1 }),
-            (6, PriceId { price: 10, id: 4 }),
-            (7, PriceId { price: 10, id: 4 }),
+            (
+                5,
+                PriceId {
+                    price: 40_000_000,
+                    id: 1,
+                },
+            ),
+            (
+                6,
+                PriceId {
+                    price: 10_000_000,
+                    id: 4,
+                },
+            ),
+            (
+                7,
+                PriceId {
+                    price: 10_000_000,
+                    id: 4,
+                },
+            ),
         ]
         .iter()
         .cloned()
@@ -180,11 +230,29 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     let testc_routes = RouteHop {
         destination: [
             (1, PriceId { price: 0, id: 1 }),
-            (2, PriceId { price: 25, id: 1 }),
-            (4, PriceId { price: 20, id: 6 }),
+            (
+                2,
+                PriceId {
+                    price: 25_000_000,
+                    id: 1,
+                },
+            ),
+            (
+                4,
+                PriceId {
+                    price: 20_000_000,
+                    id: 6,
+                },
+            ),
             (5, PriceId { price: 0, id: 5 }),
             (6, PriceId { price: 0, id: 6 }),
-            (7, PriceId { price: 30, id: 6 }),
+            (
+                7,
+                PriceId {
+                    price: 30_000_000,
+                    id: 6,
+                },
+            ),
         ]
         .iter()
         .cloned()
@@ -192,10 +260,28 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let testd_routes = RouteHop {
         destination: [
-            (1, PriceId { price: 35, id: 6 }),
+            (
+                1,
+                PriceId {
+                    price: 35_000_000,
+                    id: 6,
+                },
+            ),
             (2, PriceId { price: 0, id: 2 }),
-            (3, PriceId { price: 20, id: 6 }),
-            (5, PriceId { price: 35, id: 6 }),
+            (
+                3,
+                PriceId {
+                    price: 20_000_000,
+                    id: 6,
+                },
+            ),
+            (
+                5,
+                PriceId {
+                    price: 35_000_000,
+                    id: 6,
+                },
+            ),
             (6, PriceId { price: 0, id: 6 }),
             (7, PriceId { price: 0, id: 7 }),
         ]
@@ -205,12 +291,42 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let teste_routes = RouteHop {
         destination: [
-            (1, PriceId { price: 15, id: 3 }),
-            (2, PriceId { price: 40, id: 3 }),
+            (
+                1,
+                PriceId {
+                    price: 15_000_000,
+                    id: 3,
+                },
+            ),
+            (
+                2,
+                PriceId {
+                    price: 40_000_000,
+                    id: 3,
+                },
+            ),
             (3, PriceId { price: 0, id: 3 }),
-            (4, PriceId { price: 35, id: 3 }),
-            (6, PriceId { price: 15, id: 3 }),
-            (7, PriceId { price: 45, id: 3 }),
+            (
+                4,
+                PriceId {
+                    price: 35_000_000,
+                    id: 3,
+                },
+            ),
+            (
+                6,
+                PriceId {
+                    price: 15_000_000,
+                    id: 3,
+                },
+            ),
+            (
+                7,
+                PriceId {
+                    price: 45_000_000,
+                    id: 3,
+                },
+            ),
         ]
         .iter()
         .cloned()
@@ -218,12 +334,36 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let testf_routes = RouteHop {
         destination: [
-            (1, PriceId { price: 15, id: 3 }),
-            (2, PriceId { price: 10, id: 4 }),
+            (
+                1,
+                PriceId {
+                    price: 15_000_000,
+                    id: 3,
+                },
+            ),
+            (
+                2,
+                PriceId {
+                    price: 10_000_000,
+                    id: 4,
+                },
+            ),
             (3, PriceId { price: 0, id: 3 }),
             (4, PriceId { price: 0, id: 4 }),
-            (5, PriceId { price: 15, id: 3 }),
-            (7, PriceId { price: 10, id: 4 }),
+            (
+                5,
+                PriceId {
+                    price: 15_000_000,
+                    id: 3,
+                },
+            ),
+            (
+                7,
+                PriceId {
+                    price: 10_000_000,
+                    id: 4,
+                },
+            ),
         ]
         .iter()
         .cloned()
@@ -231,12 +371,42 @@ pub fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     };
     let testg_routes = RouteHop {
         destination: [
-            (1, PriceId { price: 45, id: 4 }),
-            (2, PriceId { price: 10, id: 4 }),
-            (3, PriceId { price: 30, id: 4 }),
+            (
+                1,
+                PriceId {
+                    price: 45_000_000,
+                    id: 4,
+                },
+            ),
+            (
+                2,
+                PriceId {
+                    price: 10_000_000,
+                    id: 4,
+                },
+            ),
+            (
+                3,
+                PriceId {
+                    price: 30_000_000,
+                    id: 4,
+                },
+            ),
             (4, PriceId { price: 0, id: 4 }),
-            (5, PriceId { price: 45, id: 4 }),
-            (6, PriceId { price: 10, id: 4 }),
+            (
+                5,
+                PriceId {
+                    price: 45_000_000,
+                    id: 4,
+                },
+            ),
+            (
+                6,
+                PriceId {
+                    price: 10_000_000,
+                    id: 4,
+                },
+            ),
         ]
         .iter()
         .cloned()

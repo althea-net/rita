@@ -57,8 +57,8 @@ use web30::{client::Web3, jsonrpc::error::Web3Error};
 const REACHABILITY_TEST_TIMEOUT: Duration = Duration::from_secs(600);
 /// How long the reacability test should wait in between tests
 const REACHABILITY_TEST_CHECK_SPEED: Duration = Duration::from_secs(5);
-/// Pay thresh used in payment tests
-pub const TEST_PAY_THRESH: u64 = 10_000_000_000u64;
+/// Pay thresh used in payment tests, 3c in wei
+pub const TEST_PAY_THRESH: u64 = 30_000_000_000_000_000u64;
 
 pub const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -788,7 +788,7 @@ pub async fn execute_register_coin_proposal(
     timeout: Option<Duration>,
     coin_params: RegisterCoinProposalParams,
     // true if we should wait for the proposal to execute
-    wait: bool
+    wait: bool,
 ) {
     let duration = match timeout {
         Some(dur) => dur,
