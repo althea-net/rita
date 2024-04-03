@@ -138,8 +138,8 @@ impl fmt::Display for ToValidate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "(txid: {:#066x}, from: {}",
-            self.payment.txid, self.payment.from.wg_public_key
+            "(txid: {:#066x}, from: {:?}",
+            self.payment.txid, self.payment.from
         )?;
         Ok(())
     }
@@ -305,6 +305,11 @@ impl PaymentValidator {
         let our_address = settings::get_rita_common().payment.eth_address.unwrap();
         let mut to_delete = Vec::new();
 
+        // there's nothing to do, exit early
+        if self.unvalidated_transactions.is_empty() {
+            return self.previously_sent_payments.clone();
+        }
+
         info!(
             "Attempting to validate {} transactions {}",
             self.unvalidated_transactions.len(),
@@ -410,8 +415,14 @@ async fn handle_althea_tx_checking(ts: ToValidate) -> Option<(ToValidate, bool)>
         ALTHEA_CHAIN_PREFIX,
     )
     .unwrap();
-    // convert to hex string
-    let txhash = ts.payment.txid.to_str_radix(16);
+    info!(
+        "In handle_althea_tx_checking trying to deal with {:?}",
+        ts.payment.txid
+    );
+    // convert to hex string, note we must pad it to the full length of there are leading
+    // or trailing zeros and a format specifier is used to do this. This is simlar to the format
+    // specifier used for eth txid, but does not include the 0x prefix
+    let txhash = althea_l1_txid_to_string(ts.payment.txid);
 
     let althea_status = althea_contact.get_chain_status().await;
     let althea_transaction = althea_contact.get_tx_by_hash(txhash.clone()).await;
@@ -421,17 +432,17 @@ async fn handle_althea_tx_checking(ts: ToValidate) -> Option<(ToValidate, bool)>
         // it could be syncing or not moving, or moving we have sufficient information
         // to judge this specific transaction
         (Ok(transaction), _) => {
+            info!("Got the tx from the rpc, decoding");
             let txs = decode_althea_microtx(transaction);
+            info!("decoding finished handling messaging");
             handle_tx_messaging_althea(txs, ts.clone())
         }
-        (_, Ok(ChainStatus::Moving { block_height })) => {
+        (Err(e), Ok(ChainStatus::Moving { block_height })) => {
+            info!("Checking for timeout, got {:?}", e);
             // now we check if maybe the tx has timed out
             if let Some(timeout_block) = ts.timeout_block {
                 if block_height > timeout_block {
-                    error!(
-                        "Transaction {:#066x} has timed out, payment failed!",
-                        ts.payment.txid
-                    );
+                    error!("Transaction {} has timed out, payment failed!", txhash);
                     Some((ts, false))
                 } else {
                     None
@@ -534,8 +545,8 @@ fn handle_tx_messaging_althea(
         // we were successfully paid
         (true, false) => {
             info!(
-                "payment {:#066x} from {} for {} {} successfully validated!",
-                ts.payment.txid,
+                "payment {} from {} for {} {} successfully validated!",
+                althea_l1_txid_to_string(ts.payment.txid),
                 reciver_address,
                 amount,
                 denom.clone().expect("Already verified existance").denom
@@ -554,8 +565,8 @@ fn handle_tx_messaging_althea(
         // we successfully paid someone
         (false, true) => {
             info!(
-                "payment {:#066x} from {} for {} {} successfully sent!",
-                ts.payment.txid,
+                "payment {} from {} for {} {} successfully sent!",
+                althea_l1_txid_to_string(ts.payment.txid),
                 reciver_address,
                 amount,
                 denom.clone().expect("Already verified existance").denom
@@ -854,11 +865,18 @@ fn print_txids(list: &HashSet<ToValidate>) -> String {
     output
 }
 
+/// Uses the correct format string to convert a Uint256 to a hex string
+/// for Alhtea L1 txids
+pub fn althea_l1_txid_to_string(txid: Uint256) -> String {
+    format!("{:64X}", txid)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::usage_tracker::tests::test::random_identity;
     use actix_async::System;
+    use num_traits::Num;
 
     fn generate_fake_payment() -> ToValidate {
         let amount: u128 = rand::random();
@@ -874,6 +892,14 @@ mod tests {
             received: Instant::now(),
             timeout_block: None,
         }
+    }
+
+    #[test]
+    fn test_althea_chain_hex_conversion() {
+        let txid = "0390A2AAD322E4232A3E795B9A418D03805ADDCF51E0E806BB563E837F758E79";
+        let txid_num = Uint256::from_str_radix(txid, 16).unwrap();
+        let txid_str = althea_l1_txid_to_string(txid_num);
+        assert_eq!(txid_str, txid)
     }
 
     /// tests the remove behaivor of payment validator, ensuring that transactions

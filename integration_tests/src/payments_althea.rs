@@ -3,7 +3,11 @@ use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_althea_grpc, get_default_settings, populate_routers_eth, print_althea_balances, register_all_namespaces_to_exit, register_erc20_usdc_token, send_althea_tokens, test_all_internet_connectivity, test_reach_all, test_routes, validate_debt_entry, TEST_PAY_THRESH
+    add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_althea_grpc,
+    get_default_settings, populate_routers_eth, print_althea_balances,
+    register_all_namespaces_to_exit, register_erc20_usdc_token, send_althea_tokens,
+    test_all_internet_connectivity, test_reach_all, test_routes, validate_debt_entry,
+    wait_for_proposals_to_execute, TEST_PAY_THRESH,
 };
 use althea_types::{Denom, SystemChain, ALTHEA_PREFIX};
 use deep_space::{Address as AltheaAddress, Contact};
@@ -15,7 +19,8 @@ use settings::exit::RitaExitSettingsStruct;
 use std::thread;
 use std::time::Duration;
 
-const USDC_TO_WEI_DECIMAL: u64 = 1_000_000_000_000u64;
+/// 10c in wei if 1*10^18 wei = $1
+const USDC_TO_WEI_DECIMAL: u64 = 100_000_000_000_000_000u64;
 
 /// This is one of the validator private keys grabbed from setup-validators.sh
 const ALTHEA_EVM_PRIV_BYTES: &str =
@@ -83,6 +88,15 @@ pub async fn run_althea_payments_test_scenario() {
     test_all_internet_connectivity(namespaces.clone());
     info!("Successfully registered all clients");
 
+    // make sure the proposal we asynce'd at the start of test is done
+    let althea_contact = Contact::new(
+        &get_althea_grpc(),
+        ALTHEA_CONTACT_TIMEOUT,
+        ALTHEA_CHAIN_PREFIX,
+    )
+    .unwrap();
+    wait_for_proposals_to_execute(&althea_contact).await;
+
     let from_node: Option<Namespace> = namespaces.get_namespace(1);
     let forward_node: Option<Namespace> = namespaces.get_namespace(3);
     let end_node: Option<Namespace> = namespaces.get_namespace(6);
@@ -103,24 +117,12 @@ pub async fn run_althea_payments_test_scenario() {
     let balances = print_althea_balances(to_topup, "aalthea".to_string()).await;
     info!("Althea Balances are {:?}", balances);
 
-    // make sure the proposal we asynce'd at the start of test is done
-    let althea_contact = Contact::new(
-        &get_althea_grpc(),
-        ALTHEA_CONTACT_TIMEOUT,
-        ALTHEA_CHAIN_PREFIX,
-    ).unwrap();
-    let proposals = althea_contact
-        .get_governance_proposals_in_voting_period()
-        .await
-        .unwrap();
-    assert!(proposals.proposals.is_empty());
-
     // generate some traffic to trigger payments
     info!("Trying to generate traffic");
     generate_traffic(
         from_node.clone().unwrap(),
         Some(end_node.clone().unwrap()),
-        "1.2G".to_string(),
+        "10G".to_string(),
     );
 
     validate_debt_entry(

@@ -68,14 +68,19 @@ impl PaymentController {
         new_outgoing_payments: Vec<UnpublishedPaymentTx>,
         previously_sent_payments: HashMap<Identity, HashSet<PaymentTx>>,
     ) -> Vec<ToValidate> {
+        // move these new payments into the outgoing queue
+        self.outgoing_queue.extend(new_outgoing_payments);
+
+        // nothing to do this round
+        if self.outgoing_queue.is_empty() && self.resend_queue.is_empty() {
+            return Vec::new();
+        }
+
         info!(
             "Ticking payment controller with {} payments and {} resends",
             self.outgoing_queue.len(),
             self.resend_queue.len()
         );
-
-        // move these new payments into the outgoing queue
-        self.outgoing_queue.extend(new_outgoing_payments);
 
         let mut payments_sent_this_round = Vec::new();
 
@@ -220,6 +225,7 @@ async fn make_althea_payment(
 
     let cosmos_node_grpc = payment_settings.althea_grpc_list[0].clone();
 
+    info!("We are sending an Althea payment of {} wei", pmt.amount);
     // Payments are tracked by debt keeper in wei (1*10^18) = $1 this is becuase
     // on xdai the native token is DAI which is pegged to the dollar and it uses 18 decimals
     // of precision. We need to convert this to the correct denomination for USDC on Althea L1
@@ -232,6 +238,7 @@ async fn make_althea_payment(
         },
         payment_denom.clone(),
     );
+    info!("We are sending an Althea payment of {} uUSDC", pmt.amount);
 
     // Create a contact object and get our balance
     let althea_contact = Contact::new(
@@ -308,6 +315,10 @@ async fn make_althea_payment(
     };
 
     // setup tx hash
+    info!(
+        "Making payment with txid {} that will be converted to hex",
+        transaction.txhash
+    );
     let pmt = pmt.publish(Uint256::from_str_radix(&transaction.txhash, 16).unwrap());
 
     let retry = send_make_payment_endpoints(
