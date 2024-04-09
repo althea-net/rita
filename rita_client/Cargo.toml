@@ -21,7 +21,7 @@ althea_kernel_interface = { path = "../althea_kernel_interface" }
 antenna_forwarding_client = { path = "../antenna_forwarding_client" }
 settings = { path = "../settings" }
 sha3 = "0.10"
-lettre = "0.10"
+lettre = "0.11"
 rand = "0.8.0"
 phonenumber = "0.3"
 babel_monitor = { path = "../babel_monitor" }
