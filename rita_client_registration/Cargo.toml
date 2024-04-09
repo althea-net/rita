@@ -14,7 +14,7 @@ clarity = "1.2"
 phonenumber = "0.3"
 awc = "3.1"
 web30 = "1.0"
-tokio = { version = "1.21", features = ["macros", "time"] }
+tokio = { version = "1.37", features = ["macros", "time"] }
 actix = "0.13"
 futures = { version = "0.3", features = ["compat"] }
 num-traits = "0.2"
