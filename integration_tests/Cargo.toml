@@ -25,7 +25,7 @@ rita_client_registration = { path = "../rita_client_registration" }
 rita_db_migration = { path = "../rita_db_migration" }
 ctrlc = { version = "3.2.1", features = ["termination"] }
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
-diesel_migrations = { version = "1.4", features = ["postgres"] }
+diesel_migrations = { version = "2.1", features = ["postgres"] }
 awc = {workspace = true}
 actix-rt = "2.8"
 deep_space = {workspace = true}
