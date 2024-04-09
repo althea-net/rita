@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 ipnetwork = "0.20"
-env_logger = "0.10"
+env_logger = "0.11"
 log = "0.4"
 docopt = "1.1"
 actix-async = { package = "actix", version = "0.13" }
