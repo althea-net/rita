@@ -67,7 +67,12 @@ pub const NODE_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(7, 7, 7, 2));
 pub const STAKING_TOKEN: &str = "aalthea";
 pub const MIN_GLOBAL_FEE_AMOUNT: u128 = 10;
 pub const TOTAL_TIMEOUT: Duration = Duration::from_secs(300);
-pub const DEBT_ACCURACY_THRES: u8 = 15;
+/// The maximum difference between routers in the debts test, keep in mind that
+/// due to race conditions this has to be decently large to avoid false positives
+/// as debts will only be exactly the same once the speedtest has completed and
+/// both sides have had time to handle their accounting loops, you'll observe that
+/// accuracy is the worst immediately following the iperf3 and then trends to 100% accurate
+pub const DEBT_ACCURACY_THRES: u8 = 20;
 pub const ETH_NODE: &str = "http://localhost:8545";
 pub const MINER_PRIVATE_KEY: &str =
     "0x34d97aaf58b1a81d3ed3068a870d8093c6341cf5d1ef7e6efa03fe7f7fc2c3a8";

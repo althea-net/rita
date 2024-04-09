@@ -278,7 +278,7 @@ pub fn validate_debt_increase(
     let actual_debt_to = debt_entry.payment_details.debt - existing_debt_entry.payment_details.debt;
     let expected_debt_to = bytes_per_gb * data_sent.into() * weight.into() * Int256::from(-1i32);
     info!(
-        "debt now is {:?}, exiting is {:?}",
+        "debt now is {:?}, expected is {:?}",
         debt_entry.payment_details.debt, existing_debt_entry.payment_details.debt
     );
     // Expected and actual debt should be within 75% accurate
