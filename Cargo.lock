@@ -1084,9 +1084,20 @@ version = "1.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b28135ecf6b7d446b43e27e225622a038cc4e2930a1022f51cdb97ada19b8e4d"
 dependencies = [
- "bitflags 1.3.2",
  "byteorder",
- "diesel_derives",
+ "diesel_derives 1.4.1",
+]
+
+[[package]]
+name = "diesel"
+version = "2.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03fc05c17098f21b89bc7d98fe1dd3cce2c11c2ad8e145f2a44fe08ed28eb559"
+dependencies = [
+ "bitflags 2.5.0",
+ "byteorder",
+ "diesel_derives 2.1.3",
+ "itoa",
  "pq-sys",
  "r2d2",
 ]
@@ -1103,6 +1114,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "diesel_derives"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d02eecb814ae714ffe61ddc2db2dd03e6c49a42e269b5001355500d431cce0c"
+dependencies = [
+ "diesel_table_macro_syntax",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.58",
+]
+
+[[package]]
 name = "diesel_migrations"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1110,6 +1133,15 @@ checksum = "bf3cde8413353dc7f5d72fa8ce0b99a560a359d2c5ef1e5817ca731cd9008f4c"
 dependencies = [
  "migrations_internals",
  "migrations_macros",
+]
+
+[[package]]
+name = "diesel_table_macro_syntax"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc5557efc453706fed5e4fa85006fe9817c224c3f480a34c7e5959fd700921c5"
+dependencies = [
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -1695,7 +1727,7 @@ dependencies = [
  "clu",
  "ctrlc",
  "deep_space",
- "diesel",
+ "diesel 2.1.5",
  "diesel_migrations",
  "docopt",
  "env_logger",
@@ -1984,7 +2016,7 @@ version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b4fc84e4af020b837029e017966f86a1c2d5e83e64b589963d5047525995860"
 dependencies = [
- "diesel",
+ "diesel 1.4.8",
 ]
 
 [[package]]
@@ -2776,7 +2808,7 @@ dependencies = [
  "clu",
  "compressed_log",
  "ctrlc",
- "diesel",
+ "diesel 2.1.5",
  "docopt",
  "env_logger",
  "flate2",
@@ -2906,7 +2938,7 @@ version = "0.1.0"
 dependencies = [
  "althea_types",
  "clarity",
- "diesel",
+ "diesel 2.1.5",
  "dotenv",
  "log",
  "r2d2",
