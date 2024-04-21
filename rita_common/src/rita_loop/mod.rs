@@ -52,6 +52,21 @@ pub fn get_web3_server() -> String {
     node_list[val].clone()
 }
 
+/// Checks the list of full nodes, panics if none exist, if there exist
+/// one or more a random entry from the list is returned in an attempt
+/// to load balance across fullnodes
+pub fn get_altheal1_server() -> String {
+    let common = settings::get_rita_common();
+    if common.payment.althea_grpc_list.is_empty() {
+        panic!("no full nodes configured!");
+    }
+    let node_list = common.payment.althea_grpc_list;
+    let mut rng = thread_rng();
+    let val = rng.gen_range(0..node_list.len());
+
+    node_list[val].clone()
+}
+
 pub fn start_core_rita_endpoints(workers: usize) {
     // Rita hello function
 

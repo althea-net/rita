@@ -3,11 +3,20 @@
 //! balance and nonce as well as computing more complicated things like the closing and
 //! payment threshold based on gas prices.
 
+use crate::debt_keeper::normalize_payment_amount;
 use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
+use crate::rita_loop::get_altheal1_server;
 use crate::rita_loop::get_web3_server;
+use althea_types::Denom;
+use althea_types::SystemChain;
+use althea_types::ALTHEA_PREFIX;
 use clarity::Address;
+use deep_space::Address as CosmosAddress;
+use deep_space::Contact;
 use num256::Int256;
 use num256::Uint256;
+use settings::DEBT_KEEPER_DENOM;
+use settings::DEBT_KEEPER_DENOM_DECIMAL;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -106,12 +115,30 @@ pub fn set_oracle_last_updated(update: Instant) {
 pub async fn update() {
     let payment_settings = settings::get_rita_common().payment;
     let our_address = payment_settings.eth_address.expect("No address!");
+    let our_althea_address = settings::get_rita_common()
+        .get_identity()
+        .unwrap()
+        .get_althea_address();
+    // on ETH based chains we are always using the native token ETH or XDAI, but on Althea L1
+    // any one of many tokens can be used so we must specify the token that represents our
+    // 'router balance'. This should maybe be a sum of all accepted denoms to better handle cases
+    // where routers have balances in multiple stables
+    let althea_denom = payment_settings.althea_l1_payment_denom;
 
-    let full_node = get_web3_server();
-    let web3 = Web3::new(&full_node, ORACLE_TIMEOUT);
-
-    info!("About to make web3 requests to {}", full_node);
-    update_blockchain_info(our_address, web3, full_node).await;
+    match payment_settings.system_chain {
+        SystemChain::Ethereum | SystemChain::Sepolia | SystemChain::Xdai => {
+            let full_node = get_web3_server();
+            info!("About to make web3 requests to {}", full_node);
+            let web3 = Web3::new(&full_node, ORACLE_TIMEOUT);
+            update_blockchain_info_gnosis(our_address, web3, full_node).await;
+        }
+        SystemChain::AltheaL1 => {
+            let full_node = get_altheal1_server();
+            let contact = Contact::new(&full_node, ORACLE_TIMEOUT, ALTHEA_PREFIX).unwrap();
+            update_blockchain_info_althea(our_althea_address, contact, althea_denom, full_node)
+                .await;
+        }
+    }
 }
 
 /// The current amount of time before we consider that the blockchain oracle
@@ -137,7 +164,57 @@ pub fn potential_payment_issues_detected() -> bool {
     false
 }
 
-async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: String) {
+async fn update_blockchain_info_althea(
+    our_address: CosmosAddress,
+    contact: Contact,
+    denom: Denom,
+    full_node: String,
+) {
+    let latest_block = contact.get_chain_status().await;
+    match latest_block {
+        Ok(deep_space::client::ChainStatus::Moving { block_height }) => {
+            let latest_block = block_height.into();
+            if let Some(last_seen_block) = get_oracle_last_seen_block() {
+                if latest_block < last_seen_block {
+                    warn!(
+                        "Got stale blockchain oracle data! {} < {}",
+                        latest_block, last_seen_block
+                    );
+                    return;
+                }
+            }
+            set_oracle_last_seen_block(latest_block);
+            set_oracle_last_updated(Instant::now());
+        }
+        Ok(_) => {
+            warn!("Failed to get latest block number and balance for Althea L1");
+            return;
+        }
+        Err(e) => {
+            warn!("Failed to get latest block number with {:?}", e);
+            return;
+        }
+    }
+
+    let balance = contact.get_balance(our_address, denom.denom.clone()).await;
+    match balance {
+        Ok(Some(balance)) => update_balance(
+            &full_node,
+            normalize_payment_amount(
+                balance.amount,
+                denom,
+                Denom {
+                    denom: DEBT_KEEPER_DENOM.to_string(),
+                    decimal: DEBT_KEEPER_DENOM_DECIMAL,
+                },
+            ),
+        ),
+        Ok(None) => update_balance(&full_node, 0u32.into()),
+        Err(e) => warn!("Failed to update balance with {:?}", e),
+    }
+}
+
+async fn update_blockchain_info_gnosis(our_address: Address, web3: Web3, full_node: String) {
     // all web30 functions check if the node is syncing, but sometimes the nodes lie about
     // syncing, this block checks the actual block number we've last seen and if we get a lower
     // value returns early, refusing to update our state with stale data.
@@ -192,5 +269,33 @@ pub fn low_balance() -> bool {
     match balance {
         Some(val) => val < balance_warning_level,
         None => false,
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_update_blockchain_info() {
+        let runner = actix_async::System::new();
+        let contact = Contact::new(
+            "https://rpc.althea.zone:9090",
+            Duration::from_secs(30),
+            "althea",
+        )
+        .unwrap();
+        runner.block_on(async move {
+            update_blockchain_info_althea(
+                "althea19983m402agvayhr8eg9d7wtyf30935ysucqqax"
+                    .parse()
+                    .unwrap(),
+                contact,
+                Denom {
+                    denom: "aalthea".to_string(),
+                    decimal: 18,
+                },
+                "https://rpc.althea.zone:9090".to_string(),
+            ).await;
+        });
     }
 }
