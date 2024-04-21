@@ -78,7 +78,7 @@ fn default_enable_enforcement() -> bool {
 }
 
 fn default_node_grpc() -> Vec<String> {
-    vec!["http://althea.zone:9090".to_string()]
+    vec!["https://althea.zone:9090".to_string()]
 }
 
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and

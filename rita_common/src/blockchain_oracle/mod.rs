@@ -295,7 +295,8 @@ mod tests {
                     decimal: 18,
                 },
                 "https://rpc.althea.zone:9090".to_string(),
-            ).await;
+            )
+            .await;
         });
     }
 }
