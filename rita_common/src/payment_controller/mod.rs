@@ -177,7 +177,7 @@ async fn make_payment(
     let system_chain = payment_settings.system_chain;
 
     match system_chain {
-        SystemChain::Althea => {
+        SystemChain::AltheaL1 => {
             make_althea_payment(
                 pmt,
                 payment_settings,
@@ -186,7 +186,7 @@ async fn make_payment(
             )
             .await
         }
-        SystemChain::Xdai | SystemChain::Rinkeby | SystemChain::Ethereum => {
+        SystemChain::Xdai | SystemChain::Sepolia | SystemChain::Ethereum => {
             make_xdai_payment(
                 pmt,
                 payment_settings,

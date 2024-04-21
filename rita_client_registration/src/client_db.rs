@@ -983,7 +983,7 @@ mod tests {
 
         let res = parse_exit_identity_abi(to_evm_words(bytes)).unwrap();
         assert!(res.allowed_regions.contains(&Regions::Colombia));
-        assert!(res.payment_types.contains(&SystemChain::Rinkeby));
+        assert!(res.payment_types.contains(&SystemChain::Sepolia));
         assert_eq!(res.allowed_regions.len(), 1);
         assert_eq!(res.payment_types.len(), 1);
 

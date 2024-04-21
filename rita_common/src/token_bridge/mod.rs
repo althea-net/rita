@@ -87,9 +87,9 @@ pub async fn tick_token_bridge() {
 
     match system_chain {
         SystemChain::Xdai => xdai_bridge(core).await,
-        SystemChain::Althea => {}
+        SystemChain::AltheaL1 => {}
         SystemChain::Ethereum => {}
-        SystemChain::Rinkeby => {}
+        SystemChain::Sepolia => {}
     }
 }
 

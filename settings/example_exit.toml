@@ -25,7 +25,7 @@ peer_interfaces = []
 manual_peers = []
 external_nic = "veth-5-8"
 default_route = []
-payment_chains = ["Ethereum", "Althea"]
+payment_chains = ["Ethereum", "AltheaL1"]
 
 [dao]
 dao_enforcement = false

@@ -80,7 +80,7 @@ pub async fn validate_contract_exit_functionality(db_addr: Address) {
         },
         payment_types: {
             let mut ret = HashSet::new();
-            ret.insert(SystemChain::Althea);
+            ret.insert(SystemChain::AltheaL1);
             ret.insert(SystemChain::Ethereum);
 
             ret

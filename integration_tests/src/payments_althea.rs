@@ -153,8 +153,8 @@ fn althea_payments_map(
         decimal: 1_000_000u64,
     };
 
-    c_set.payment.system_chain = SystemChain::Althea;
-    exit_set.payment.system_chain = SystemChain::Althea;
+    c_set.payment.system_chain = SystemChain::AltheaL1;
+    exit_set.payment.system_chain = SystemChain::AltheaL1;
     // set pay thres to a smaller value
     c_set.payment.payment_threshold = TEST_PAY_THRESH.into();
     exit_set.payment.payment_threshold = TEST_PAY_THRESH.into();

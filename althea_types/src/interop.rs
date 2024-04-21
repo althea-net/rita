@@ -155,19 +155,19 @@ pub struct Denom {
 #[derive(Default, Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
 pub enum SystemChain {
     Ethereum,
-    Rinkeby,
+    Sepolia,
     #[default]
     Xdai,
-    Althea,
+    AltheaL1,
 }
 
 /// Interal mapping of a SystemChain to an integer, used to store data in the db
 impl From<SystemChain> for u8 {
     fn from(value: SystemChain) -> Self {
         match value {
-            SystemChain::Althea => 1,
+            SystemChain::AltheaL1 => 1,
             SystemChain::Ethereum => 2,
-            SystemChain::Rinkeby => 3,
+            SystemChain::Sepolia => 3,
             SystemChain::Xdai => 4,
         }
     }
@@ -176,12 +176,12 @@ impl From<SystemChain> for u8 {
 impl From<u8> for SystemChain {
     fn from(value: u8) -> Self {
         match value {
-            1 => SystemChain::Althea,
+            1 => SystemChain::AltheaL1,
             2 => SystemChain::Ethereum,
-            3 => SystemChain::Rinkeby,
+            3 => SystemChain::Sepolia,
             4 => SystemChain::Xdai,
             // Undefined, return Althea chain by default
-            _ => SystemChain::Althea,
+            _ => SystemChain::AltheaL1,
         }
     }
 }
@@ -190,9 +190,9 @@ impl Display for SystemChain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SystemChain::Ethereum => write!(f, "Ethereum"),
-            SystemChain::Rinkeby => write!(f, "Rinkeby"),
+            SystemChain::Sepolia => write!(f, "Rinkeby"),
             SystemChain::Xdai => write!(f, "Xdai"),
-            SystemChain::Althea => write!(f, "Althea"),
+            SystemChain::AltheaL1 => write!(f, "Althea"),
         }
     }
 }
@@ -206,14 +206,21 @@ impl FromStr for SystemChain {
     fn from_str(s: &str) -> Result<SystemChain, ()> {
         match s {
             "Ethereum" => Ok(SystemChain::Ethereum),
-            "Rinkeby" => Ok(SystemChain::Rinkeby),
+            "Rinkeby" => Ok(SystemChain::Sepolia),
+            "Sepolia" => Ok(SystemChain::Sepolia),
+            "Testnet" => Ok(SystemChain::Sepolia),
+            "Test" => Ok(SystemChain::Sepolia),
             "Xdai" => Ok(SystemChain::Xdai),
             "xdai" => Ok(SystemChain::Xdai),
             "gnosis" => Ok(SystemChain::Xdai),
             "gnosischain" => Ok(SystemChain::Xdai),
-            "Althea" => Ok(SystemChain::Althea),
-            "althea" => Ok(SystemChain::Althea),
-            "altheachain" => Ok(SystemChain::Althea),
+            "Althea" => Ok(SystemChain::AltheaL1),
+            "althea" => Ok(SystemChain::AltheaL1),
+            "altheachain" => Ok(SystemChain::AltheaL1),
+            "GnosisChain" => Ok(SystemChain::Xdai),
+            "Gnosis" => Ok(SystemChain::Xdai),
+            "AltheaL1" => Ok(SystemChain::AltheaL1),
+            "altheal1" => Ok(SystemChain::AltheaL1),
             _ => Err(()),
         }
     }
