@@ -58,7 +58,7 @@ async fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResp
         (SystemChain::Ethereum, SystemChain::Ethereum) => {
             eth_compatible_withdraw(address, amount).await
         }
-        (SystemChain::Rinkeby, SystemChain::Rinkeby) => {
+        (SystemChain::Sepolia, SystemChain::Sepolia) => {
             eth_compatible_withdraw(address, amount).await
         }
         (SystemChain::Xdai, SystemChain::Xdai) => eth_compatible_withdraw(address, amount).await,

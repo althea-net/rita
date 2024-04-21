@@ -338,7 +338,7 @@ impl PaymentValidator {
             else if elapsed.is_some()
                 && from_us
                 && elapsed.unwrap() > ETH_PAYMENT_SEND_TIMEOUT
-                && chain != SystemChain::Althea
+                && chain != SystemChain::AltheaL1
             {
                 error!(
                     "Outgoing transaction {:#066x} has timed out, payment failed!",
@@ -400,8 +400,8 @@ impl PaymentValidator {
 /// This wrapper function handles validating a transaction on either Althea or Xdai based on the system chain
 async fn validate_transaction(ts: ToValidate, chain: SystemChain) -> Option<(ToValidate, bool)> {
     match chain {
-        SystemChain::Althea => handle_althea_tx_checking(ts.clone()).await,
-        SystemChain::Xdai | SystemChain::Ethereum | SystemChain::Rinkeby => {
+        SystemChain::AltheaL1 => handle_althea_tx_checking(ts.clone()).await,
+        SystemChain::Xdai | SystemChain::Ethereum | SystemChain::Sepolia => {
             handle_xdai_tx_checking(ts.clone()).await
         }
     }

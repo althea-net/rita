@@ -3,7 +3,10 @@ use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::{
-    deploy_contracts, generate_traffic, get_althea_grpc, get_default_settings, populate_routers_eth, print_althea_balances, register_all_namespaces_to_exit, register_erc20_usdc_token, send_althea_tokens, test_all_internet_connectivity, test_reach_all, test_routes, validate_debt_entry, wait_for_proposals_to_execute, TEST_PAY_THRESH
+    deploy_contracts, generate_traffic, get_althea_grpc, get_default_settings,
+    populate_routers_eth, print_althea_balances, register_all_namespaces_to_exit,
+    register_erc20_usdc_token, send_althea_tokens, test_all_internet_connectivity, test_reach_all,
+    test_routes, validate_debt_entry, wait_for_proposals_to_execute, TEST_PAY_THRESH,
 };
 use althea_types::{Denom, SystemChain, ALTHEA_PREFIX};
 use deep_space::{Address as AltheaAddress, Contact};
@@ -161,8 +164,8 @@ fn althea_payments_map(
         decimal: 1_000_000u64,
     };
 
-    c_set.payment.system_chain = SystemChain::Althea;
-    exit_set.payment.system_chain = SystemChain::Althea;
+    c_set.payment.system_chain = SystemChain::AltheaL1;
+    exit_set.payment.system_chain = SystemChain::AltheaL1;
     // set pay thres to a smaller value
     c_set.payment.payment_threshold = TEST_PAY_THRESH.into();
     exit_set.payment.payment_threshold = TEST_PAY_THRESH.into();

@@ -121,19 +121,19 @@ pub struct Denom {
 #[derive(Default, Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
 pub enum SystemChain {
     Ethereum,
-    Rinkeby,
+    Sepolia,
     #[default]
     Xdai,
-    Althea,
+    AltheaL1,
 }
 
 impl Display for SystemChain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SystemChain::Ethereum => write!(f, "Ethereum"),
-            SystemChain::Rinkeby => write!(f, "Rinkeby"),
+            SystemChain::Sepolia => write!(f, "Rinkeby"),
             SystemChain::Xdai => write!(f, "Xdai"),
-            SystemChain::Althea => write!(f, "Althea"),
+            SystemChain::AltheaL1 => write!(f, "Althea"),
         }
     }
 }
@@ -147,9 +147,15 @@ impl FromStr for SystemChain {
     fn from_str(s: &str) -> Result<SystemChain, ()> {
         match s {
             "Ethereum" => Ok(SystemChain::Ethereum),
-            "Rinkeby" => Ok(SystemChain::Rinkeby),
+            "Rinkeby" => Ok(SystemChain::Sepolia),
+            "Sepolia" => Ok(SystemChain::Sepolia),
+            "Testnet" => Ok(SystemChain::Sepolia),
+            "Test" => Ok(SystemChain::Sepolia),
             "Xdai" => Ok(SystemChain::Xdai),
-            "Althea" => Ok(SystemChain::Althea),
+            "GnosisChain" => Ok(SystemChain::Xdai),
+            "Gnosis" => Ok(SystemChain::Xdai),
+            "Althea" => Ok(SystemChain::AltheaL1),
+            "AltheaL1" => Ok(SystemChain::AltheaL1),
             _ => Err(()),
         }
     }

@@ -45,28 +45,26 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             set_oracle_net_version(1);
             payment.system_chain = SystemChain::Ethereum;
             payment.withdraw_chain = SystemChain::Ethereum;
-            // reset balance so that things take effect immediatley in the UI
-            set_oracle_balance(Some(0u32.into()));
         }
         SystemChain::Xdai => {
             payment.eth_node_list = vec!["https://dai.althea.org/".to_string()];
             set_oracle_net_version(100);
             payment.system_chain = SystemChain::Xdai;
             payment.withdraw_chain = SystemChain::Xdai;
-            // reset balance so that things take effect immediatley in the UI
-            set_oracle_balance(Some(0u32.into()));
         }
-        SystemChain::Rinkeby => {
-            payment.eth_node_list =
-                vec!["https://rinkeby.infura.io/v3/174d2ebf288a452fab8a8f90eab57be7".to_string()];
-            set_oracle_net_version(4);
-            payment.system_chain = SystemChain::Rinkeby;
-            payment.withdraw_chain = SystemChain::Rinkeby;
-            // reset balance so that things take effect immediatley in the UI
-            set_oracle_balance(Some(0u32.into()));
+        SystemChain::Sepolia => {
+            payment.eth_node_list = vec!["https://ethereum-sepolia-rpc.publicnode.com".to_string()];
+            set_oracle_net_version(11155111);
+            payment.system_chain = SystemChain::Sepolia;
+            payment.withdraw_chain = SystemChain::Sepolia;
         }
-        SystemChain::Althea => {
-            todo!();
+        SystemChain::AltheaL1 => {
+            payment.eth_node_list = vec!["https://rpc.althea.zone:8545".to_string()];
+            set_oracle_net_version(11155111);
+            payment.system_chain = SystemChain::AltheaL1;
+            payment.withdraw_chain = SystemChain::AltheaL1;
         }
     }
+    // reset balance so that things take effect immediatley in the UI
+    set_oracle_balance(Some(0u32.into()));
 }

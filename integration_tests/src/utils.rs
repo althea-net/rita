@@ -430,7 +430,7 @@ pub fn get_default_settings(
 
 pub fn althea_system_chain_client(settings: RitaClientSettings) -> RitaClientSettings {
     let mut settings = settings;
-    settings.payment.system_chain = SystemChain::Althea;
+    settings.payment.system_chain = SystemChain::AltheaL1;
     settings.payment.payment_threshold = TEST_PAY_THRESH.into();
     let denom = Denom {
         denom: "uUSDC".to_string(),
@@ -443,7 +443,7 @@ pub fn althea_system_chain_client(settings: RitaClientSettings) -> RitaClientSet
 
 pub fn althea_system_chain_exit(settings: RitaExitSettingsStruct) -> RitaExitSettingsStruct {
     let mut settings = settings;
-    settings.payment.system_chain = SystemChain::Althea;
+    settings.payment.system_chain = SystemChain::AltheaL1;
 
     // set pay thres to a smaller value
     settings.payment.payment_threshold = TEST_PAY_THRESH.into();
