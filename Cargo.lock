@@ -332,6 +332,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "althea_proto"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f81e1401a23d8dac767aef9ec4685a5a5c06b7334ce2ee97b182837a832b68e"
+dependencies = [
+ "cosmos-sdk-proto-althea",
+ "prost",
+ "prost-types",
+ "tonic",
+]
+
+[[package]]
 name = "althea_rs"
 version = "0.1.11"
 
@@ -1025,11 +1037,11 @@ dependencies = [
 
 [[package]]
 name = "deep_space"
-version = "2.24.0"
+version = "2.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70abb3511818fb33edb752315e7b8b5260513c062b32a586b788a9be3452a0da"
+checksum = "96c702be76d65f74ea018a5fba52d78712e7fec9e2a5915261452bab5c097c00"
 dependencies = [
- "althea_proto",
+ "althea_proto 0.7.0",
  "base64 0.21.7",
  "bech32",
  "bytes",
@@ -1687,7 +1699,7 @@ dependencies = [
  "actix-rt",
  "actix-web",
  "althea_kernel_interface",
- "althea_proto",
+ "althea_proto 0.6.1",
  "althea_types",
  "awc",
  "babel_monitor",
@@ -2867,7 +2879,7 @@ dependencies = [
  "actix-web",
  "actix-web-httpauth",
  "althea_kernel_interface",
- "althea_proto",
+ "althea_proto 0.6.1",
  "althea_types",
  "arrayvec",
  "auto-bridge",
