@@ -6,16 +6,13 @@
 use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use clarity::Address;
-use futures::future::join4;
 use num256::Int256;
 use num256::Uint256;
-use settings::payment::PaymentSettings;
-use web30::client::Web3;
-
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
+use web30::client::Web3;
 
 /// This is the value pay_threshold is multiplied by to determine the close threshold
 /// the close pay_threshold is when one router will pay another, the close_threshold is when
@@ -37,26 +34,12 @@ lazy_static! {
 }
 
 pub struct BlockchainOracle {
-    pub nonce: Uint256,
-    pub net_version: u64,
-    /// latest gas price value. Note that due to routers taking different times to run a loop, different routers
-    ///  may have different values for this field. Post EIP1559, the max price change per block is 12.5% of the previous block
-    pub gas_price: Uint256,
     /// The latest balance for this router, none if not yet set
     pub balance: Option<Uint256>,
     /// The last seen block, if this goes backwards we will
     /// ignore the update, none if not yet set
     pub last_seen_block: Option<Uint256>,
     pub last_updated: Option<Instant>,
-}
-
-// Set Xdai default
-fn default_net_version() -> u64 {
-    if cfg!(feature = "integration_test") {
-        417834u64
-    } else {
-        100u64
-    }
 }
 
 /// payment_threshold : This is the amount at which a router will make a payment. Below this value, the router will not may a payment since
@@ -84,10 +67,6 @@ pub fn calculate_close_thresh() -> Int256 {
 impl BlockchainOracle {
     pub fn new() -> Self {
         BlockchainOracle {
-            nonce: 0u64.into(),
-            //xdai by default
-            net_version: default_net_version(),
-            gas_price: 0u32.into(),
             balance: None,
             last_seen_block: None,
             last_updated: None,
@@ -99,19 +78,6 @@ impl Default for BlockchainOracle {
     fn default() -> BlockchainOracle {
         BlockchainOracle::new()
     }
-}
-
-// Oracle Getters
-pub fn get_oracle_latest_gas_price() -> Uint256 {
-    ORACLE.read().unwrap().gas_price
-}
-
-pub fn get_oracle_nonce() -> Uint256 {
-    ORACLE.read().unwrap().nonce
-}
-
-pub fn get_oracle_net_version() -> u64 {
-    ORACLE.read().unwrap().net_version
 }
 
 pub fn get_oracle_balance() -> Option<Uint256> {
@@ -126,18 +92,6 @@ pub fn get_oracle_last_updated() -> Option<Instant> {
     ORACLE.read().unwrap().last_updated
 }
 
-// Oracle setters
-pub fn set_oracle_gas_price(price: Uint256) {
-    ORACLE.write().unwrap().gas_price = price;
-}
-
-pub fn set_oracle_nonce(n: Uint256) {
-    ORACLE.write().unwrap().nonce = n;
-}
-
-pub fn set_oracle_net_version(net_v: u64) {
-    ORACLE.write().unwrap().net_version = net_v;
-}
 pub fn set_oracle_balance(new_balance: Option<Uint256>) {
     ORACLE.write().unwrap().balance = new_balance
 }
@@ -208,34 +162,11 @@ async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: Str
         }
     }
 
-    let balance = web3.eth_get_balance(our_address);
-    let nonce = web3.eth_get_transaction_count(our_address);
-    let net_version = web3.net_version();
-    let gas_price = web3.eth_gas_price();
-    let (balance, nonce, net_version, gas_price) =
-        join4(balance, nonce, net_version, gas_price).await;
-
-    let mut settings = settings::get_rita_common();
-
+    let balance = web3.eth_get_balance(our_address).await;
     match balance {
         Ok(balance) => update_balance(&full_node, balance),
         Err(e) => warn!("Failed to update balance with {:?}", e),
     }
-    match gas_price {
-        Ok(gas_price) => update_gas_price(&full_node, gas_price, &mut settings.payment),
-        Err(e) => warn!("Failed to update gas price with {:?}", e),
-    }
-    match net_version {
-        Ok(net_version) => {
-            check_net_version(&full_node, ORACLE.read().unwrap().net_version, net_version)
-        }
-        Err(e) => warn!("Failed to update net_version with {:?}", e),
-    }
-    match nonce {
-        Ok(nonce) => update_nonce(&full_node, nonce, &mut ORACLE.write().unwrap().nonce),
-        Err(e) => warn!("Failed to update nonce with {:?}", e),
-    }
-    settings::set_rita_common(settings);
 }
 
 /// Gets the balance for the provided eth address and updates it
@@ -251,76 +182,6 @@ fn update_balance(full_node: &str, new_balance: Uint256) {
     set_oracle_balance(Some(value));
 }
 
-/// Updates the net_version in our global setting variable, this function
-/// specifically runs into some security issues, a hostile node could provide
-/// us with the wrong net_version, hoping to get a signed transaction good for
-/// a different network than the one we are actually using. For example an address
-/// that contains both real eth and test eth may be tricked into singing a transaction
-/// for real eth while operating on the testnet. Because of this we have warnings behavior
-fn check_net_version(full_node: &str, net_version: u64, new_net_version: u64) {
-    info!(
-        "Got response from {} for net_version request {:?}",
-        full_node, new_net_version
-    );
-    // we could just take the first value and kept it but for now
-    // lets check that all nodes always agree on net version constantly
-    if net_version != new_net_version {
-        error!("GOT A DIFFERENT NETWORK ID VALUE, IT IS CRITICAL THAT YOU REVIEW YOUR NODE LIST FOR HOSTILE/MISCONFIGURED NODES");
-    }
-}
-
-/// Updates the nonce in global SETTING storage. The nonce of our next transaction
-/// must always be greater than the nonce of our last transaction, since it's possible that other
-/// programs are using the same private key and/or the router may be reset we need to get the nonce
-/// from the blockchain at least once. We stick to incrementing it locally once we have it.
-///
-/// A potential attack here would be providing a lower nonce to cause you to replace an earlier transaction
-/// that is still unconfirmed. That's a bit of a streach, more realistiically this would be spoofed in conjunction
-/// with net_version
-fn update_nonce(full_node: &str, transaction_count: Uint256, nonce: &mut Uint256) {
-    info!(
-        "Got response from {} for nonce request {:?}",
-        full_node, transaction_count
-    );
-    *nonce = transaction_count;
-}
-
-/// This function updates the gas price and in the process adjusts our payment threshold
-/// The average gas price over the last hour are averaged by the web3 call we then adjust our
-/// expected payment amount and grace period so that every transaction pays 5% in transaction fees
-/// (or whatever they care to configure as dyanmic_fee_factor). This also handles dramatic spikes in
-/// gas prices by increasing the maximum debt before a drop to the free tier occurs. So if the blockchain
-/// is simply to busy to use for some period of time payments will simply wait.
-fn update_gas_price(
-    full_node: &str,
-    new_gas_price: Uint256,
-    payment_settings: &mut PaymentSettings,
-) {
-    // Minimum gas price. When gas is below this, we set gasprice to this value, which is then used to
-    // calculate pay and close thresh
-    let min_gas = payment_settings.min_gas;
-
-    let value = new_gas_price;
-    info!(
-        "Got response from {} for gas price request {:?}",
-        full_node, value
-    );
-
-    // taking the latest gas value for pay_thres and close_thres calculation does better
-    // in the worst case compared to averaging
-    let oracle_gas_price = value;
-
-    let oracle_gas_price = if oracle_gas_price < min_gas {
-        info!("gas price is low setting to! {}", min_gas);
-        min_gas
-    } else {
-        oracle_gas_price
-    };
-
-    //set local values in lazy static
-    set_oracle_gas_price(oracle_gas_price)
-}
-
 /// A very simple function placed here for convinence that indicates
 /// if the system should go into low balance mode
 pub fn low_balance() -> bool {
@@ -331,63 +192,5 @@ pub fn low_balance() -> bool {
     match balance {
         Some(val) => val < balance_warning_level,
         None => false,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Helper function to prevent race conditions when running these test due to parallel test environment
-    fn clear_gas_oracle() {
-        set_oracle_gas_price(0u32.into());
-    }
-
-    #[test]
-    fn test_oracle_get_set() {
-        clear_gas_oracle();
-
-        let or = ORACLE.read().unwrap();
-        assert_eq!(or.gas_price, 0u128.into());
-        drop(or);
-
-        set_oracle_gas_price(10u128.into());
-
-        let or = ORACLE.read().unwrap();
-        assert_eq!(or.gas_price, 10u128.into());
-        drop(or);
-        clear_gas_oracle();
-    }
-
-    #[test]
-    fn test_set_network_and_nonce() {
-        clear_gas_oracle();
-
-        let or = ORACLE.read().unwrap();
-        assert_eq!(or.nonce, 0u128.into());
-        assert_eq!(or.net_version, 417834);
-        drop(or);
-
-        check_net_version("Some node", ORACLE.read().unwrap().net_version, 17u64);
-        let or = ORACLE.read().unwrap();
-        drop(or);
-
-        update_nonce(
-            "Some Node",
-            21u128.into(),
-            &mut ORACLE.write().unwrap().nonce,
-        );
-        let or = ORACLE.read().unwrap();
-        assert_eq!(or.nonce, 21u128.into());
-        drop(or);
-
-        set_oracle_nonce(30u64.into());
-        set_oracle_net_version(78u64);
-        let or = ORACLE.read().unwrap();
-        assert_eq!(or.nonce, 30u128.into());
-        assert_eq!(or.net_version, 78u64);
-        drop(or);
-
-        clear_gas_oracle();
     }
 }

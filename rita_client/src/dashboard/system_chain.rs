@@ -2,7 +2,7 @@ use actix_web_async::http::StatusCode;
 use actix_web_async::web::Path;
 use actix_web_async::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
-use rita_common::blockchain_oracle::{set_oracle_balance, set_oracle_net_version};
+use rita_common::blockchain_oracle::set_oracle_balance;
 use settings::payment::PaymentSettings;
 
 /// Changes the full node configuration value between test/prod and other networks
@@ -42,25 +42,21 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
                 "https://eth.althea.org:443".to_string(),
                 "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
             ];
-            set_oracle_net_version(1);
             payment.system_chain = SystemChain::Ethereum;
             payment.withdraw_chain = SystemChain::Ethereum;
         }
         SystemChain::Xdai => {
             payment.eth_node_list = vec!["https://dai.althea.org/".to_string()];
-            set_oracle_net_version(100);
             payment.system_chain = SystemChain::Xdai;
             payment.withdraw_chain = SystemChain::Xdai;
         }
         SystemChain::Sepolia => {
             payment.eth_node_list = vec!["https://ethereum-sepolia-rpc.publicnode.com".to_string()];
-            set_oracle_net_version(11155111);
             payment.system_chain = SystemChain::Sepolia;
             payment.withdraw_chain = SystemChain::Sepolia;
         }
         SystemChain::AltheaL1 => {
             payment.eth_node_list = vec!["https://rpc.althea.zone:8545".to_string()];
-            set_oracle_net_version(11155111);
             payment.system_chain = SystemChain::AltheaL1;
             payment.withdraw_chain = SystemChain::AltheaL1;
         }
