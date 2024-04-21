@@ -18,8 +18,6 @@ use althea_types::Identity;
 use althea_types::PaymentTx;
 use num256::Uint256;
 use rita_common::blockchain_oracle::get_oracle_balance;
-use rita_common::blockchain_oracle::get_oracle_latest_gas_price;
-use rita_common::blockchain_oracle::get_oracle_nonce;
 use rita_common::blockchain_oracle::get_pay_thresh;
 use rita_common::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use rita_common::rita_loop::get_web3_server;
@@ -28,7 +26,6 @@ use rita_common::usage_tracker::update_payments;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use web30::client::Web3;
-use web30::types::SendTxOption;
 
 lazy_static! {
     static ref OPERATOR_FEE_DATA: Arc<RwLock<OperatorFeeManager>> =
@@ -82,8 +79,6 @@ pub async fn tick_operator_payments() {
     let payment_settings = common.payment;
     let eth_private_key = payment_settings.eth_private_key.unwrap();
     let our_balance = get_oracle_balance();
-    let gas_price = get_oracle_latest_gas_price();
-    let nonce = get_oracle_nonce();
     let pay_threshold = get_pay_thresh();
     let operator_address = match operator_settings.operator_address {
         Some(val) => val,
@@ -131,10 +126,7 @@ pub async fn tick_operator_payments() {
                 Vec::new(),
                 amount_to_pay,
                 eth_private_key,
-                vec![
-                    SendTxOption::Nonce(nonce),
-                    SendTxOption::GasPrice(gas_price),
-                ],
+                vec![],
             )
             .await;
         match tx {

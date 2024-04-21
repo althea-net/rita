@@ -1,6 +1,4 @@
 use crate::blockchain_oracle::get_oracle_balance;
-use crate::blockchain_oracle::get_oracle_latest_gas_price;
-use crate::blockchain_oracle::get_oracle_nonce;
 use crate::rita_loop::get_web3_server;
 use crate::token_bridge::setup_withdraw as bridge_withdraw;
 use crate::token_bridge::Withdraw as WithdrawMsg;
@@ -12,7 +10,6 @@ use clarity::Address;
 use num256::Uint256;
 use std::time::Duration;
 use web30::client::Web3;
-use web30::types::SendTxOption;
 
 pub const WITHDRAW_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -21,8 +18,13 @@ async fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResp
     let payment_settings = settings::get_rita_common().payment;
     let system_chain = payment_settings.system_chain;
     let withdraw_chain = payment_settings.withdraw_chain;
-    let mut gas_price = get_oracle_latest_gas_price();
     let balance = get_oracle_balance();
+    let full_node = get_web3_server();
+    let web3 = Web3::new(&full_node, WITHDRAW_TIMEOUT);
+    let mut gas_price = match web3.eth_gas_price().await {
+        Ok(gp) => gp,
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
 
     // if no amount is specified we are withdrawing our entire balance
     let mut amount = if let Some(amount) = amount {
@@ -92,10 +94,7 @@ pub async fn eth_compatible_withdraw(dest: Address, amount: Uint256) -> HttpResp
             Vec::new(),
             amount,
             payment_settings.eth_private_key.unwrap(),
-            vec![
-                SendTxOption::Nonce(get_oracle_nonce()),
-                SendTxOption::GasPrice(get_oracle_latest_gas_price()),
-            ],
+            vec![],
         )
         .await;
     match tx {

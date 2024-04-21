@@ -3,9 +3,7 @@
 //! until it is successfully in a block, see payment_validator, once the payment is on
 //! the blockchain it's up to the reciever to validate that it's correct
 
-use crate::blockchain_oracle::{
-    get_oracle_balance, get_oracle_latest_gas_price, get_oracle_nonce, set_oracle_nonce,
-};
+use crate::blockchain_oracle::get_oracle_balance;
 use crate::debt_keeper::normalize_payment_amount;
 use crate::debt_keeper::payment_failed;
 use crate::payment_validator::ToValidate;
@@ -31,7 +29,6 @@ use std::time::Duration;
 use std::time::Instant;
 use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
-use web30::types::SendTxOption;
 
 pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
 pub const MAX_TXID_RETRIES: u8 = 15u8;
@@ -352,8 +349,6 @@ async fn make_xdai_payment(
     previously_sent_payments: &HashMap<Identity, HashSet<PaymentTx>>,
 ) -> Result<(ToValidate, Option<ResendInfo>), PaymentControllerError> {
     let balance = get_oracle_balance();
-    let nonce = get_oracle_nonce();
-    let gas_price = get_oracle_latest_gas_price();
     let our_private_key = &payment_settings
         .eth_private_key
         .expect("No private key configured!");
@@ -365,8 +360,8 @@ async fn make_xdai_payment(
     }
 
     info!(
-        "current xdai balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
-        balance, pmt.amount, our_address, pmt.to.eth_address, nonce
+        "current xdai balance: {:?}, payment of {:?}, from address {} to address {}",
+        balance, pmt.amount, our_address, pmt.to.eth_address
     );
 
     let full_node = get_web3_server();
@@ -379,10 +374,7 @@ async fn make_xdai_payment(
             pmt.amount,
             our_private_key.to_address(),
             *our_private_key,
-            vec![
-                SendTxOption::Nonce(nonce),
-                SendTxOption::GasPrice(gas_price),
-            ],
+            vec![],
         )
         .await;
 
@@ -410,12 +402,8 @@ async fn make_xdai_payment(
                 }
             };
 
-            // increment our nonce, this allows us to send another transaction
-            // right away before this one that we just sent out gets into the chain
-            set_oracle_nonce(get_oracle_nonce() + 1u64.into());
-
-            info!("Sending bw payment with txid {:#066x} current balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
-                            tx_id, balance, pmt.amount, our_address, pmt.to.eth_address, nonce);
+            info!("Sending bw payment with txid {:#066x} current balance: {:?}, payment of {:?}, from address {} to address {}",
+                            tx_id, balance, pmt.amount, our_address, pmt.to.eth_address);
 
             // add published txid to submission
             let pmt = pmt.publish(tx_id);
