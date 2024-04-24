@@ -2260,9 +2260,9 @@ dependencies = [
 
 [[package]]
 name = "oping"
-version = "0.3.5"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71bb25d9765215c06d5188b3bb7a563b5b0148bda65d3c60e727603c4a0676a5"
+checksum = "4422f85745475dbd50b5c99b7df256b6a8b36badd222b401583ac8718d13bd56"
 dependencies = [
  "cc",
  "libc",
