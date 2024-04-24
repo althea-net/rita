@@ -28,4 +28,4 @@ set +u
 TEST_TYPE=$1
 set -u
 
-docker run --name $CONTAINER_NAME-all-up --privileged -t $CONTAINER_NAME /bin/bash /althea_rs/scripts/integration_tests/container_scripts/all-up-test-internal.sh $NODES $TEST_TYPE
+docker run --ulimit nofile=262144:262144 --name $CONTAINER_NAME-all-up --privileged -t $CONTAINER_NAME /bin/bash /althea_rs/scripts/integration_tests/container_scripts/all-up-test-internal.sh $NODES $TEST_TYPE

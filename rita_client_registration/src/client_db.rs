@@ -343,7 +343,7 @@ pub fn parse_identity_abi(byte_chunks: Vec<Vec<u8>>) -> Result<Identity, Web3Err
     });
 
     if mesh_ip == 0 {
-        error!("Received a null entry! {:?}", byte_chunks);
+        warn!("Received a null entry! {:?}", byte_chunks);
         return Err(Web3Error::BadInput(format!(
             "Recived a null output {byte_chunks:?}."
         )));

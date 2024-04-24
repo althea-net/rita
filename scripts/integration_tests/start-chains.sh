@@ -17,4 +17,4 @@ NODES=3
 pushd $DIR/../
 
 # Run new test container instance
-docker run --name $CONTAINER_NAME-instance --mount type=bind,source="$DIR/../../",target=/althea_rs --privileged -p 2345:2345 -p 9090:9090 -p 26657:26657 -p 1317:1317 -p 8545:8545 -it $CONTAINER_NAME /bin/bash /althea_rs/scripts/integration_tests/container_scripts/reload-code.sh $NODES
+docker run --ulimit nofile=262144:262144 --name $CONTAINER_NAME-instance --mount type=bind,source="$DIR/../../",target=/althea_rs --privileged -p 2345:2345 -p 9090:9090 -p 26657:26657 -p 1317:1317 -p 8545:8545 -it $CONTAINER_NAME /bin/bash /althea_rs/scripts/integration_tests/container_scripts/reload-code.sh $NODES
