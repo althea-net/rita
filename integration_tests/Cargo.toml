@@ -9,7 +9,7 @@ env_logger = "0.11"
 log = "0.4"
 docopt = "1.1"
 actix-async = { package = "actix", version = "0.13" }
-nix = "0.26.1"
+nix = "0.28.0"
 petgraph = "0.6.2"
 babel_monitor = { path = "../babel_monitor" }
 althea_kernel_interface = { path = "../althea_kernel_interface", features = [
