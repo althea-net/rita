@@ -36,6 +36,9 @@ pub enum RitaClientError {
     NoExitIPError(String),
     RitaCommonError(RitaCommonError),
     ParseIntError(ParseIntError),
+    /// This error should be impossible, as the mesh IP is generated at startup, the only reason it's an option
+    /// is to allow for serde to deserialize without it in the CLU module where it is generated
+    NoMeshIpError,
 }
 
 impl From<LoggerError> for RitaClientError {
@@ -142,6 +145,7 @@ impl Display for RitaClientError {
             }
             RitaClientError::RitaCommonError(e) => write!(f, "{e}"),
             RitaClientError::ParseIntError(e) => write!(f, "{e}"),
+            RitaClientError::NoMeshIpError => write!(f, "No mesh ip generated?"),
         }
     }
 }

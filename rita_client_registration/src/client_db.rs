@@ -3,7 +3,7 @@
 //! exit and client routers can read it to coordinate user setup and two way key exchange with the blockchain
 //! as the trusted party
 
-use althea_types::{regions::Regions, ExitIdentity, Identity, SystemChain, WgKey};
+use althea_types::{regions::Regions, exit_interop::ExitIdentity, Identity, SystemChain, WgKey};
 use clarity::{
     abi::{encode_call, AbiToken},
     utils::bytes_to_hex_str,

@@ -74,6 +74,8 @@ fn default_allowed_countries() -> HashSet<Regions> {
 pub struct NetworkSettings {
     #[serde(default = "default_babeld_config")]
     pub babeld_settings: BabeldConfig,
+    /// This controls which interfaces will be proxied over the exit tunnel
+    pub lan_nics: HashSet<String>,
     /// How much non-financial metrics matter compared to a route's cost. By default a 2x more
     /// expensive route will only be chosen if it scores more than 2x better in other metrics. The
     /// value is expressed in 1/1000 increments, i.e. 1000 = 1.0, 500 = 0.5 and 1 = 0.001
@@ -189,6 +191,7 @@ impl Default for NetworkSettings {
             allowed_countries: default_allowed_countries(),
             payment_chains: HashSet::new(),
             babeld_settings: default_babeld_config(),
+            lan_nics: HashSet::new(),
         }
     }
 }

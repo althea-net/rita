@@ -1,5 +1,5 @@
 use althea_kernel_interface::KernelInterfaceError;
-use althea_types::{error::AltheaTypesError, ExitClientIdentity};
+use althea_types::{error::AltheaTypesError, exit_interop::ExitRegistrationIdentity};
 use babel_monitor::structs::BabelMonitorError;
 use handlebars::RenderError;
 use ipnetwork::IpNetworkError;
@@ -13,7 +13,7 @@ use std::{
 #[derive(Debug)]
 pub enum RitaExitError {
     MiscStringError(String),
-    EmailNotFound(Box<ExitClientIdentity>),
+    EmailNotFound(Box<ExitRegistrationIdentity>),
     AddrParseError(AddrParseError),
     IpAddrError(IpAddr),
     RitaCommonError(RitaCommonError),
