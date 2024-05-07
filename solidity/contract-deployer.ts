@@ -49,7 +49,7 @@ async function deploy() {
   var althea_db_path: string
   const main_location_altheadb = "/althea_rs/solidity/artifacts/contracts/AltheaDB.sol/AltheaDB.json"
 
-  const alt_location_1_altheadb = "/solidity/AltheaDB.json"
+  const alt_location_1_altheadb = "solidity/artifacts/contracts/AltheaDB.sol/AltheaDB.json"
 
   const alt_location_2_altheadb = "AltheaDB.json"
 

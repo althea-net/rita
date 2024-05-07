@@ -1,4 +1,5 @@
 use crate::KernelInterface;
+use std::thread::sleep;
 
 impl dyn KernelInterface {
     /// Custom function for our integration test environment, returns a numbered netnamespace
@@ -7,7 +8,13 @@ impl dyn KernelInterface {
     /// that the lazy static for cross thread comms arch if a bit questionable by nature
     pub fn check_integration_test_netns(&self) -> u32 {
         if cfg!(feature = "integration_test") {
-            let ns = self.run_command("ip", &["netns", "identify"]).unwrap();
+            let mut ns = self.run_command("ip", &["netns", "identify"]);
+            while let Err(e) = ns {
+                warn!("Could not get netns name, retrying: {:?}", e);
+                sleep(std::time::Duration::from_secs(1));
+                ns = self.run_command("ip", &["netns", "identify"]);
+            }
+            let ns = ns.unwrap();
             let ns = match String::from_utf8(ns.stdout) {
                 Ok(s) => s,
                 Err(_) => panic!("Could not get netns name!"),

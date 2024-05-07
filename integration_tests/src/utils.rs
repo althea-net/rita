@@ -173,10 +173,20 @@ pub async fn deploy_contracts() -> Address {
     // yet produced the next block after submitting each eth address
     contact.wait_for_next_block(TOTAL_TIMEOUT).await.unwrap();
 
+    let location_a = "/althea_rs/solidity/contract-deployer.ts";
+    let location_b = "solidity/contract-deployer.ts";
+    let location = if std::path::Path::new(location_a).exists() {
+        location_a
+    } else if std::path::Path::new(location_b).exists() {
+        location_b
+    } else {
+        panic!("Could not find contract deployer file!")
+    };
+
     let res = Command::new("npx")
         .args([
             "ts-node",
-            "/althea_rs/solidity/contract-deployer.ts",
+            location,
             &format!("--eth-privkey={}", REGISTRATION_SERVER_KEY),
             &format!("--eth-node={}", ETH_NODE),
         ])
@@ -526,7 +536,7 @@ pub fn set_sigterm() {
 
 /// Run an iperf to generate from between two namespaces. data represents the string
 /// representation to pass into iperf. For example '10G' or '15M'
-/// When to is None, traffic is generated to the internet
+/// When to is None, traffic is generated to the internet/exit
 pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
     let ip = match &to {
         Some(a) => format!("fd00::{}", a.id),
@@ -536,17 +546,27 @@ pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
     // setup server
     info!("Going to setup server, spawning new thread");
     thread::spawn(move || {
-        if let Some(ns) = to {
-            let _output = KI
-                .run_command(
-                    "ip",
-                    &["netns", "exec", &ns.get_name(), "iperf3", "-s", "-1"],
-                )
-                .expect("Could not setup iperf server");
+        info!("In new thread about to start iperf server");
+        let output = if let Some(ns) = to {
+            KI.run_command(
+                "ip",
+                &["netns", "exec", &ns.get_name(), "iperf3", "-s", "-1"],
+            )
+            .expect("Could not setup iperf server")
         } else {
-            let _output = KI
-                .run_command("iperf3", &["-s", "-1"])
-                .expect("Could not setup iperf server");
+            KI.run_command("iperf3", &["-s", "-1"])
+                .expect("Could not setup iperf server")
+        };
+
+        let stderr = from_utf8(&output.stderr).expect("Why is this failing");
+        let std_output = from_utf8(&output.stdout).expect("could not get output for client setup!");
+        if !std_output.is_empty() {
+            info!("Server out: {}", format!("{}", std_output));
+        } else {
+            panic!(
+                "Iperf server failed to generate traffic with status {} and stderr {}",
+                output.status, stderr
+            );
         }
     });
 

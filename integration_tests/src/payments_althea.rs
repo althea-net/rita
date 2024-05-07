@@ -119,11 +119,7 @@ pub async fn run_althea_payments_test_scenario() {
 
     // generate some traffic to trigger payments
     info!("Trying to generate traffic");
-    generate_traffic(
-        from_node.clone().unwrap(),
-        Some(end_node.clone().unwrap()),
-        "10G".to_string(),
-    );
+    generate_traffic(from_node.clone().unwrap(), end_node, "10G".to_string());
 
     validate_debt_entry(
         from_node.unwrap(),
