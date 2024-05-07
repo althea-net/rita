@@ -487,9 +487,14 @@ pub async fn register_to_exit(namespace_name: String, exit_name: String) -> Stat
     });
 
     // wait for the child thread to finish performing it's query
+    const TIMEOUT: Duration = Duration::from_secs(30);
+    let start = Instant::now();
     while response_local.read().unwrap().is_none() {
         info!("Waiting for a rpc response from {}", namespace_local);
         sleep(Duration::from_millis(100)).await;
+        if Instant::now() - start > TIMEOUT {
+            panic!("Timeout waiting for response from {}", namespace_local);
+        }
     }
     let code = response_local.read().unwrap().unwrap();
     code
@@ -637,14 +642,22 @@ pub async fn query_debts(
         });
 
         // wait for the child thread to finish performing it's query
+        const TIMEOUT: Duration = Duration::from_secs(30);
+        let start = Instant::now();
         while response_local.read().unwrap().is_none() {
             info!(
                 "Waiting for a rpc response from {}",
                 node.clone().get_name()
             );
             sleep(Duration::from_millis(100)).await;
+            if Instant::now() - start > TIMEOUT {
+                panic!(
+                    "Timeout waiting for response from {}",
+                    node.clone().get_name()
+                );
+            }
         }
-        sleep(Duration::from_millis(100)).await;
+
         let list = response_local.read().unwrap().clone().unwrap();
 
         let mut ret = vec![];
