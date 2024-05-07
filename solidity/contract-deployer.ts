@@ -60,12 +60,7 @@ async function deploy() {
   // const main_location_721_a = "/althea_rs/solidity/artifacts/contracts/TestERC721A.sol/TestERC721A.json"
   const main_location_altheadb = "/althea_rs/solidity/artifacts/contracts/AltheaDB.sol/AltheaDB.json"
 
-
-  // const alt_location_1_a = "/solidity/TestERC20A.json"
-  // const alt_location_1_b = "/solidity/TestERC20B.json"
-  // const alt_location_1_c = "/solidity/TestERC20C.json"
-  // const alt_location_1_721a = "/solidity/TestERC721A.json"
-  const alt_location_1_altheadb = "/solidity/AltheaDB.json"
+  const alt_location_1_altheadb = "solidity/artifacts/contracts/AltheaDB.sol/AltheaDB.json"
 
   // const alt_location_2_a = "TestERC20A.json"
   // const alt_location_2_b = "TestERC20B.json"

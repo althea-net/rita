@@ -1,6 +1,6 @@
 use althea_kernel_interface::KI;
 use diesel::{Connection, PgConnection};
-use log::{error, warn};
+use log::warn;
 use std::io::Write;
 use std::{
     fs::File,
@@ -13,42 +13,74 @@ use std::{
 /// Starts the exit postgres instance in the native system namespace, TODO insert plumbing so that exits can reach it
 pub fn start_postgres() {
     const POSTGRES_USER: &str = "postgres";
-    const POSTGRES_BIN: &str = "/usr/lib/postgresql/16/bin/postgres";
-    const INITDB_BIN: &str = "/usr/lib/postgresql/16/bin/initdb";
+    const POSTGRES_14_BIN: &str = "/usr/lib/postgresql/14/bin/postgres";
+    const POSTGRES_16_BIN: &str = "/usr/lib/postgresql/16/bin/postgres";
+    const INITDB_14_BIN: &str = "/usr/lib/postgresql/14/bin/initdb";
+    const INITDB_16_BIN: &str = "/usr/lib/postgresql/16/bin/initdb";
+    let postgres_bin = if Path::new(POSTGRES_14_BIN).exists() {
+        POSTGRES_14_BIN
+    } else if Path::new(POSTGRES_16_BIN).exists() {
+        POSTGRES_16_BIN
+    } else {
+        panic!("Could not find postgres binary")
+    };
+    let initdb_bin = if Path::new(INITDB_14_BIN).exists() {
+        INITDB_14_BIN
+    } else if Path::new(INITDB_16_BIN).exists() {
+        INITDB_16_BIN
+    } else {
+        panic!("Could not find initdb binary")
+    };
+
     // for this test script
     const DB_URL_LOCAL: &str = "postgres://postgres@127.0.0.1/test";
     // for the rita exit instances
     const POSTGRES_DATABASE_LOCATION: &str = "/var/lib/postgresql/data";
-    let migration_directory = Path::new("/althea_rs/integration_tests/src/setup_utils/migrations/");
+    let migration_directory_a =
+        Path::new("/althea_rs/integration_tests/src/setup_utils/migrations/");
+    let migration_directory_b = Path::new("integration_tests/src/setup_utils/migrations/");
+    let migration_directory = if migration_directory_a.exists() {
+        migration_directory_a
+    } else if migration_directory_b.exists() {
+        migration_directory_b
+    } else {
+        panic!("Could not find migrations directory")
+    };
     let postgres_pid_path: String = format!("{}/postmaster.pid", POSTGRES_DATABASE_LOCATION);
 
     // only init and launch if postgres has not already been started
     if !Path::new(&postgres_pid_path).exists() {
         // initialize the db datadir
-        KI.run_command(
-            "sudo",
-            &[
-                "-u",
-                POSTGRES_USER,
-                INITDB_BIN,
-                "-D",
-                POSTGRES_DATABASE_LOCATION,
-            ],
-        )
-        .unwrap();
+        let res = KI
+            .run_command(
+                "sudo",
+                &[
+                    "-u",
+                    POSTGRES_USER,
+                    initdb_bin,
+                    "-D",
+                    POSTGRES_DATABASE_LOCATION,
+                ],
+            )
+            .unwrap();
+        if !res.status.success() {
+            panic!("Failed to init postgres {:?}", res);
+        }
 
         // create the pg_hba.conf with auth for the 10.0.0.1 routers
         let pg_hba_path = format!("{}/pg_hba.conf", POSTGRES_DATABASE_LOCATION);
         let mut pg_hba = File::create(pg_hba_path).unwrap();
-        let pb_hba_lines: [&str; 3] = [
+        let pb_hba_lines: [&str; 4] = [
             "local   all all trust",
             "host   all all 10.0.0.1/16 trust",
             "host   all all 127.0.0.1/32 trust",
+            "host   all all ::1/128 trust",
         ];
         for line in pb_hba_lines {
             writeln!(pg_hba, "{}", line).unwrap()
         }
     }
+    info!("Starting postgres");
     // start postgres in it's own thread, we kill it every time we startup
     // so it's spawned in this context
     thread::spawn(move || {
@@ -58,13 +90,13 @@ pub fn start_postgres() {
                 &[
                     "-u",
                     POSTGRES_USER,
-                    POSTGRES_BIN,
+                    postgres_bin,
                     "-D",
                     POSTGRES_DATABASE_LOCATION,
                 ],
             )
             .unwrap();
-        error!("Postgres has crashed {:?}", res);
+        panic!("Postgres has crashed {:?}", res);
     });
 
     // create connection to the now started database

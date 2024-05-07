@@ -53,7 +53,7 @@ pub fn thread_spawner(
     db_addr: Address,
 ) -> Result<InstanceData, KernelInterfaceError> {
     let mut instance_data = InstanceData::default();
-    let babeld_path = "/var/babeld/babeld/babeld".to_string();
+    let babeld_path = "/var/babeld/babeld".to_string();
     let babelconf_path = "/var/babeld/config".to_string();
     let babelconf_data = "default enable-timestamps true\ndefault update-interval 1";
     // pass the config arguments for babel to a config file as they cannot be successfully passed as arguments via run_command()
