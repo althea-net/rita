@@ -73,7 +73,7 @@ jobs:
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh FIVE_NODES
   integration-test-althea-payment:
-    needs: integration-test-five-nodes
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -81,7 +81,7 @@ jobs:
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh PAYMENTS_ALTHEA
   integration-test-debts:
-    needs: integration-test-five-nodes
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -89,7 +89,7 @@ jobs:
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh DEBTS_TEST
   integration-test-eth-payments:
-    needs: integration-test-five-nodes
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -97,7 +97,7 @@ jobs:
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh ETH_PAYMENTS
   integration-test-multi-exit:
-    needs: integration-test-five-nodes
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -105,7 +105,7 @@ jobs:
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh MULTI_EXIT
   integration-test-validate-contract:
-    needs: integration-test-five-nodes
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -113,7 +113,7 @@ jobs:
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh CONTRACT_TEST
   integration-test-db-migration:
-    needs: integration-test-five-nodes
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
