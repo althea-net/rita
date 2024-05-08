@@ -19,10 +19,10 @@ do
         # node one gets localhost so we can easily shunt these ports
         # to the docker host
         RPC_ADDRESS="--rpc.laddr tcp://0.0.0.0:26657"
-        GRPC_ADDRESS="--grpc.address 0.0.0.0:9090"
-        GRPC_WEB_ADDRESS="--grpc-web.address 0.0.0.0:9092"
-        ETH_RPC_ADDRESS="--json-rpc.address 0.0.0.0:8545"
-        ETH_RPC_WS_ADDRESS="--json-rpc.ws-address 0.0.0.0:8546" # We don't use the WS address, but without this it will break the server
+        GRPC_ADDRESS="--grpc.address 7.7.7.1:9090"
+        GRPC_WEB_ADDRESS="--grpc-web.address 7.7.7.1:9091"
+        ETH_RPC_ADDRESS="--json-rpc.address 7.7.7.1:8545"
+        ETH_RPC_WS_ADDRESS="--json-rpc.ws-address 7.7.7.1:8546" # We don't use the WS address, but without this it will break the server
         sed -i 's/enable-unsafe-cors = false/enable-unsafe-cors = true/g' /validator$i/config/app.toml
         sed -i 's/enabled-unsafe-cors = false/enabled-unsafe-cors = true/g' /validator$i/config/app.toml
         sed -i 's/enable = false/enable = true/g' /validator$i/config/app.toml #enables more than we want, but will work for now
@@ -32,7 +32,7 @@ do
         # you also can't duplicate the port selection against localhost
         # for reasons that are not clear to me right now.
         RPC_ADDRESS="--rpc.laddr tcp://7.7.7.$i:26658"
-        GRPC_ADDRESS="--grpc.address 7.7.7.$i:9091"
+        GRPC_ADDRESS="--grpc.address 7.7.7.$i:9092"
         GRPC_WEB_ADDRESS="--grpc-web.address 7.7.7.$i:9093"
         ETH_RPC_ADDRESS="--json-rpc.address 7.7.7.$i:8545"
         ETH_RPC_WS_ADDRESS="--json-rpc.address 7.7.7.$i:8546" # We don't use the WS address, but without this it will break the server
