@@ -1,6 +1,6 @@
 use althea_kernel_interface::KI;
 use diesel::{Connection, PgConnection};
-use log::warn;
+use log::{info, warn};
 use std::io::Write;
 use std::{
     fs::File,

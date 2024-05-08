@@ -62,7 +62,7 @@ pub const TEST_PAY_THRESH: u64 = 30_000_000_000_000_000u64;
 
 pub const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 
-pub const NODE_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(7, 7, 7, 2));
+pub const NODE_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(7, 7, 7, 1));
 
 pub const STAKING_TOKEN: &str = "aalthea";
 pub const MIN_GLOBAL_FEE_AMOUNT: u128 = 10;
@@ -137,7 +137,7 @@ pub struct ExitInstances {
 }
 
 pub fn get_althea_grpc() -> String {
-    format!("http://{}:9091", NODE_IP)
+    format!("http://{}:9090", NODE_IP)
 }
 
 pub fn get_eth_node() -> String {
@@ -173,8 +173,8 @@ pub async fn deploy_contracts() -> Address {
         .args([
             "ts-node",
             location,
-            &format!("--eth-privkey={}", REGISTRATION_SERVER_KEY),
-            &format!("--eth-node={}", ETH_NODE),
+            &format!("--eth-privkey={}", MINER_PRIVATE_KEY),
+            &format!("--eth-node={}", get_eth_node()),
         ])
         .output()
         .expect("Failed to deploy contracts!");
@@ -1132,7 +1132,7 @@ pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
 pub async fn populate_routers_eth(rita_identities: InstanceData) {
     // Exits need to have funds to request a registered client list, which is needed for proper setup
     info!("Topup exits with funds");
-    let web3 = Web3::new("http://localhost:8545", WEB3_TIMEOUT);
+    let web3 = Web3::new(&get_eth_node(), WEB3_TIMEOUT);
     let mut to_top_up = Vec::new();
     for c in rita_identities.client_identities {
         to_top_up.push(c.eth_address);

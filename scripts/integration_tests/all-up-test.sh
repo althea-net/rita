@@ -23,7 +23,7 @@ set +e
 docker rm -f $CONTAINER_NAME-all-up
 set -e
 
-NODES=3
+NODES=1
 set +u
 TEST_TYPE=$1
 set -u

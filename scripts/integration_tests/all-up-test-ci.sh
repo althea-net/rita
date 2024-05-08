@@ -54,7 +54,7 @@ popd
 sudo wget https://github.com/althea-net/althea-L1/releases/download/v1.1.0/althea-linux-amd64 -O /usr/bin/althea
 sudo chmod +x /usr/bin/althea
 
-NODES=3
+NODES=1
 set +u
 TEST_TYPE=$1
 set -u
@@ -80,4 +80,5 @@ killall -9 postgres
 set -e
 export TEST_TYPE
 cargo build --profile testrunner --manifest-path test_runner/Cargo.toml
+sudo cat /validator1/logs
 sudo TEST_TYPE=$TEST_TYPE RUST_LOG=INFO RUST_BACKTRACE=1 ./target/testrunner/tester

@@ -12,7 +12,7 @@ set +e
 docker rm -f $CONTAINER_NAME-instance
 set -e
 
-NODES=3
+NODES=1
 
 pushd $DIR/../
 
