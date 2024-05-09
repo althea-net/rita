@@ -61,7 +61,7 @@ use std::{
 use web30::{client::Web3, jsonrpc::error::Web3Error, types::SendTxOption};
 
 /// Wait this long for network convergence
-const REACHABILITY_TEST_TIMEOUT: Duration = Duration::from_secs(600);
+const REACHABILITY_TEST_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long the reacability test should wait in between tests
 const REACHABILITY_TEST_CHECK_SPEED: Duration = Duration::from_secs(5);
 /// Pay thresh used in payment tests, 3c in wei
