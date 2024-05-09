@@ -543,7 +543,10 @@ pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
     };
 
     // setup server
-    info!("Going to setup server, spawning new thread");
+    info!(
+        "Going to setup server, spawning new thread from {:?} to {:?}",
+        from, to
+    );
     thread::spawn(move || {
         info!("In new thread about to start iperf server");
         let output = if let Some(ns) = to {
@@ -594,7 +597,7 @@ pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
         if !std_output.is_empty() {
             info!("Client out: {}", format!("{}", std_output));
             break;
-        } else if stderr.contains("Connection refused") {
+        } else if stderr.contains("Connection refused") || stderr.contains("Bad file descriptor") {
             info!("server not set up yet");
             thread::sleep(Duration::from_millis(100));
         } else {
