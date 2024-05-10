@@ -169,9 +169,8 @@ pub fn spawn_rita(
         save_to_disk_loop(SettingsOnDisk::RitaClientSettings(Box::new(
             settings::get_rita_client(),
         )));
-        start_core_rita_endpoints(4);
+        start_core_rita_endpoints(1);
         start_client_dashboard(s.network.rita_dashboard_port);
-        start_antenna_forwarder(s);
 
         if let Err(e) = system.run() {
             panic!("Starting client failed with {}", e);
