@@ -427,7 +427,7 @@ pub fn get_default_settings(
         }
         .into(),
     );
-    client.exit_client.exits = exit_servers.clone();
+    client.exit_client.exits.clone_from(&exit_servers);
     // first node is passed through to the host machine for testing second node is used
     // for testnet queries
     exit.payment.althea_grpc_list = vec![get_althea_grpc()];

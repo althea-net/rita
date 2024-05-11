@@ -197,7 +197,9 @@ pub async fn operator_update(
         rita_client.operator.billing_details.clone(),
         new_settings.billing_details.clone(),
     ) {
-        operator.billing_details = new_settings.billing_details.clone();
+        operator
+            .billing_details
+            .clone_from(&new_settings.billing_details);
     }
 
     let use_operator_price = operator.use_operator_price || operator.force_use_operator_price;

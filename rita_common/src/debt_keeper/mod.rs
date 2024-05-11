@@ -504,11 +504,12 @@ impl DebtKeeper {
             file_path.drain(0..file_path.len() - 4);
             file_path.push_str("bincode");
         }
-        new_settings.payment.debts_file = file_path.clone();
+        let path = file_path.clone();
+        new_settings.payment.debts_file = file_path;
         settings::set_rita_common(new_settings);
 
         let serialized = bincode::serialize(&debt_data_to_ser(self.debt_data.clone())).unwrap();
-        let mut file = File::create(file_path)?;
+        let mut file = File::create(path)?;
         file.write_all(&serialized)
     }
 
