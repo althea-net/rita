@@ -57,6 +57,6 @@
     "typescript": "^3.9.7"
   },
   "dependencies": {
-    "pkg": "^4.4.9"
+    "pkg": "^5.8.1"
   }
 }
