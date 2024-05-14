@@ -2324,9 +2324,9 @@ dependencies = [
 
 [[package]]
 name = "phonenumber"
-version = "0.3.4+8.13.34"
+version = "0.3.5+8.13.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d888d375f2963bf06c5079665fbe53db69860879ff5a78524fe3c93c54fb7b8"
+checksum = "f174c8db59b620032bd52b655fc97000458850fec0db35fcd4e802b668517ec0"
 dependencies = [
  "bincode",
  "either",
@@ -2697,7 +2697,7 @@ dependencies = [
 
 [[package]]
 name = "rita_bin"
-version = "0.21.6"
+version = "0.21.7"
 dependencies = [
  "actix",
  "actix-rt",
@@ -2735,7 +2735,7 @@ dependencies = [
 
 [[package]]
 name = "rita_client"
-version = "0.21.6"
+version = "0.21.7"
 dependencies = [
  "actix",
  "actix-web",
@@ -2790,7 +2790,7 @@ dependencies = [
 
 [[package]]
 name = "rita_common"
-version = "0.21.6"
+version = "0.21.7"
 dependencies = [
  "actix",
  "actix-service",
@@ -2847,7 +2847,7 @@ dependencies = [
 
 [[package]]
 name = "rita_exit"
-version = "0.21.6"
+version = "0.21.7"
 dependencies = [
  "actix",
  "actix-web",
@@ -2877,7 +2877,7 @@ dependencies = [
 
 [[package]]
 name = "rita_extender"
-version = "0.21.6"
+version = "0.21.7"
 dependencies = [
  "actix",
  "actix-web",
