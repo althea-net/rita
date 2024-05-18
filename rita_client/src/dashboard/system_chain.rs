@@ -8,7 +8,7 @@ use settings::payment::PaymentSettings;
 /// Changes the full node configuration value between test/prod and other networks
 pub async fn set_system_blockchain_endpoint(path: Path<String>) -> HttpResponse {
     info!("Blockchain change endpoint hit!");
-    let id: Result<SystemChain, ()> = path.into_inner().parse();
+    let id: Result<SystemChain, _> = path.into_inner().parse();
     if id.is_err() {
         return HttpResponse::build(StatusCode::BAD_REQUEST)
             .json(format!("Could not parse {id:?} into a SystemChain enum!"));
