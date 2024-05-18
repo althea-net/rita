@@ -9,6 +9,7 @@ use deep_space::Address as AltheaAddress;
 use ipnetwork::IpNetwork;
 use num256::Uint256;
 use serde::de::Error;
+use serde::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
@@ -152,7 +153,7 @@ pub struct Denom {
     pub decimal: u64,
 }
 
-#[derive(Default, Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
+#[derive(Default, Debug, Hash, Clone, Eq, PartialEq, Copy)]
 pub enum SystemChain {
     Ethereum,
     Sepolia,
@@ -190,7 +191,7 @@ impl Display for SystemChain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SystemChain::Ethereum => write!(f, "Ethereum"),
-            SystemChain::Sepolia => write!(f, "Rinkeby"),
+            SystemChain::Sepolia => write!(f, "Sepolia"),
             SystemChain::Xdai => write!(f, "Xdai"),
             SystemChain::AltheaL1 => write!(f, "Althea"),
         }
@@ -202,27 +203,54 @@ fn default_system_chain() -> SystemChain {
 }
 
 impl FromStr for SystemChain {
-    type Err = ();
-    fn from_str(s: &str) -> Result<SystemChain, ()> {
+    type Err = String;
+    fn from_str(s: &str) -> Result<SystemChain, String> {
         match s {
             "Ethereum" => Ok(SystemChain::Ethereum),
+            "ethereum" => Ok(SystemChain::Ethereum),
+            "eth" => Ok(SystemChain::Ethereum),
+            "ETH" => Ok(SystemChain::Ethereum),
             "Rinkeby" => Ok(SystemChain::Sepolia),
+            "rinkeby" => Ok(SystemChain::Sepolia),
             "Sepolia" => Ok(SystemChain::Sepolia),
+            "sepolia" => Ok(SystemChain::Sepolia),
             "Testnet" => Ok(SystemChain::Sepolia),
             "Test" => Ok(SystemChain::Sepolia),
+            "testnet" => Ok(SystemChain::Sepolia),
+            "test" => Ok(SystemChain::Sepolia),
             "Xdai" => Ok(SystemChain::Xdai),
+            "xDai" => Ok(SystemChain::Xdai),
+            "xDAI" => Ok(SystemChain::Xdai),
             "xdai" => Ok(SystemChain::Xdai),
-            "gnosis" => Ok(SystemChain::Xdai),
-            "gnosischain" => Ok(SystemChain::Xdai),
-            "Althea" => Ok(SystemChain::AltheaL1),
-            "althea" => Ok(SystemChain::AltheaL1),
-            "altheachain" => Ok(SystemChain::AltheaL1),
             "GnosisChain" => Ok(SystemChain::Xdai),
+            "gnosischain" => Ok(SystemChain::Xdai),
             "Gnosis" => Ok(SystemChain::Xdai),
+            "gnosis" => Ok(SystemChain::Xdai),
+            "Althea" => Ok(SystemChain::AltheaL1),
             "AltheaL1" => Ok(SystemChain::AltheaL1),
             "altheal1" => Ok(SystemChain::AltheaL1),
-            _ => Err(()),
+            "altheaL1" => Ok(SystemChain::AltheaL1),
+            _ => Err("Unknown SystemChain!".to_string()),
         }
+    }
+}
+
+impl Serialize for SystemChain {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for SystemChain {
+    fn deserialize<D>(deserializer: D) -> Result<SystemChain, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
     }
 }
 
