@@ -20,7 +20,6 @@ pub struct InstallationDetailsPost {
     pub email: Option<String>,
     pub client_antenna_ip: Option<String>,
     pub relay_antennas: Option<String>,
-    pub phone_client_antennas: Option<String>,
     pub physical_address: Option<String>,
     pub equipment_details: String,
 }
@@ -32,7 +31,9 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
     let mut rita_client = settings::get_rita_client();
     let mut exit_client = rita_client.exit_client;
     let contact_details = match (input.phone, input.email) {
-        (None, None) => return HttpResponse::BadRequest().finish(),
+        (None, None) => {
+            return HttpResponse::BadRequest().json("Must input at least one contact method!")
+        }
         (Some(phone), Some(email)) => match (phone.parse(), email.parse()) {
             (Ok(p), Ok(e)) => ContactType::Both {
                 number: p,
@@ -40,21 +41,21 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
                 // initialize sequence with 0
                 sequence_number: Some(0),
             },
-            (_, _) => return HttpResponse::BadRequest().finish(),
+            (_, _) => return HttpResponse::BadRequest().json("Invalid phone or email input!"),
         },
         (None, Some(email)) => match email.parse() {
             Ok(e) => ContactType::Email {
                 email: e,
                 sequence_number: Some(0),
             },
-            Err(_e) => return HttpResponse::BadRequest().finish(),
+            Err(_e) => return HttpResponse::BadRequest().json("Invalid email input!"),
         },
         (Some(phone), None) => match phone.parse() {
             Ok(p) => ContactType::Phone {
                 number: p,
                 sequence_number: Some(0),
             },
-            Err(_e) => return HttpResponse::BadRequest().finish(),
+            Err(_e) => return HttpResponse::BadRequest().json("Invalid phone input!"),
         },
     };
     // this lets us do less formatting on the frontend and simply
@@ -62,21 +63,30 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
     // values
     let mut parsed_relay_antenna_ips = Vec::new();
     if let Some(val) = input.relay_antennas {
-        for ip_str in val.split(',') {
-            if let Ok(ip) = ip_str.parse() {
-                parsed_relay_antenna_ips.push(ip);
-            } else {
-                trace!("false to parse {}", ip_str);
-                // it's permissible to have nothing but it's not permissable to have improperly
-                // formatted data
-                return HttpResponse::BadRequest().finish();
+        if !val.is_empty() {
+            for ip_str in val.split(',') {
+                if let Ok(ip) = ip_str.parse() {
+                    parsed_relay_antenna_ips.push(ip);
+                } else {
+                    trace!("false to parse {}", ip_str);
+                    // it's permissible to have nothing but it's not permissable to have improperly
+                    // formatted data
+                    return HttpResponse::BadRequest().json(
+                        "Failed to parse relay antenna IPs! Enter comma separated IPs only.",
+                    );
+                }
             }
         }
     }
     let parsed_client_antenna_ip = match input.client_antenna_ip {
         Some(ip_str) => match ip_str.parse() {
             Ok(ip) => Some(ip),
-            Err(_e) => return HttpResponse::BadRequest().finish(),
+            Err(_e) => {
+                if !ip_str.is_empty() {
+                    return HttpResponse::BadRequest().json("Failed to parse client antenna IP!");
+                }
+                None
+            }
         },
         None => None,
     };
@@ -118,7 +128,7 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
     settings::set_rita_client(rita_client);
 
     if let Err(_e) = settings::write_config() {
-        return HttpResponse::InternalServerError().finish();
+        return HttpResponse::InternalServerError().json("Could not write config!");
     }
     HttpResponse::Ok().finish()
 }
