@@ -682,7 +682,7 @@ pub mod tests {
                 .unwrap(),
             None,
         );
-        assert!(tunnel_manager.tunnels.get(&id).is_none());
+        assert!(!tunnel_manager.tunnels.contains_key(&id));
 
         // Create dummy tunnel
         tunnel_manager
