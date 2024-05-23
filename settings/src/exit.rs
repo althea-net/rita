@@ -82,71 +82,11 @@ impl ExitNetworkSettings {
     }
 }
 
-fn default_signup_email_subject() -> String {
-    String::from("Althea Exit verification code")
-}
-
-fn default_signup_email_body() -> String {
-    // templated using the handlebars language
-    // the code will be placed in the {{email_code}}, the [] is for integration testing
-    String::from("Your althea verification code is [{{email_code}}]")
-}
-
-fn default_balance_notification_email_subject() -> String {
-    String::from("Althea low balance warning")
-}
-
-fn default_balance_notification_email_body() -> String {
-    String::from("Your Althea router has a low balance! Your service will be slow until more funds are added. Visit althea.net/add-funds")
-}
-
 fn default_remote_log() -> bool {
     false
 }
 pub fn default_reg_url() -> String {
     "https://operator.althea.net:8080/register_router".to_string()
-}
-
-/// These are the settings for email verification
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
-pub struct EmailVerifSettings {
-    /// The email address of the from field of the email sent
-    pub from_address: String,
-    /// Min amount of time for emails going to the same address
-    pub email_cooldown: u64,
-
-    // templating stuff
-    #[serde(default = "default_signup_email_subject")]
-    pub signup_subject: String,
-
-    #[serde(default = "default_signup_email_body")]
-    pub signup_body: String,
-
-    #[serde(default = "default_balance_notification_email_subject")]
-    pub balance_notification_subject: String,
-
-    #[serde(default = "default_balance_notification_email_body")]
-    pub balance_notification_body: String,
-
-    #[serde(default)]
-    pub test: bool,
-    #[serde(default)]
-    pub test_dir: String,
-    /// SMTP server url e.g. smtp.fastmail.com
-    #[serde(default)]
-    pub smtp_url: String,
-    /// SMTP domain url e.g. mail.example.com
-    #[serde(default)]
-    pub smtp_domain: String,
-    #[serde(default)]
-    pub smtp_username: String,
-    #[serde(default)]
-    pub smtp_password: String,
-    /// time in seconds between notifications
-    pub balance_notification_interval: u32,
-
-    /// True if the exit should notify clients when they have a low balance
-    pub notify_low_balance: bool,
 }
 
 /// This is the main settings struct for rita_exit
