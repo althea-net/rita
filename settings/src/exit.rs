@@ -38,8 +38,6 @@ pub struct ExitNetworkSettings {
     pub wg_private_key: WgKey,
     /// path for the exit tunnel keyfile must be distinct from the common tunnel path!
     pub wg_private_key_path: String,
-    /// password that operator tools uses to verify that this is an exit that's allowed to checkin
-    pub pass: Option<String>,
     /// Determines if enforcement is ensabled on the wg_exit interfaces, the htb classifier used here
     /// is slower than we would like, and therefore overloaded exits may wish to disable enforcment
     /// to maintain a good user experience while migrating users or waiting on a faster enforcement classifier
@@ -73,7 +71,6 @@ impl ExitNetworkSettings {
             wg_private_key: WgKey::from_str("mFFBLqQYrycxfHo10P9l8I2G7zbw8tia4WkGGgjGCn8=")
                 .unwrap(),
             wg_private_key_path: String::new(),
-            pass: None,
             enable_enforcement: true,
             registered_users_contract_addr: "0x9BAbFde52Fe18A5CD00a542b87b4D124a4879582"
                 .parse()

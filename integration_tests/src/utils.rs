@@ -385,7 +385,7 @@ pub fn get_default_settings(
     namespaces: NamespaceInfo,
 ) -> (RitaClientSettings, RitaExitSettingsStruct) {
     let mut exit_servers = HashMap::new();
-    let mut exit = RitaExitSettingsStruct {
+    let exit = RitaExitSettingsStruct {
         client_registration_url: "https://7.7.7.1:40400/register_router".to_string(),
         workers: 2,
         remote_log: false,
@@ -397,7 +397,6 @@ pub fn get_default_settings(
         allowed_countries: HashSet::new(),
     };
     let client = RitaClientSettings::default();
-    exit.exit_network.pass = Some("testpass".to_string());
 
     let mut exit_mesh_ips = HashSet::new();
     for ns in namespaces.names {

@@ -37,27 +37,24 @@ pub async fn operator_update(rita_started: Instant) {
     let rita_exit = settings::get_rita_exit();
     let id = rita_exit.get_identity().unwrap();
 
-    if let Some(pass) = rita_exit.exit_network.pass {
-        info!("About to perform operator update with {}", url);
+    info!("About to perform operator update with {}", url);
 
-        let client = awc::Client::default();
-        let response = client
-            .post(url)
-            .timeout(OPERATOR_UPDATE_TIMEOUT)
-            .send_json(&OperatorExitCheckinMessage {
-                id,
-                pass,
-                exit_uptime: rita_started.elapsed(),
-                // Since this checkin works only from b20, we only need to look on wg_exit_v2
-                users_online: KI.get_wg_exit_clients_online(EXIT_INTERFACE).ok(),
-            })
-            .await;
-        match response {
-            Ok(v) => match v.status().is_success() {
-                true => info!("Exit operator update succeeded"),
-                false => error!("Exit operator update failed with {:?}", v),
-            },
-            Err(e) => error!("Exit operator update failed with {:?}", e),
-        }
+    let client = awc::Client::default();
+    let response = client
+        .post(url)
+        .timeout(OPERATOR_UPDATE_TIMEOUT)
+        .send_json(&OperatorExitCheckinMessage {
+            id,
+            exit_uptime: rita_started.elapsed(),
+            // Since this checkin works only from b20, we only need to look on wg_exit_v2
+            users_online: KI.get_wg_exit_clients_online(EXIT_INTERFACE).ok(),
+        })
+        .await;
+    match response {
+        Ok(v) => match v.status().is_success() {
+            true => info!("Exit operator update succeeded"),
+            false => error!("Exit operator update failed with {:?}", v),
+        },
+        Err(e) => error!("Exit operator update failed with {:?}", e),
     }
 }

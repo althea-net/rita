@@ -856,10 +856,6 @@ pub struct OperatorCheckinMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorExitCheckinMessage {
     pub id: Identity,
-    /// This is a password that operator tools uses to verify that the one
-    /// making a request is an exit. Exits are started with this password
-    /// in their config, and ops verifies this pass with the one they store
-    pub pass: String,
     /// This is to keep track of the rita exit uptime for debugging purposes
     pub exit_uptime: Duration,
     /// Number of users online
