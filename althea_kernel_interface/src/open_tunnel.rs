@@ -31,35 +31,6 @@ pub fn is_link_local(ip: IpAddr) -> bool {
     false
 }
 
-/// socket to string with interface id support
-fn socket_to_string(
-    endpoint: &SocketAddr,
-    interface_name: Option<String>,
-) -> Result<String, KernelInterfaceError> {
-    match *endpoint {
-        SocketAddr::V6(endpoint) => {
-            if is_link_local(IpAddr::V6(*endpoint.ip())) {
-                if let Some(interface_name) = interface_name {
-                    Ok(format!(
-                        "[{}%{}]:{}",
-                        endpoint.ip(),
-                        interface_name,
-                        endpoint.port()
-                    ))
-                } else {
-                    Err(KernelInterfaceError::NoInterfaceError(format!(
-                        "Endpoint {} is ipv6 link local and should have an interaface name",
-                        endpoint
-                    )))
-                }
-            } else {
-                Ok(format!("[{}]:{}", endpoint.ip(), endpoint.port()))
-            }
-        }
-        SocketAddr::V4(endpoint) => Ok(format!("{}:{}", endpoint.ip(), endpoint.port())),
-    }
-}
-
 #[derive(Debug)]
 pub struct TunnelOpenArgs<'a> {
     /// the wg tunnel name
@@ -87,23 +58,32 @@ pub struct TunnelOpenArgs<'a> {
 
 impl dyn KernelInterface {
     pub fn open_tunnel(&self, args: TunnelOpenArgs) -> Result<(), KernelInterfaceError> {
-        let (phy_name, external_peer) = match is_link_local(args.endpoint.ip()) {
-            true => (self.get_device_name(args.endpoint.ip())?, false),
-            false => match args.external_nic.clone() {
-                Some(external_nic) => (external_nic, true),
-                None => {
-                    // external peers need to have an interface name to setup static routes for
-                    return Err(KernelInterfaceError::NoInterfaceError(format!(
-                        "Endpoint {} is not link local and should have an interaface name",
-                        args.endpoint
-                    )));
+        let (setup_gateway_routes, socket_connect_str) = match args.endpoint {
+            SocketAddr::V4(sockv4) => (
+                // if the ipv4 address is not private we are connecting to an exit
+                // and instead we are connecting to a local peer over ipv4
+                !sockv4.ip().is_private(),
+                format!("{}:{}", sockv4.ip(), sockv4.port()),
+            ),
+            SocketAddr::V6(sockv6) => {
+                let is_link_local = is_link_local(IpAddr::V6(*sockv6.ip()));
+                if is_link_local {
+                    // if the ipv6 address is link local we need to add the interface name
+                    // to the endpoint
+                    let interface_name = self.get_device_name((*sockv6.ip()).into())?;
+                    (
+                        false,
+                        format!("[{}%{}]:{}", sockv6.ip(), interface_name, sockv6.port()),
+                    )
+                } else {
+                    // ipv6 is not link local, it's over the internet
+                    (true, format!("[{}]:{}", sockv6.ip(), sockv6.port()))
                 }
-            },
+            }
         };
 
         let allowed_addresses = "::/0".to_string();
 
-        let socket_connect_str = socket_to_string(&args.endpoint, Some(phy_name))?;
         trace!("socket connect string: {}", socket_connect_str);
         let output = self.run_command(
             "wg",
@@ -161,7 +141,7 @@ impl dyn KernelInterface {
             ],
         )?;
 
-        if external_peer {
+        if setup_gateway_routes {
             self.manual_peers_route(&args.endpoint.ip(), args.settings_default_route)?;
         }
 
