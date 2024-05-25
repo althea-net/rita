@@ -10,7 +10,6 @@
 //! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
 use crate::blockchain_oracle::calculate_close_thresh;
 use crate::blockchain_oracle::get_pay_thresh;
-use crate::blockchain_oracle::potential_payment_issues_detected;
 use crate::payment_validator::ETH_PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;
 use crate::tunnel_manager::tm_tunnel_state_change;
@@ -20,13 +19,11 @@ use crate::RitaCommonError;
 use crate::KI;
 use althea_types::Denom;
 use althea_types::Identity;
-use althea_types::SystemChain;
 use althea_types::UnpublishedPaymentTx;
 use num256::{Int256, Uint256};
 use num_traits::identities::Zero;
 use num_traits::CheckedMul;
 use num_traits::Signed;
-use settings::get_rita_common;
 use settings::DEBT_KEEPER_DENOM;
 use settings::DEBT_KEEPER_DENOM_DECIMAL;
 use std::collections::HashMap;
@@ -328,7 +325,7 @@ pub fn send_debt_update() -> Result<Vec<UnpublishedPaymentTx>, RitaCommonError> 
     let mut payments_to_send = Vec::new();
 
     for (k, _) in dk.debt_data.clone() {
-        match dk.send_update(&k)? {
+        match dk.update_debt_keeper_state_machine(&k)? {
             DebtAction::SuspendTunnel => {
                 debts_message.push(TunnelChange {
                     identity: k,
@@ -342,15 +339,6 @@ pub fn send_debt_update() -> Result<Vec<UnpublishedPaymentTx>, RitaCommonError> 
                 });
             }
             DebtAction::MakePayment { to, amount } => {
-                let payment = get_rita_common().payment;
-                if let SystemChain::Xdai = payment.system_chain {
-                    if potential_payment_issues_detected() {
-                        warn!("Potential payment issue detected");
-                        return Err(RitaCommonError::MiscStringError(
-                            "Potential payment issue detected".to_string(),
-                        ));
-                    }
-                }
                 payments_to_send.push(UnpublishedPaymentTx {
                     to: *to,
                     from: match settings::get_rita_common().get_identity() {
@@ -522,6 +510,7 @@ impl DebtKeeper {
     }
 
     fn payment_failed(&mut self, to: &Identity) {
+        warn!("Payment to {} failed", to.eth_address);
         let peer = self.get_debt_data_mut(to);
         peer.payment_in_flight = false;
         peer.payment_in_flight_start = None;
@@ -529,6 +518,7 @@ impl DebtKeeper {
 
     fn payment_succeeded(&mut self, to: &Identity, amount: Uint256) -> Result<(), RitaCommonError> {
         let peer = self.get_debt_data_mut(to);
+        info!("Payment to {} succeeded", to.eth_address);
         peer.payment_in_flight = false;
         peer.payment_in_flight_start = None;
 
@@ -641,7 +631,10 @@ impl DebtKeeper {
     }
 
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
-    fn send_update(&mut self, ident: &Identity) -> Result<DebtAction, RitaCommonError> {
+    fn update_debt_keeper_state_machine(
+        &mut self,
+        ident: &Identity,
+    ) -> Result<DebtAction, RitaCommonError> {
         trace!("debt data: {:?}", self.debt_data);
         let debt_data = self.get_debt_data_mut(ident);
         // the debt we started this round with
@@ -710,6 +703,8 @@ impl DebtKeeper {
 
                 debt_data.payment_in_flight = true;
                 debt_data.payment_in_flight_start = Some(Instant::now());
+
+                info!("Make payment to {} for {}", ident.wg_public_key, to_pay);
 
                 debt_data.action = DebtAction::MakePayment {
                     to: Box::new(*ident),
@@ -868,7 +863,10 @@ mod tests {
 
         d.traffic_update(&ident, Int256::from(-100i64));
 
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::SuspendTunnel
+        );
     }
 
     #[test]
@@ -885,7 +883,10 @@ mod tests {
         d.traffic_update(&ident, Int256::from(-100i64));
         let _ = d.payment_received(&ident, Uint256::from(1000u64));
 
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
     }
 
     #[test]
@@ -903,7 +904,7 @@ mod tests {
         d.traffic_update(&ident, Int256::from(100));
 
         assert_eq!(
-            d.send_update(&ident).unwrap(),
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(100u32),
                 to: Box::new(ident),
@@ -926,7 +927,7 @@ mod tests {
         d.traffic_update(&ident, Int256::from(100));
 
         assert_eq!(
-            d.send_update(&ident).unwrap(),
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(11u32),
                 to: Box::new(ident),
@@ -946,11 +947,17 @@ mod tests {
 
         d.traffic_update(&ident, Int256::from(-100i64));
 
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::SuspendTunnel
+        );
 
         d.payment_received(&ident, Uint256::from(110u64)).unwrap();
 
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
     }
 
     #[test]
@@ -970,7 +977,7 @@ mod tests {
         }
 
         assert_eq!(
-            d.send_update(&ident).unwrap(),
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(10000u32),
                 to: Box::new(ident),
@@ -995,7 +1002,7 @@ mod tests {
         }
 
         assert_eq!(
-            d.send_update(&ident).unwrap(),
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(11u32),
                 to: Box::new(ident),
@@ -1020,7 +1027,10 @@ mod tests {
             d.payment_received(&ident, Uint256::from(100u64)).unwrap();
         }
 
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::SuspendTunnel
+        );
     }
 
     #[test]
@@ -1039,11 +1049,17 @@ mod tests {
             d.payment_received(&ident, Uint256::from(100u64)).unwrap();
         }
 
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::SuspendTunnel
+        );
 
         d.payment_received(&ident, Uint256::from(200u64)).unwrap();
 
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
     }
 
     #[test]
@@ -1066,13 +1082,22 @@ mod tests {
         d.traffic_update(&ident, Int256::from(-10100i64));
 
         // one round of grace while we apply their old payments
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
         // then enforcement kicks in becuase they have in fact used more than their credit
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::SuspendTunnel
+        );
 
         d.payment_received(&ident, Uint256::from(200u64)).unwrap();
 
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
     }
 
     #[test]
@@ -1094,16 +1119,25 @@ mod tests {
         // by a smaller payment to reopen
         for _ in 0..100 {
             d.payment_received(&ident, Uint256::from(25u64)).unwrap();
-            assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+            assert_eq!(
+                d.update_debt_keeper_state_machine(&ident).unwrap(),
+                DebtAction::OpenTunnel
+            );
             d.traffic_update(&ident, Int256::from(-26i64));
         }
         // negative debt is now -105 so a payment of 100 shouldn't open unless limiting is working
         d.traffic_update(&ident, Int256::from(-5i64));
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::SuspendTunnel
+        );
 
         d.payment_received(&ident, Uint256::from(100u64)).unwrap();
 
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
     }
 
     #[test]
@@ -1123,7 +1157,7 @@ mod tests {
         }
         // make sure that the update response is to pay
         assert_eq!(
-            d.send_update(&ident).unwrap(),
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(10000u32),
                 to: Box::new(ident),
@@ -1154,7 +1188,7 @@ mod tests {
         // another payment, to make sure the state was all set right after
         // the failure then success
         assert_eq!(
-            d.send_update(&ident).unwrap(),
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(10000u32),
                 to: Box::new(ident),
@@ -1173,15 +1207,24 @@ mod tests {
             d.traffic_update(&ident, Int256::from(100))
         }
         assert_eq!(
-            d.send_update(&ident).unwrap(),
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(10000u32),
                 to: Box::new(ident),
             }
         );
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
     }
 
     #[test]
@@ -1205,7 +1248,7 @@ mod tests {
         }
         // make sure that the update response is to pay
         assert_eq!(
-            d.send_update(&ident).unwrap(),
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(11u32),
                 to: Box::new(ident),
@@ -1235,7 +1278,7 @@ mod tests {
         // another payment, to make sure the state was all set right after
         // the failure then success
         assert_eq!(
-            d.send_update(&ident).unwrap(),
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(11u32),
                 to: Box::new(ident),
@@ -1253,15 +1296,24 @@ mod tests {
             d.traffic_update(&ident, Int256::from(100))
         }
         assert_eq!(
-            d.send_update(&ident).unwrap(),
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(11u32),
                 to: Box::new(ident),
             }
         );
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
-        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
     }
 
     #[test]
