@@ -28,7 +28,6 @@ use std::fmt::{Display, Formatter};
 use std::time::Duration;
 use std::time::Instant;
 use web30::client::Web3;
-use web30::jsonrpc::error::Web3Error;
 
 pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
 pub const MAX_TXID_RETRIES: u8 = 15u8;
@@ -390,15 +389,8 @@ async fn make_xdai_payment(
                     );
                     // it is now possible that this transaction has been published
                     // so we have to try and determine what happened
-                    if let Web3Error::JsonRpcError { .. } = e {
-                        // in this case, we got a response from the full node that it did not like our
-                        // tx, no chance that it is published (unless they start lying to us in a new way)
-                        payment_failed(pmt.to);
-                        return Err(PaymentControllerError::FailedToSendPayment);
-                    } else {
-                        // the published state of the tx is ambiguous, now we have to pretend like we sent it.
-                        tx.txid()
-                    }
+                    // the published state of the tx is ambiguous, now we have to pretend like we sent it.
+                    tx.txid()
                 }
             };
 
