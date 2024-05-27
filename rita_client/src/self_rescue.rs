@@ -51,7 +51,7 @@ pub fn start_rita_client_rescue_loop() {
                 let mut rng = rand::thread_rng();
                 let sample = interfaces.choose_multiple(&mut rng, 3);
                 for interface in sample {
-                    if let Ok(times) = KI.get_last_active_handshake_time(&interface) {
+                    if let Ok(times) = KI.get_last_active_handshake_time(interface) {
                         // we grab only the first timestamps because none of these tunnels should have multiple timestamps
                         if let Some((_, time)) = times.first() {
                             if let Ok(elapsed) = time.elapsed() {
