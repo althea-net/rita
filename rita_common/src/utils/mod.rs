@@ -58,11 +58,6 @@ pub fn apply_babeld_settings_defaults(babeld_port: u16, config: BabeldConfig) {
                 ) {
                     error!("Failed to set babel kernel check interval with {:?}", e);
                 }
-                if let Err(e) =
-                    babel_monitor::set_interface_defaults(&mut stream, config.interface_defaults)
-                {
-                    error!("Failed to set babel interface defaults with {:?}", e);
-                }
                 info!("Successfully completed babeld setup!");
                 return;
             }
