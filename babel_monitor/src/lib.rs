@@ -239,20 +239,6 @@ pub fn set_kernel_check_interval(
     Ok(())
 }
 
-/// Sets the default interface parameters for babel. These are applied at startup and can be overridden per interface, note if modified
-/// at runtime then existing interfaces will not be updated.
-pub fn set_interface_defaults(
-    stream: &mut TcpStream,
-    defaults: BabeldInterfaceConfig,
-) -> Result<(), BabelMonitorError> {
-    let mut command = "default ".to_string();
-    command.push_str(&build_interface_config_string(defaults));
-    let result = run_command(stream, &command)?;
-
-    let _out = result;
-    Ok(())
-}
-
 /// internal utility for building the configuration string
 fn build_interface_config_string(config: BabeldInterfaceConfig) -> String {
     let mut command = String::new();
@@ -280,12 +266,12 @@ fn build_interface_config_string(config: BabeldInterfaceConfig) -> String {
 pub fn monitor(
     stream: &mut TcpStream,
     iface: &str,
-    options: Option<BabeldInterfaceConfig>,
+    options: BabeldInterfaceConfig,
 ) -> Result<(), BabelMonitorError> {
     let mut command = format!("interface {iface} ");
-    if let Some(options) = options {
-        command.push_str(&build_interface_config_string(options));
-    }
+
+    command.push_str(&build_interface_config_string(options));
+
     let result = run_command(stream, &command)?;
 
     trace!("Babel started monitoring: {}", iface);
