@@ -222,10 +222,11 @@ impl Tunnel {
         info!("Monitoring tunnel {}", self.iface_name);
         let iface_name = self.iface_name.clone();
         let babel_port = settings::get_rita_common().network.babel_port;
+        let babel_settings = settings::get_rita_common().network.babeld_settings.clone();
 
         // this operation blocks while opening and using a tcp stream
         let mut stream = open_babel_stream(babel_port, FAST_LOOP_TIMEOUT)?;
-        monitor(&mut stream, &iface_name, None)
+        monitor(&mut stream, &iface_name, babel_settings.interface_defaults)
     }
 
     pub fn unmonitor(&self) -> Result<(), RitaCommonError> {
