@@ -132,35 +132,23 @@ impl dyn KernelInterface {
         &self,
         ifname: &str,
     ) -> Result<Vec<(WgKey, SystemTime)>, Error> {
-        let output = self.run_command("wg", &["show", ifname, "latest-handshakes"])?;
-        let out = String::from_utf8(output.stdout)?;
-        let mut timestamps = Vec::new();
-        for line in out.lines() {
-            let content: Vec<&str> = line.split('\t').collect();
-            let mut itr = content.iter();
-            let wg_key: WgKey = match itr.next() {
-                Some(val) => val.parse()?,
-                None => {
-                    return Err(KernelInterfaceError::RuntimeError(
-                        "Invalid line!".to_string(),
-                    ))
-                }
-            };
-            let timestamp = match itr.next() {
-                Some(val) => val.parse()?,
-                None => {
-                    return Err(KernelInterfaceError::RuntimeError(
-                        "Invalid line!".to_string(),
-                    ))
-                }
-            };
-            if timestamp == 0 {
-                continue;
-            }
-            let d = UNIX_EPOCH + Duration::from_secs(timestamp);
-            timestamps.push((wg_key, d))
-        }
+        let timestamps = self.get_last_handshake_time(ifname)?;
+        let timestamps = timestamps
+            .into_iter()
+            .filter(|(_, time)| *time != UNIX_EPOCH)
+            .collect();
         Ok(timestamps)
+    }
+
+    /// Gets a list of all active wireguard interfaces on this device
+    pub fn get_list_of_wireguard_interfaces(&self) -> Result<Vec<String>, Error> {
+        let output = self.run_command("wg", &["show", "interfaces"])?;
+        let out = String::from_utf8(output.stdout)?;
+        let mut interfaces = Vec::new();
+        for interface in out.split_ascii_whitespace() {
+            interfaces.push(interface.to_string())
+        }
+        Ok(interfaces)
     }
 }
 
