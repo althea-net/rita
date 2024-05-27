@@ -11,18 +11,15 @@ use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::operator_fee_manager::tick_operator_payments;
 use crate::InterfaceMode;
 use actix_async::System as AsyncSystem;
-use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_kernel_interface::KernelInterfaceError;
 use althea_kernel_interface::KI;
 use althea_types::ExitState;
 use antenna_forwarding_client::start_antenna_forwarding_proxy;
-use rand::Rng;
 use rita_common::rita_loop::set_gateway;
 use rita_common::tunnel_manager::tm_get_neighbors;
 use rita_common::usage_tracker::get_current_hour;
 use rita_common::usage_tracker::get_last_saved_usage_hour;
 use settings::client::RitaClientSettings;
-use settings::get_rita_common;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -32,7 +29,6 @@ use std::io::BufReader;
 use std::io::Read;
 use std::io::Seek;
 use std::net::IpAddr;
-use std::net::Ipv4Addr;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -99,7 +95,6 @@ pub fn start_rita_client_loop() {
         // with some fancy destructuring
         while let Err(e) = {
             thread::spawn(move || {
-                let mut last_successful_ping = Instant::now();
                 loop {
                     let start = Instant::now();
                     trace!("Client tick!");
@@ -121,13 +116,6 @@ pub fn start_rita_client_loop() {
                     check_for_gateway_client_billing_corner_case();
                     info!(
                         "Rita Client loop corner case in {}s {}ms",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis()
-                    );
-
-                    last_successful_ping = check_for_rescue_reboot(last_successful_ping);
-                    info!(
-                        "Rita Client loop check for rescue reboot completed in {}s {}ms",
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_millis()
                     );
@@ -172,6 +160,7 @@ pub fn start_rita_client_loops() {
     }
     crate::exit_manager::exit_loop::start_exit_manager_loop();
     crate::rita_loop::start_rita_client_loop();
+    crate::self_rescue::start_rita_client_rescue_loop();
     crate::operator_update::update_loop::start_operator_update_loop();
 }
 
@@ -494,76 +483,4 @@ fn maybe_parse_ip(
         Ok(s) => Ok(s.parse()?),
         Err(e) => Err(e),
     }
-}
-
-/// This list should contain as many unique public ips from as many different providers as possible
-/// the larger this list the less we ping any specific provider and the less likely we are to be
-/// confused by a single router being down
-const PING_TEST_IPS: [Ipv4Addr; 6] = [
-    // Cloudflare
-    Ipv4Addr::new(1, 1, 1, 1),
-    // Google
-    Ipv4Addr::new(8, 8, 8, 8),
-    // Quad9
-    Ipv4Addr::new(9, 9, 9, 9),
-    // Hurricane Electric
-    Ipv4Addr::new(74, 82, 42, 42),
-    // OpenDNS
-    Ipv4Addr::new(208, 67, 222, 222),
-    // Verisin
-    Ipv4Addr::new(64, 6, 65, 6),
-];
-/// Verifies ipv4 connectivity by pinging a set list of external ip addresses. This check
-/// comes with some risk, if the ip addresses provided are all down, the router will reboot
-/// even if connectivity to the rest of the internet is fine. To avoid this we ping several
-/// different common addresses
-pub fn run_ping_test() -> bool {
-    let mut rng = rand::thread_rng();
-    let index = rng.gen_range(0..PING_TEST_IPS.len());
-    let target_ip = PING_TEST_IPS[index];
-
-    let timeout = Duration::from_secs(5);
-    match KI.ping_check(&target_ip.into(), timeout, None) {
-        Ok(out) => out,
-        Err(e) => {
-            error!("ipv4 ping error: {:?}", e);
-            false
-        }
-    }
-}
-
-const PING_TEST_SPEED: Duration = Duration::from_secs(100);
-const REBOOT_TIMEOUT: Duration = Duration::from_secs(600);
-/// This function checks if the router needs a rescue reboot. Meaning it has entered a bad state somehow and needs to be restarted
-/// to recover.
-fn check_for_rescue_reboot(mut last_successful_ping: Instant) -> Instant {
-    // first we check if we can reach the internet, if we can't for too long we reboot
-
-    // Run this ping test every PING_TEST_SPEED seconds
-    if Instant::now() - last_successful_ping > PING_TEST_SPEED {
-        if run_ping_test() {
-            last_successful_ping = Instant::now();
-        } else {
-            // If this router has been in a bad state for >10 mins, reboot
-            if (Instant::now() - last_successful_ping) > REBOOT_TIMEOUT {
-                let _res = KI.run_command("reboot", &[]);
-            }
-        }
-    }
-
-    // next we check if the load average is too high for hAP specifically since they are more prone to this
-    let model = get_rita_common().network.device;
-    let hw_info = get_hardware_info(model.clone());
-    match (model, hw_info) {
-        (None, _) => error!("Model name not found?"),
-        (Some(mdl), Ok(info)) => {
-            if mdl.contains("mikrotik_hap-ac2") && info.load_avg_fifteen_minute > 4.0 {
-                info!("15 minute load average > 4, rebooting!");
-                let _res = KI.run_command("reboot", &[]);
-            }
-        }
-        (Some(_), Err(_)) => error!("Could not get hardware info!"),
-    }
-
-    last_successful_ping
 }

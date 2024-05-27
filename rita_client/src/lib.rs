@@ -16,7 +16,9 @@ pub mod logging;
 pub mod operator_fee_manager;
 pub mod operator_update;
 pub mod rita_loop;
+mod self_rescue;
 pub mod traffic_watcher;
+
 pub use error::RitaClientError;
 use rita_common::READABLE_VERSION;
 use std::path::PathBuf;
