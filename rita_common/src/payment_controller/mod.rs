@@ -80,26 +80,30 @@ impl PaymentController {
 
         let mut payments_sent_this_round = Vec::new();
 
-        // Send each payment from the outgoing queue, if it fails we will requeue it
-        // if make_payment fails, that means the transaction never made it to the full node
-        // if the transaction never made it to the neighbor then we return Ok() but Some(RetryInfo)
-        // is populated
-        let mut requeue = Vec::new();
+        // if payments fail they are passed back to debt keeper to handle retrying
+        // or passed onto payment_validator becuase they might be published
         while let Some(pmt) = self.outgoing_queue.pop() {
             match make_payment(pmt, &previously_sent_payments).await {
                 Ok((pmt, resend)) => {
+                    // resend info contains info required to notify our neighbor that the payment
+                    // has been made. Since we have already sent the payment on the blockchain
+                    // and the neighbor is not watching their account but instead needs to be notified
+                    // we must make all possible efforts to get this info to them otherwise the payment
+                    // doesn't do anything for us
                     payments_sent_this_round.push(pmt);
                     if let Some(retry) = resend {
                         self.resend_queue.push(retry)
                     }
                 }
                 Err(e) => {
+                    // this must be the only reference to this function in this file!
+                    // anything that is definately not publsihed needs to go back to debt keeper
+                    // anything that might be published must go to payment validator
+                    payment_failed(pmt.to);
                     warn!("Failed to send payment with {:?}!", e);
-                    requeue.push(pmt)
                 }
             }
         }
-        self.outgoing_queue.extend(requeue);
 
         // this creates a series of futures that we can use to perform
         // retires in parallel, this is helpful because retries may take
@@ -161,8 +165,7 @@ impl Display for PaymentControllerError {
 
 impl Error for PaymentControllerError {}
 
-/// This is called by debt_keeper to make payments. It sends a
-/// PaymentTx to the `mesh_ip` in its `to` field. It returns a payment to validate
+/// Make a payment to a neighbor, this function will send the payment on the blockchain
 async fn make_payment(
     pmt: UnpublishedPaymentTx,
     previously_sent_payments: &HashMap<Identity, HashSet<PaymentTx>>,
@@ -305,7 +308,6 @@ async fn make_althea_payment(
                 "Failed to send payment {:?} to {:?} with {:?}",
                 pmt, pmt.to, e
             );
-            payment_failed(pmt.to);
             return Err(PaymentControllerError::FailedToSendPayment);
         }
     };
@@ -425,7 +427,6 @@ async fn make_xdai_payment(
             );
             // we have not yet published the tx
             // so it's safe to add this debt back to our balances
-            payment_failed(pmt.to);
             Err(PaymentControllerError::FailedToSendPayment)
         }
     }
@@ -443,7 +444,6 @@ fn sanity_check_balance(
                 // tell debt keeper the payment failed and it enqueues another
                 // that also won't succeed right away, or it waits for the timeout
                 // and does the same thing.
-                payment_failed(pmt.to);
                 Err(PaymentControllerError::InsufficientFunds {
                     amount: pmt.amount,
                     balance: value,
@@ -460,7 +460,7 @@ fn sanity_check_balance(
             warn!("Balance is none");
             Err(PaymentControllerError::InsufficientFunds {
                 amount: pmt.amount,
-                balance: balance.unwrap_or_else(|| 0u64.into()),
+                balance: 0u32.into(),
             })
         }
     }

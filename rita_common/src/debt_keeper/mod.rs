@@ -514,6 +514,17 @@ impl DebtKeeper {
     fn payment_failed(&mut self, to: &Identity) {
         warn!("Payment to {} failed", to.eth_address);
         let peer = self.get_debt_data_mut(to);
+
+        // this should be true! if it's not we have a bug
+        if !peer.payment_in_flight {
+            error!(
+                "Payment to {} failed but no payment in flight!",
+                to.eth_address
+            );
+        }
+        // this should be true! if it's not we have a bug
+        assert!(peer.payment_in_flight);
+
         peer.payment_in_flight = false;
         peer.payment_in_flight_start = None;
     }
@@ -521,6 +532,16 @@ impl DebtKeeper {
     fn payment_succeeded(&mut self, to: &Identity, amount: Uint256) -> Result<(), RitaCommonError> {
         let peer = self.get_debt_data_mut(to);
         info!("Payment to {} succeeded", to.eth_address);
+
+        // this should be true! if it's not we have a bug
+        if !peer.payment_in_flight {
+            error!(
+                "Payment to {} succeeded but no payment in flight!",
+                to.eth_address
+            );
+        }
+        assert!(peer.payment_in_flight);
+
         peer.payment_in_flight = false;
         peer.payment_in_flight_start = None;
 
@@ -912,6 +933,10 @@ mod tests {
                 to: Box::new(ident),
             }
         );
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::OpenTunnel
+        );
     }
 
     #[test]
@@ -1174,6 +1199,15 @@ mod tests {
             Uint256::from(0u32)
         );
 
+        // update the state machine again, make sure it tires the payment again since the last one failed
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::MakePayment {
+                amount: Uint256::from(10000u32),
+                to: Box::new(ident),
+            }
+        );
+
         // mark the payment as a success
         d.payment_succeeded(&ident, Uint256::from(10000u32))
             .unwrap();
@@ -1263,6 +1297,15 @@ mod tests {
         assert_eq!(
             d.get_debts()[&ident].total_payment_sent,
             Uint256::from(0u32)
+        );
+
+        // try the payment again
+        assert_eq!(
+            d.update_debt_keeper_state_machine(&ident).unwrap(),
+            DebtAction::MakePayment {
+                amount: Uint256::from(11u32),
+                to: Box::new(ident),
+            }
         );
 
         // mark the payment as a success
