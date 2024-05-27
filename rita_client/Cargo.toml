@@ -36,7 +36,7 @@ actix-web-async = { package="actix-web", version = "4.3", default_features = fal
 actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.8.0"}
 clarity = {workspace = true}
 openssh-keys = "0.6"
-mac_address = "1.1.4"
+mac_address = "1.1.7"
 futures = { version = "0.3", features = ["compat"] }
 
 [lib]
