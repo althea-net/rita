@@ -395,7 +395,6 @@ pub fn get_default_settings(
         network: NetworkSettings::default(),
         exit_network: ExitNetworkSettings::test_default(),
         allowed_countries: HashSet::new(),
-        save_interval: 6000,
     };
     let client = RitaClientSettings::default();
     exit.exit_network.pass = Some("testpass".to_string());

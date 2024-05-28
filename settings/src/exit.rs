@@ -103,9 +103,6 @@ fn default_balance_notification_email_body() -> String {
 fn default_remote_log() -> bool {
     false
 }
-fn default_save_interval() -> u64 {
-    300
-}
 pub fn default_reg_url() -> String {
     "https://operator.althea.net:8080/register_router".to_string()
 }
@@ -174,9 +171,6 @@ pub struct RitaExitSettingsStruct {
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     pub allowed_countries: HashSet<Regions>,
-    /// The save interval defaults to 5 minutes for exit settings represented in seconds
-    #[serde(default = "default_save_interval")]
-    pub save_interval: u64,
 }
 
 impl RitaExitSettingsStruct {
@@ -198,7 +192,6 @@ impl RitaExitSettingsStruct {
             network: NetworkSettings::default(),
             exit_network: ExitNetworkSettings::test_default(),
             allowed_countries: HashSet::new(),
-            save_interval: default_save_interval(),
         }
     }
 
