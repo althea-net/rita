@@ -85,6 +85,10 @@ fn main() {
 
         settings::set_flag_config(settings_file.clone());
 
+        if !settings.validate() {
+            panic!("Invalid settings file!")
+        }
+
         let settings = clu::exit_init(settings);
         settings::set_rita_exit(settings.clone());
         sanity_check_config();

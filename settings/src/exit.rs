@@ -180,6 +180,11 @@ pub struct RitaExitSettingsStruct {
 }
 
 impl RitaExitSettingsStruct {
+    /// Returns true if the settings are valid
+    pub fn validate(&self) -> bool {
+        self.payment.validate()
+    }
+
     /// Generates a configuration that can be used in integration tests, does not use the
     /// default trait to prevent some future code from picking up on the 'default' implementation
     pub fn test_default() -> Self {

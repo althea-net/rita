@@ -7,6 +7,7 @@
 //! off to debt keeper to be removed from the owed balance. Payments may time out after a
 //! configured period.
 
+use crate::debt_keeper::payment_failed;
 use crate::debt_keeper::payment_received;
 use crate::debt_keeper::payment_succeeded;
 use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
@@ -224,27 +225,64 @@ impl PaymentValidator {
 
     /// Removes a transaction from the pending validation queue, it may either
     /// have been discovered to be invalid or have been successfully accepted
-    fn remove(&mut self, tx: ToValidate, our_address: Address, success: bool) {
+    /// This function handles updating debt keeper and usage tracker with the details
+    /// messaging to external modules should happen only in this function
+    fn remove_and_update_debt_keeper(&mut self, tx: ToValidate, success: TxValidationStatus) {
         let was_present = self.unvalidated_transactions.remove(&tx);
 
-        // store successful transactions to us so that they can't be played back to us, at least
-        // during this session
-        if success && tx.payment.from.eth_address != our_address {
-            self.successful_transactions.insert(tx.payment);
+        match success {
+            TxValidationStatus::FromUsSuccess => {
+                let txs = self
+                    .previously_sent_payments
+                    .entry(tx.payment.to)
+                    .or_default();
+
+                // update debt keeper with details of this payment
+                let _ = payment_succeeded(
+                    tx.payment.to,
+                    tx.payment.amount,
+                    Denom {
+                        denom: DEBT_KEEPER_DENOM.to_string(),
+                        decimal: DEBT_KEEPER_DENOM_DECIMAL,
+                    },
+                );
+
+                // update the usage tracker with the details of this payment
+                update_payments(tx.payment);
+
+                txs.insert(tx.payment);
+            }
+            TxValidationStatus::FromUsFailure => {
+                // notify debt keeper that the payment has failed
+                payment_failed(tx.payment.to);
+            }
+            // store successful transactions to us so that they can't be played back to us, at least
+            // during this session
+            TxValidationStatus::ToUsSuccess => {
+                self.successful_transactions.insert(tx.payment);
+
+                // update debt keeper with the details of this payment
+                let _ = payment_received(
+                    tx.payment.from,
+                    tx.payment.amount,
+                    Denom {
+                        denom: DEBT_KEEPER_DENOM.to_string(),
+                        decimal: DEBT_KEEPER_DENOM_DECIMAL,
+                    },
+                );
+
+                // update the usage tracker with the details of this payment
+                update_payments(tx.payment);
+            }
+            // if a payment to us fails we don't need to do anything
+            TxValidationStatus::ToUsFailure => {}
+            // Log and hopefully resolve the errors
+            TxValidationStatus::FailureException => {}
         }
 
-        // store transactions we have sent by ID for later playback to that peer
-        // to remind them of the transaction if they reboot
-        if success && tx.payment.from.eth_address == our_address {
-            let txs = self
-                .previously_sent_payments
-                .entry(tx.payment.to)
-                .or_default();
-            txs.insert(tx.payment);
-        }
-
+        // integrity checks unrelated to the rest of the processing
         if was_present && self.is_consistent() {
-            info!("Transaction {} {} was removed", tx, success);
+            info!("Transaction {} {:?} was removed", tx, success);
         } else {
             warn!(
                 "Transaction {} was double removed or state became inconsistent",
@@ -331,7 +369,7 @@ impl PaymentValidator {
                     format!("{:#066x}", item.payment.txid)
                 );
 
-                to_delete.push((item.clone(), false));
+                to_delete.push((item.clone(), TxValidationStatus::ToUsFailure));
             }
             // timeout eth based transactions after the timeout time has passed, in this case it's possible that our tx will be included
             // after the timeout and we will overpay
@@ -344,7 +382,7 @@ impl PaymentValidator {
                     "Outgoing transaction {:#066x} has timed out, payment failed!",
                     item.payment.txid
                 );
-                to_delete.push((item.clone(), false));
+                to_delete.push((item.clone(), TxValidationStatus::FromUsFailure));
             } else {
                 // we take all these futures and put them onto an array that we will execute
                 // in parallel, this is essential on the exit where in the worst case scenario
@@ -383,10 +421,11 @@ impl PaymentValidator {
 
         // This is the final stage of payment validation, we remove all transactions
         // that have been processed from the unvalidated_transactions list
-        // Messaging to debt keeper and usage tracker is done within the validate
-        // functions themselves
+        // Messaging to debt keeper and usage tracker must only be done here
+        // keeping it in one location makes it easier to keep track of and prevent
+        // duplicate checks which can cause duplicate payments or panics in debt keeper
         for (tx, success) in to_delete.iter() {
-            self.remove(tx.clone(), our_address, *success)
+            self.remove_and_update_debt_keeper(tx.clone(), *success)
         }
 
         // we return our list of sent payments this is passed to payment_controller
@@ -398,7 +437,10 @@ impl PaymentValidator {
 }
 
 /// This wrapper function handles validating a transaction on either Althea or Xdai based on the system chain
-async fn validate_transaction(ts: ToValidate, chain: SystemChain) -> Option<(ToValidate, bool)> {
+async fn validate_transaction(
+    ts: ToValidate,
+    chain: SystemChain,
+) -> Option<(ToValidate, TxValidationStatus)> {
     match chain {
         SystemChain::AltheaL1 => handle_althea_tx_checking(ts.clone()).await,
         SystemChain::Xdai | SystemChain::Ethereum | SystemChain::Sepolia => {
@@ -407,7 +449,7 @@ async fn validate_transaction(ts: ToValidate, chain: SystemChain) -> Option<(ToV
     }
 }
 
-async fn handle_althea_tx_checking(ts: ToValidate) -> Option<(ToValidate, bool)> {
+async fn handle_althea_tx_checking(ts: ToValidate) -> Option<(ToValidate, TxValidationStatus)> {
     let cosmos_node_grpc = get_rita_common().payment.althea_grpc_list[0].clone();
     let althea_contact = Contact::new(
         &cosmos_node_grpc,
@@ -443,7 +485,14 @@ async fn handle_althea_tx_checking(ts: ToValidate) -> Option<(ToValidate, bool)>
             if let Some(timeout_block) = ts.timeout_block {
                 if block_height > timeout_block {
                     error!("Transaction {} has timed out, payment failed!", txhash);
-                    Some((ts, false))
+                    let our_address = settings::get_rita_common().payment.eth_address.unwrap();
+                    let to_us = ts.payment.to.eth_address == our_address;
+                    let from_us = ts.payment.from.eth_address == our_address;
+                    match (to_us, from_us) {
+                        (true, false) => Some((ts, TxValidationStatus::ToUsFailure)),
+                        (false, true) => Some((ts, TxValidationStatus::FromUsFailure)),
+                        _ => Some((ts, TxValidationStatus::FailureException)),
+                    }
                 } else {
                     None
                 }
@@ -468,13 +517,13 @@ async fn handle_althea_tx_checking(ts: ToValidate) -> Option<(ToValidate, bool)>
 fn handle_tx_messaging_althea(
     transactions: Vec<MsgMicrotx>,
     ts: ToValidate,
-) -> Option<(ToValidate, bool)> {
+) -> Option<(ToValidate, TxValidationStatus)> {
     if transactions.is_empty() {
         error!("Microtx payment with no transactions!");
         if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
             panic!("Microtx payment with no transactions!");
         }
-        return Some((ts, false));
+        return Some((ts, TxValidationStatus::FailureException));
     }
     let transaction = transactions[0].clone();
 
@@ -485,7 +534,7 @@ fn handle_tx_messaging_althea(
         if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
             panic!("Transaction with no amount!");
         }
-        return Some((ts, false));
+        return Some((ts, TxValidationStatus::FailureException));
     };
 
     let reciver_address: AltheaAddress = match transaction.receiver.parse() {
@@ -495,7 +544,7 @@ fn handle_tx_messaging_althea(
             if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
                 panic!("Invalid reciever address!");
             }
-            return Some((ts, false));
+            return Some((ts, TxValidationStatus::FailureException));
         }
     };
 
@@ -506,7 +555,7 @@ fn handle_tx_messaging_althea(
             if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
                 panic!("Invalid sender address!");
             }
-            return Some((ts, false));
+            return Some((ts, TxValidationStatus::FailureException));
         }
     };
 
@@ -523,7 +572,11 @@ fn handle_tx_messaging_althea(
             "Invalid Denom! We do not currently support {}!",
             amount.denom
         );
-        return Some((ts, false));
+        if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+            panic!("Invalid recieved denom");
+        }
+        // since we must always send a payment that's valid to ourselves this must be a failure
+        return Some((ts, TxValidationStatus::ToUsFailure));
     }
 
     let our_id = settings::get_rita_common().get_identity().unwrap();
@@ -538,7 +591,10 @@ fn handle_tx_messaging_althea(
 
     if !value_correct {
         error!("Transaction with invalid amount!");
-        return Some((ts, false));
+        if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+            panic!("Transaction with invalid amount!");
+        }
+        return Some((ts, TxValidationStatus::FailureException));
     }
 
     match (to_us, from_us) {
@@ -551,16 +607,7 @@ fn handle_tx_messaging_althea(
                 amount,
                 denom.clone().expect("Already verified existance").denom
             );
-
-            // update debt keeper with the details of this payment
-            let _ = payment_received(
-                ts.payment.from,
-                ts.payment.amount,
-                denom.expect("How did this happen when we already verified existence"),
-            );
-            // update the usage tracker with the details of this payment
-            update_payments(ts.payment);
-            Some((ts, true))
+            Some((ts, TxValidationStatus::ToUsSuccess))
         }
         // we successfully paid someone
         (false, true) => {
@@ -571,26 +618,15 @@ fn handle_tx_messaging_althea(
                 amount,
                 denom.clone().expect("Already verified existance").denom
             );
-
-            // update debt keeper with the details of this payment
-            payment_succeeded(
-                ts.payment.to,
-                ts.payment.amount,
-                denom.expect("How did this happen when we already verified existence"),
-            )
-            .unwrap();
-            // update the usage tracker with the details of this payment
-            update_payments(ts.payment);
-
-            Some((ts, true))
+            Some((ts, TxValidationStatus::FromUsSuccess))
         }
         (true, true) => {
             error!("Transaction to ourselves!");
-            Some((ts, false))
+            Some((ts, TxValidationStatus::FailureException))
         }
         (false, false) => {
             error!("Transaction has nothing to do with us?");
-            Some((ts, false))
+            Some((ts, TxValidationStatus::FailureException))
         }
     }
 }
@@ -675,7 +711,7 @@ fn decode_althea_microtx(response: GetTxResponse) -> Vec<MsgMicrotx> {
 /// and then checking the results to determine if the transaction is valid. If the transaction
 /// is valid or invalid Some(true) or Some(false) respectively is returned. If the transaction
 /// is still pending None is returned.
-async fn handle_xdai_tx_checking(ts: ToValidate) -> Option<(ToValidate, bool)> {
+async fn handle_xdai_tx_checking(ts: ToValidate) -> Option<(ToValidate, TxValidationStatus)> {
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, TRANSACTION_VERIFICATION_TIMEOUT);
 
@@ -722,6 +758,22 @@ fn get_xdai_transaction_details(
     }
 }
 
+/// A quick internal enum to encode the status of a transaction validation
+/// rather than a boolean which would leave the direction of the transaction
+/// ambiguous
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TxValidationStatus {
+    FromUsSuccess,
+    FromUsFailure,
+    ToUsSuccess,
+    ToUsFailure,
+    /// a case for failures that don't require any messaging about success or failure
+    /// to debt keeper and is used for cases we really shouldn't ever seen in production
+    /// but we don't panic for because a hostile actor could cause them by submitting strange tx
+    /// for validation
+    FailureException,
+}
+
 /// This function is used to validate transactions both incoming and outgoing, it must reject any payment
 /// that is not correct and returns the payment and a boolean indicating if it was successful, if we do not
 /// yet know if the payment was successful we return None
@@ -730,10 +782,9 @@ fn handle_tx_messaging_xdai(
     transaction: TransactionResponse,
     ts: ToValidate,
     current_block: Uint256,
-) -> Option<(ToValidate, bool)> {
+) -> Option<(ToValidate, TxValidationStatus)> {
     let from_address = ts.payment.from.eth_address;
     let amount = ts.payment.amount;
-    let pmt = ts.payment;
     let our_address = settings::get_rita_common()
         .payment
         .eth_address
@@ -744,8 +795,9 @@ fn handle_tx_messaging_xdai(
     let to = match tx_to {
         Some(val) => val,
         None => {
+            // this is only possible for contract creation transactions
             error!("Invalid TX! No destination!");
-            return Some((ts, false));
+            return Some((ts, TxValidationStatus::FailureException));
         }
     };
 
@@ -760,12 +812,12 @@ fn handle_tx_messaging_xdai(
 
     if !value_correct {
         error!("Transaction with invalid amount!");
-        return Some((ts, false));
+        return Some((ts, TxValidationStatus::FailureException));
     }
 
     if is_old {
         error!("Transaction is more than 6 hours old! {:#066x}", txid);
-        return Some((ts, false));
+        return Some((ts, TxValidationStatus::FailureException));
     }
 
     match (to_us, from_us, is_in_chain) {
@@ -775,20 +827,7 @@ fn handle_tx_messaging_xdai(
                 "payment {:#066x} from {} for {} wei successfully validated!",
                 txid, from_address, amount
             );
-            // update debt keeper with the details of this payment
-            let _ = payment_received(
-                pmt.from,
-                pmt.amount,
-                Denom {
-                    denom: DEBT_KEEPER_DENOM.to_string(),
-                    decimal: DEBT_KEEPER_DENOM_DECIMAL,
-                },
-            );
-
-            // update the usage tracker with the details of this payment
-            update_payments(pmt);
-
-            Some((ts, true))
+            Some((ts, TxValidationStatus::ToUsSuccess))
         }
         // we successfully paid someone
         (false, true, true) => {
@@ -796,31 +835,18 @@ fn handle_tx_messaging_xdai(
                 "payment {:#066x} from {} for {} wei successfully sent!",
                 txid, from_address, amount
             );
-            // update debt keeper with the details of this payment
-            let _ = payment_succeeded(
-                pmt.to,
-                pmt.amount,
-                Denom {
-                    denom: DEBT_KEEPER_DENOM.to_string(),
-                    decimal: DEBT_KEEPER_DENOM_DECIMAL,
-                },
-            );
-
-            // update the usage tracker with the details of this payment
-            update_payments(pmt);
-
-            Some((ts, true))
+            Some((ts, TxValidationStatus::FromUsSuccess))
         }
         (true, true, _) => {
             error!("Transaction to ourselves!");
-            Some((ts, false))
+            Some((ts, TxValidationStatus::FailureException))
         }
         (false, false, _) => {
             error!("Transaction has nothing to do with us?");
-            Some((ts, false))
+            Some((ts, TxValidationStatus::FailureException))
         }
         (_, _, false) => {
-            //transaction waiting for validation, do nothingi
+            //transaction waiting for validation, do nothing
             None
         }
     }
@@ -874,16 +900,27 @@ pub fn althea_l1_txid_to_string(txid: Uint256) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::usage_tracker::tests::test::random_identity;
+    use crate::debt_keeper::reset_debt_keeper;
+    use crate::{
+        blockchain_oracle::get_pay_thresh,
+        debt_keeper::{send_debt_update, traffic_update, Traffic},
+        usage_tracker::tests::test::random_identity,
+    };
     use actix_async::System;
+    use num256::Int256;
     use num_traits::Num;
+    use settings::client::RitaClientSettings;
 
-    fn generate_fake_payment() -> ToValidate {
-        let amount: u128 = rand::random();
+    fn generate_fake_payment(from_id: Identity) -> ToValidate {
+        let mut amount: u128 = rand::random();
+        // we have to make sure this value is hgih enough to trigger a payment
+        while Int256::from(amount) <= get_pay_thresh() {
+            amount = rand::random();
+        }
         let txid: u128 = rand::random();
         let tx = PaymentTx {
             to: random_identity(),
-            from: random_identity(),
+            from: from_id,
             amount: amount.into(),
             txid: txid.into(),
         };
@@ -907,54 +944,92 @@ mod tests {
     #[test]
     fn test_remove() {
         let mut validator = PaymentValidator::new();
+        let our_id = random_identity();
+        // setup settings in test env
+        RitaClientSettings::setup_test(our_id);
+        reset_debt_keeper();
 
         // add a payment to carry through the test to demonstrate we don't
         // remove the wrong one
-        let payment = generate_fake_payment();
+        let payment = generate_fake_payment(our_id);
         validator.add_to_validation_queue(payment.clone()).unwrap();
 
         // test that we remove a transaction and put it into the successful list
-        let payment = generate_fake_payment();
+        let payment = generate_fake_payment(our_id);
         validator.add_to_validation_queue(payment.clone()).unwrap();
-        validator.remove(payment.clone(), random_identity().eth_address, true);
+        validator.remove_and_update_debt_keeper(
+            payment.clone(),
+            // the random payment doesn't specify who it's from
+            TxValidationStatus::ToUsSuccess,
+        );
         assert_eq!(validator.unvalidated_transactions.len(), 1);
         assert_eq!(validator.successful_transactions.len(), 1);
         assert_eq!(validator.previously_sent_payments.len(), 0);
 
-        // unsuccessful transactions should be saved
-        let payment = generate_fake_payment();
+        // unsuccessful transactions should not be saved
+
+        // we generate a payment, and enqueue it for validation, while also
+        // messaging debt keeper that a payment needs to be made this is required
+        // so that the cross validation works while also bypassing payment_controller
+        // since we're not actually sending a payment in this test
+        let payment = generate_fake_payment(our_id);
+        traffic_update(vec![Traffic {
+            // not a typo, the debt is from this peer
+            from: payment.payment.to,
+            amount: payment.payment.amount.to_string().parse().unwrap(),
+        }]);
         validator.add_to_validation_queue(payment.clone()).unwrap();
-        validator.remove(payment.clone(), random_identity().eth_address, false);
+        // debt update should return one payment to be made (which we've already added to the queue)
+        // skipping the part where paymetn_controller would send hte payment then enqueue it
+        assert!(send_debt_update().unwrap().len() == 1);
+
+        validator.remove_and_update_debt_keeper(payment.clone(), TxValidationStatus::FromUsFailure);
         assert_eq!(validator.unvalidated_transactions.len(), 1);
         assert_eq!(validator.successful_transactions.len(), 1);
         assert_eq!(validator.previously_sent_payments.len(), 0);
 
         // make sure the payments sent from us are stored in the correct list
-        let payment = generate_fake_payment();
+        // run this again to have debt_keeper trigger a payment retry
+        assert!(send_debt_update().unwrap().len() == 1);
         validator.add_to_validation_queue(payment.clone()).unwrap();
-        validator.remove(payment.clone(), payment.payment.from.eth_address, true);
+        validator.remove_and_update_debt_keeper(payment.clone(), TxValidationStatus::FromUsSuccess);
         assert_eq!(validator.unvalidated_transactions.len(), 1);
         assert_eq!(validator.successful_transactions.len(), 1);
         assert_eq!(validator.previously_sent_payments.len(), 1);
 
         // payments that do not succeed should not be added
-        let payment = generate_fake_payment();
+        let payment = generate_fake_payment(our_id);
+        traffic_update(vec![Traffic {
+            // not a typo, the debt is from this peer
+            from: payment.payment.to,
+            amount: payment.payment.amount.to_string().parse().unwrap(),
+        }]);
         validator.add_to_validation_queue(payment.clone()).unwrap();
+        // debt update should return one payment to be made (which we've already added to the queue)
+        // skipping the part where paymetn_controller would send hte payment then enqueue it
+        assert!(send_debt_update().unwrap().len() == 1);
         assert_eq!(validator.unvalidated_transactions.len(), 2);
-        validator.remove(payment.clone(), payment.payment.from.eth_address, false);
+        validator.remove_and_update_debt_keeper(payment.clone(), TxValidationStatus::FromUsFailure);
         assert_eq!(validator.unvalidated_transactions.len(), 1);
         assert_eq!(validator.successful_transactions.len(), 1);
         assert_eq!(validator.previously_sent_payments.len(), 1);
     }
 
+    // this test has to be ignored by default becuase it panics and poisons the DebtKeeper lazy static
+    // this can be removed once we (hopefuly) move away from a global variable situation
+    #[ignore]
     #[test]
     #[should_panic]
     fn test_double_remove() {
         let mut validator = PaymentValidator::new();
-        let payment = generate_fake_payment();
+        let our_id = random_identity();
+        RitaClientSettings::setup_test(our_id);
+        reset_debt_keeper();
+
+        let payment = generate_fake_payment(our_id);
         validator.add_to_validation_queue(payment.clone()).unwrap();
-        validator.remove(payment.clone(), payment.payment.from.eth_address, false);
-        validator.remove(payment.clone(), payment.payment.from.eth_address, false);
+        validator.remove_and_update_debt_keeper(payment.clone(), TxValidationStatus::FromUsFailure);
+        validator.remove_and_update_debt_keeper(payment.clone(), TxValidationStatus::FromUsFailure);
     }
 
     #[test]
@@ -962,11 +1037,15 @@ mod tests {
     fn test_duplicate_tx() {
         // check that we can't put duplicates in add_to_validation_queue
         let mut validator = PaymentValidator::new();
-        let payment = generate_fake_payment();
+        let our_id = random_identity();
+        RitaClientSettings::setup_test(our_id);
+        reset_debt_keeper();
+
+        let payment = generate_fake_payment(our_id);
         assert!(validator.add_to_validation_queue(payment.clone()).is_ok());
         assert!(validator.add_to_validation_queue(payment).is_err());
         // check that we can't put dupliates in that we have already validated
-        let payment = generate_fake_payment();
+        let payment = generate_fake_payment(our_id);
         validator.successful_transactions.insert(payment.payment);
         assert!(validator.add_to_validation_queue(payment).is_err());
     }
@@ -974,9 +1053,13 @@ mod tests {
     // ensures that payment validator crashes when presented with an invalid state
     #[test]
     fn test_invalid_payment_validator_state() {
-        // duplicate between unvalidated and previously sent
         let mut validator = PaymentValidator::new();
-        let payment = generate_fake_payment();
+        let our_id = random_identity();
+        RitaClientSettings::setup_test(our_id);
+        reset_debt_keeper();
+
+        // duplicate between unvalidated and previously sent
+        let payment = generate_fake_payment(our_id);
         let mut set = HashSet::new();
         set.insert(payment.clone().payment);
         validator.unvalidated_transactions.insert(payment.clone());
@@ -988,7 +1071,7 @@ mod tests {
 
         // duplicate between unvalidated and successful
         let mut validator = PaymentValidator::new();
-        let payment = generate_fake_payment();
+        let payment = generate_fake_payment(our_id);
         validator.unvalidated_transactions.insert(payment.clone());
         validator.successful_transactions.insert(payment.payment);
 
@@ -996,7 +1079,7 @@ mod tests {
 
         // duplicate between sent and recieved
         let mut validator = PaymentValidator::new();
-        let payment = generate_fake_payment();
+        let payment = generate_fake_payment(our_id);
         let mut set = HashSet::new();
         set.insert(payment.clone().payment);
         validator.successful_transactions.insert(payment.payment);
@@ -1009,11 +1092,11 @@ mod tests {
         // Consistent with 3 different payments, happy path
         let mut validator = PaymentValidator::new();
         let mut set = HashSet::new();
-        set.insert(generate_fake_payment().payment);
+        set.insert(generate_fake_payment(our_id).payment);
         validator.unvalidated_transactions.insert(payment.clone());
         validator
             .successful_transactions
-            .insert(generate_fake_payment().payment);
+            .insert(generate_fake_payment(our_id).payment);
         validator
             .previously_sent_payments
             .insert(payment.payment.to, set);
