@@ -135,6 +135,10 @@ impl RitaSettings {
     pub fn get_identity(&self) -> Option<Identity> {
         self.identity
     }
+    /// Returns true if the settings are valid
+    pub fn validate(&self) -> bool {
+        self.payment.validate()
+    }
 }
 
 /// write the current SETTINGS from memory to file

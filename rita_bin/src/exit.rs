@@ -76,6 +76,10 @@ fn main() {
         let settings_file = args.flag_config;
         let settings = RitaExitSettingsStruct::new_watched(&settings_file).unwrap();
 
+        if !settings.validate() {
+            panic!("Invalid settings file!")
+        }
+
         let settings = clu::exit_init(settings);
         settings::set_rita_exit(settings.clone());
         sanity_check_config();

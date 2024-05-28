@@ -10,7 +10,6 @@
 //! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
 use crate::blockchain_oracle::calculate_close_thresh;
 use crate::blockchain_oracle::get_pay_thresh;
-use crate::payment_validator::ETH_PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;
 use crate::tunnel_manager::tm_tunnel_state_change;
 use crate::tunnel_manager::TunnelAction;
@@ -92,10 +91,6 @@ pub struct NodeDebtData {
     /// If we have an outgoing payment to a node in flight
     pub payment_in_flight: bool,
     #[serde(skip_serializing, skip_deserializing)]
-    /// When the payment in flight was started, used to time out attempts and try again
-    /// if they don't get into the blockchain
-    pub payment_in_flight_start: Option<Instant>,
-    #[serde(skip_serializing, skip_deserializing)]
     /// The last time we successfully paid a node, this is used only in the exit payments
     /// case, where when we get payments from the exit there is a race condition where the
     /// exit may not update that we have paid it fast enough
@@ -111,7 +106,6 @@ impl Default for NodeDebtData {
             incoming_payments: Uint256::from(0u32),
             action: DebtAction::OpenTunnel,
             payment_in_flight: false,
-            payment_in_flight_start: None,
             last_successful_payment: None,
         }
     }
@@ -125,7 +119,6 @@ impl NodeDebtData {
             incoming_payments: Uint256::from(0u32),
             action: DebtAction::OpenTunnel,
             payment_in_flight: false,
-            payment_in_flight_start: None,
             last_successful_payment: None,
         }
     }
@@ -526,7 +519,6 @@ impl DebtKeeper {
         assert!(peer.payment_in_flight);
 
         peer.payment_in_flight = false;
-        peer.payment_in_flight_start = None;
     }
 
     fn payment_succeeded(&mut self, to: &Identity, amount: Uint256) -> Result<(), RitaCommonError> {
@@ -543,7 +535,6 @@ impl DebtKeeper {
         assert!(peer.payment_in_flight);
 
         peer.payment_in_flight = false;
-        peer.payment_in_flight_start = None;
 
         peer.total_payment_sent += amount;
         peer.last_successful_payment = Some(Instant::now());
@@ -725,7 +716,6 @@ impl DebtKeeper {
                 })?;
 
                 debt_data.payment_in_flight = true;
-                debt_data.payment_in_flight_start = Some(Instant::now());
 
                 info!("Make payment to {} for {}", ident.wg_public_key, to_pay);
 
@@ -762,22 +752,9 @@ impl DebtKeeper {
                 Ok(DebtAction::OpenTunnel)
             }
             (false, true, true) => {
-                // In theory it's possible for the payment_failed or payment_succeeded actor calls to fail for
-                // various reasons. In practice this only happens with the system is in a nearly inoperable state.
-                // But for the sake of parinoia we provide a handler here which will time out in such a situation
-                match debt_data.payment_in_flight_start {
-                    Some(start_time) => {
-                        if Instant::now() - start_time > ETH_PAYMENT_SEND_TIMEOUT {
-                            error!("Payment in flight for more than payment timeout! Resetting!");
-                            debt_data.payment_in_flight = false;
-                            debt_data.payment_in_flight_start = None;
-                        }
-                    }
-                    None => {
-                        error!("No start time but payment in flight?");
-                        debt_data.payment_in_flight = false;
-                    }
-                }
+                // we have a payment outstanding, we wait for it to complete
+                // if it fails payment_validator will call payment_failed so that
+                // we can try again
                 debt_data.action = DebtAction::OpenTunnel;
                 Ok(DebtAction::OpenTunnel)
             }
@@ -1433,7 +1410,6 @@ mod tests {
             incoming_payments: Uint256::from(0u8),
             action: DebtAction::OpenTunnel,
             payment_in_flight: false,
-            payment_in_flight_start: None,
             last_successful_payment: None,
         };
 
@@ -1455,7 +1431,6 @@ mod tests {
             incoming_payments: Uint256::from(0u8),
             action: DebtAction::OpenTunnel,
             payment_in_flight: false,
-            payment_in_flight_start: None,
             last_successful_payment: None,
         };
 

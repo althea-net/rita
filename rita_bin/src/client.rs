@@ -101,7 +101,22 @@ fn main() {
             .map(|url| url.replace("http://althea.zone", "http://rpc.althea.zone"))
             .collect();
 
+        // add the new default payment denom to the list of accepted denoms
+        if !s
+            .payment
+            .althea_l1_accepted_denoms
+            .contains(&s.payment.althea_l1_payment_denom)
+        {
+            s.payment
+                .althea_l1_accepted_denoms
+                .push(s.payment.althea_l1_payment_denom.clone());
+        }
+
         // end migrations //
+
+        if !s.validate() {
+            panic!("Invalid settings file!")
+        }
 
         let s = clu::init(s);
 

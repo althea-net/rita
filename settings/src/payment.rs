@@ -180,6 +180,34 @@ fn default_althea_l1_payment_denom() -> Denom {
     }
 }
 
+impl PaymentSettings {
+    /// Returns false if the payment settings are invalid
+    pub fn validate(&self) -> bool {
+        if self.althea_grpc_list.is_empty() {
+            return false;
+        }
+        if self.eth_node_list.is_empty() {
+            return false;
+        }
+        if self.min_gas == 0u8.into() {
+            return false;
+        }
+        if self.althea_l1_accepted_denoms.is_empty() {
+            return false;
+        }
+        if self.althea_l1_payment_denom.denom.is_empty() {
+            return false;
+        }
+        if !self
+            .althea_l1_accepted_denoms
+            .contains(&self.althea_l1_payment_denom)
+        {
+            return false;
+        }
+        true
+    }
+}
+
 impl Default for PaymentSettings {
     fn default() -> Self {
         PaymentSettings {
