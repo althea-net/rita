@@ -228,9 +228,6 @@ pub struct RitaClientSettings {
     pub exit_client: ExitClientSettings,
     #[serde(default = "default_app_name")]
     pub app_name: String,
-    /// The save interval defaults to 48 hours for exit settings represented in seconds
-    #[serde(default = "default_save_interval")]
-    pub save_interval: u64,
 }
 
 impl RitaClientSettings {

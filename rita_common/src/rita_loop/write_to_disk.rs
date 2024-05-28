@@ -1,18 +1,9 @@
 use crate::{debt_keeper::save_debt_to_disk, usage_tracker::save_usage_to_disk};
 use settings::{
-    check_if_exit, client::RitaClientSettings, exit::RitaExitSettingsStruct, get_rita_client,
-    get_rita_exit, write_config,
+    client::RitaClientSettings, exit::RitaExitSettingsStruct, get_rita_client, get_rita_exit,
+    write_config,
 };
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
-/// How often we save the nodes debt data, currently 48 minutes
-const SAVE_FREQUENCY_EXIT: Duration = Duration::from_secs(172800);
-/// How often we save the nodes debt data, currently 5 minutes
-const SAVE_FREQUENCY_ROUTER: Duration = Duration::from_secs(300);
-
-pub const FAST_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
+use std::{thread, time::Duration};
 // Save duration for all writes to disk in order to reduce write operations
 // pub const SAVING_TO_DISK_FREQUENCY: Duration = Duration::from_secs(600);
 #[derive(Clone)]
@@ -20,6 +11,14 @@ pub enum SettingsOnDisk {
     RitaClientSettings(Box<RitaClientSettings>),
     RitaExitSettingsStruct(Box<RitaExitSettingsStruct>),
 }
+
+/// 10 minutes
+const RITA_EXIT_SAVE_INTERVAL: Duration = Duration::from_secs(600);
+/// One hour
+const RITA_CLIENT_SAVE_INTERVAL: Duration = Duration::from_secs(3600);
+/// 48 hours
+const RITA_CLIENT_SMALL_STORAGE_SAVE_INTERVAL: Duration = Duration::from_secs(172800);
+
 /// This loop attempts to perform all write operations for writing to disk
 /// This includes writing config/settings, usage tracker, and debt tracker.
 /// It takes in a settings enum in order to identify what type the device
@@ -27,38 +26,31 @@ pub enum SettingsOnDisk {
 /// has on disk since we don't want to save too often if the disk doesn't
 /// contain a lot of storage.
 pub fn save_to_disk_loop(mut old_settings: SettingsOnDisk) {
-    let router_storage_small;
-    let saving_to_disk_frequency: Duration;
-
-    let save_frequency = if check_if_exit() {
-        SAVE_FREQUENCY_EXIT
-    } else {
-        SAVE_FREQUENCY_ROUTER
-    };
-
-    match old_settings.clone() {
+    let (loop_speed, router_storage_small) = match old_settings.clone() {
         SettingsOnDisk::RitaClientSettings(old_settings_client) => {
-            match old_settings_client.network.device.clone() {
-                Some(val) => router_storage_small = is_router_storage_small(&val),
-                None => router_storage_small = false,
+            let router_storage_small = match old_settings_client.network.device.clone() {
+                Some(val) => is_router_storage_small(&val),
+                None => false,
             };
-            saving_to_disk_frequency = Duration::from_secs(old_settings_client.save_interval);
+            (
+                match router_storage_small {
+                    true => RITA_CLIENT_SMALL_STORAGE_SAVE_INTERVAL,
+                    false => RITA_CLIENT_SAVE_INTERVAL,
+                },
+                router_storage_small,
+            )
         }
         SettingsOnDisk::RitaExitSettingsStruct(old_settings_exit) => {
-            match old_settings_exit.network.device.clone() {
-                Some(val) => router_storage_small = is_router_storage_small(&val),
-                None => router_storage_small = false,
+            let router_storage_small = match old_settings_exit.network.device.clone() {
+                Some(val) => is_router_storage_small(&val),
+                None => false,
             };
-            saving_to_disk_frequency = Duration::from_secs(old_settings_exit.save_interval);
+            (RITA_EXIT_SAVE_INTERVAL, router_storage_small)
         }
-    }
+    };
 
     thread::spawn(move || loop {
-        let start = Instant::now();
-
-        if start.elapsed() < saving_to_disk_frequency {
-            thread::sleep(saving_to_disk_frequency - start.elapsed());
-        }
+        thread::sleep(loop_speed);
 
         //settings
         match old_settings.clone() {
@@ -90,7 +82,7 @@ pub fn save_to_disk_loop(mut old_settings: SettingsOnDisk) {
 
         // debt keeper, only saved on graceful shutdown
         if !router_storage_small {
-            save_debt_to_disk(save_frequency);
+            save_debt_to_disk(loop_speed);
         }
 
         // usage tracker monitors and saves bandwidth usage info and payment metadata
