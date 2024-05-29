@@ -1,6 +1,6 @@
 [package]
 name = "rita_extender"
-version = "0.21.12"
+version = "0.21.13"
 edition = "2018"
 license = "Apache-2.0"
 
