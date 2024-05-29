@@ -37,8 +37,15 @@ use std::time::Instant;
 
 lazy_static! {
     /// A locked global ref containing the state for this module. Note that the default implementation
-    /// loads saved data from teh disk if it exists.
+    /// loads saved data from the disk if it exists.
     static ref DEBT_DATA: Arc<RwLock<HashMap<u32,DebtKeeper>>> = Arc::new(RwLock::new(HashMap::new()));
+}
+
+/// Resets the debt keeper, this is used in tests to ensure that the debt keeper is in a known state
+#[cfg(test)]
+pub fn reset_debt_keeper() {
+    let mut dk = DEBT_DATA.write().unwrap();
+    *dk = HashMap::new();
 }
 
 /// Returns the default denomination for the debt keeper
@@ -66,7 +73,7 @@ pub fn get_debt_keeper() -> DebtKeeper {
 /// Gets a write ref for the debt keeper lock, since this is a mutable reference
 /// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
 /// but still hold the lock in the local thread to prevent parallel modification
-pub fn get_debt_keeper_write_ref(input: &mut HashMap<u32, DebtKeeper>) -> &mut DebtKeeper {
+fn get_debt_keeper_write_ref(input: &mut HashMap<u32, DebtKeeper>) -> &mut DebtKeeper {
     let netns = KI.check_integration_test_netns();
     input.entry(netns).or_default();
     input.get_mut(&netns).unwrap()

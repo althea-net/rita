@@ -162,6 +162,27 @@ impl ExitClientSettings {
 }
 
 impl RitaClientSettings {
+    /// This is a test setup function that returns a default settings object
+    /// and sets the default settings as the current settings object
+    pub fn setup_test(our_id: Identity) -> Self {
+        let mut settings = RitaClientSettings {
+            payment: PaymentSettings::default(),
+            log: LoggingSettings::default(),
+            operator: OperatorSettings::default(),
+            localization: LocalizationSettings::default(),
+            network: NetworkSettings::default(),
+            exit_client: ExitClientSettings::default(),
+            app_name: APP_NAME.to_string(),
+        };
+        settings.network.mesh_ip = Some(our_id.mesh_ip);
+        settings.network.wg_public_key = Some(our_id.wg_public_key);
+        settings.payment.eth_address = Some(our_id.eth_address);
+
+        set_rita_client(settings.clone());
+        settings
+    }
+
+    /// Loads a settings file from the disk and returns a new settings object
     pub fn new(file_name: &str) -> Result<Self, SettingsError> {
         if !Path::new(file_name).exists() {
             error!(
@@ -176,6 +197,8 @@ impl RitaClientSettings {
         Ok(ret)
     }
 
+    /// Loads a new settings file from a pathbuf and sets it as the current settings
+    /// object for this instance of Rita
     pub fn new_watched(file_name: PathBuf) -> Result<Self, SettingsError> {
         if !file_name.exists() {
             return Err(SettingsError::FileNotFoundError(
