@@ -7,4 +7,4 @@ source $DIR/build_common.sh
 
 cargo install cross
 
-cross build --target mipsel-unknown-linux-musl ${PROFILE} ${FEATURES} -p rita_bin --bin rita
+cross build --target mipsel-unknown-linux-musl ${PROFILE} ${FEATURES} -p rita_bin --bin ${RITA_VERSION}

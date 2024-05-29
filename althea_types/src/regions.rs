@@ -3,13 +3,15 @@
 //! Note this list was completed using AI so it may not be 100% accurate. I've hand checked the major countries
 //! but if you see an issue just open a PR.
 
+use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serializer};
 use std::{
     fmt::{self, Display},
     str::FromStr,
 };
 
 /// An enum representation of the Regions supported by althea exits
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Regions {
     UnitedStates,
     Canada,
@@ -756,8 +758,8 @@ impl Display for Regions {
 }
 
 impl FromStr for Regions {
-    type Err = ();
-    fn from_str(s: &str) -> Result<Regions, ()> {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Regions, String> {
         let lowercase_s = s.to_lowercase();
         match lowercase_s.as_str() {
             "united states" => Ok(Regions::UnitedStates),
@@ -951,7 +953,26 @@ impl FromStr for Regions {
             "vc" => Ok(Regions::SaintVincentAndTheGrenadines),
             "trinidad and tobago" => Ok(Regions::TrinidadAndTobago),
             "tt" => Ok(Regions::TrinidadAndTobago),
-            _ => Err(()),
+            _ => Err("Invalid country code accepted formats are EX: US or United States (spaces included)".to_string()),
         }
+    }
+}
+
+impl Serialize for Regions {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Regions {
+    fn deserialize<D>(deserializer: D) -> Result<Regions, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
     }
 }
