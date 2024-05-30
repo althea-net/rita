@@ -31,6 +31,7 @@ use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::time::SystemTime;
@@ -133,7 +134,7 @@ pub async fn secure_setup_request(
 ) -> HttpResponse {
     let exit_settings = get_rita_exit();
 
-    let our_old_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
+    let our_old_secretkey: WgKey = exit_settings.exit_network.wg_private_key.unwrap();
     let our_new_secretkey = exit_settings.network.wg_private_key.unwrap();
 
     let our_old_secretkey: SecretKey = our_old_secretkey.into();
@@ -215,7 +216,7 @@ pub async fn secure_setup_request(
 
 pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
     let exit_settings = get_rita_exit();
-    let our_old_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
+    let our_old_secretkey: WgKey = exit_settings.exit_network.wg_private_key.unwrap();
     let our_new_secretkey = exit_settings.network.wg_private_key.unwrap();
 
     let our_old_secretkey = our_old_secretkey.into();
@@ -305,7 +306,7 @@ pub async fn get_exit_timestamp_http(_req: HttpRequest) -> HttpResponse {
 /// data is in the config and this is considered to be a key exchange in and of itself.
 pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
     let exit_settings = get_rita_exit();
-    let our_secretkey: WgKey = exit_settings.exit_network.wg_private_key;
+    let our_secretkey: WgKey = exit_settings.exit_network.wg_private_key.unwrap();
     let our_secretkey = our_secretkey.into();
 
     let their_nacl_pubkey = request.pubkey.into();
@@ -324,7 +325,12 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
         exit_list: match get_exits_list(&contact, our_addr, contract_addr).await {
             Ok(a) => {
                 let exit_regions = rita_exit.network.allowed_countries;
-                let accepted_payments = rita_exit.network.payment_chains;
+
+                // only one payment type can be accepted for now, but this structure allows for
+                // multiple payment types in the future
+                let mut accepted_payments = HashSet::new(); 
+                accepted_payments.insert(exit_settings.payment.system_chain);
+
                 if exit_regions.is_empty() || accepted_payments.is_empty() {
                     error!("Exit list not configured correctly. Please set up exit regions and accepted payment types in config");
                     return HttpResponse::InternalServerError().finish();

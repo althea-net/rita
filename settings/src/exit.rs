@@ -2,7 +2,7 @@ use crate::localization::LocalizationSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_exit, SettingsError};
-use althea_types::{regions::Regions, ExitIdentity, FromStr, Identity, WgKey};
+use althea_types::{regions::Regions, ExitIdentity, Identity, WgKey};
 use clarity::Address;
 use ipnetwork::IpNetwork;
 use std::collections::HashSet;
@@ -32,10 +32,10 @@ pub struct ExitNetworkSettings {
     pub geoip_api_user: Option<String>,
     pub geoip_api_key: Option<String>,
     /// The our public key for the wg_exit tunnel
-    pub wg_public_key: WgKey,
+    pub wg_public_key: Option<WgKey>,
     /// Our private key for the wg_exit tunnel, not an option because it's better
     /// for exits to crash than to generate their own key
-    pub wg_private_key: WgKey,
+    pub wg_private_key: Option<WgKey>,
     /// path for the exit tunnel keyfile must be distinct from the common tunnel path!
     pub wg_private_key_path: String,
     /// Determines if enforcement is ensabled on the wg_exit interfaces, the htb classifier used here
@@ -67,9 +67,8 @@ impl ExitNetworkSettings {
             client_subnet_size: None,
             geoip_api_user: None,
             geoip_api_key: None,
-            wg_public_key: WgKey::from_str("Ha2YlTfDimJNboqxOSCh6M29W/H0jKtB4utitjaTO3A=").unwrap(),
-            wg_private_key: WgKey::from_str("mFFBLqQYrycxfHo10P9l8I2G7zbw8tia4WkGGgjGCn8=")
-                .unwrap(),
+            wg_public_key: None,
+            wg_private_key: None,
             wg_private_key_path: String::new(),
             enable_enforcement: true,
             registered_users_contract_addr: "0x9BAbFde52Fe18A5CD00a542b87b4D124a4879582"
@@ -143,6 +142,8 @@ impl RitaExitSettingsStruct {
 
     pub fn get_exit_identity(&self) -> ExitIdentity {
         let id = self.get_identity().unwrap();
+        let mut set = HashSet::new();
+        set.insert(self.payment.system_chain);
         ExitIdentity {
             mesh_ip: id.mesh_ip,
             wg_key: id.wg_public_key,
@@ -150,7 +151,7 @@ impl RitaExitSettingsStruct {
             registration_port: self.exit_network.exit_hello_port,
             wg_exit_listen_port: self.exit_network.wg_v2_tunnel_port,
             allowed_regions: self.allowed_countries.clone(),
-            payment_types: self.network.payment_chains.clone(),
+            payment_types: set,
         }
     }
 

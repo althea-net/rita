@@ -1,5 +1,5 @@
 use althea_kernel_interface::DefaultRoute;
-use althea_types::{regions::Regions, ShaperSettings, SystemChain};
+use althea_types::{regions::Regions, ShaperSettings};
 use babel_monitor::structs::{BabeldConfig, BabeldInterfaceConfig};
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv6Addr};
@@ -155,8 +155,6 @@ pub struct NetworkSettings {
     /// List of countries exits that this device can roam to
     #[serde(default = "default_allowed_countries")]
     pub allowed_countries: HashSet<Regions>,
-    /// Payment chains that this device can use
-    pub payment_chains: HashSet<SystemChain>,
 }
 
 impl Default for NetworkSettings {
@@ -187,7 +185,6 @@ impl Default for NetworkSettings {
             usage_tracker_file: default_usage_tracker_file(),
             user_bandwidth_limit: None,
             allowed_countries: default_allowed_countries(),
-            payment_chains: HashSet::new(),
             babeld_settings: default_babeld_config(),
         }
     }
