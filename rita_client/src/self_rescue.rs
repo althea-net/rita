@@ -18,6 +18,12 @@ pub fn start_rita_client_rescue_loop() {
     // outer thread is a watchdog inner thread is the runner
     thread::spawn(move || {
         let mut last_successful_ping = Instant::now();
+        // when we check the last successful handshake on wireguard tunnels we are implicitly checking the system time
+        // as well. If we sync the system time it is not uncommon to see tunnel handshakes more than 'one year old' for a short period
+        // no more than a few minutes. Since openwrt gets the system time from the last saved file on the disk and last saved times
+        // sometimes get wonky by reverting to the original firmware image build time we should wait long enough for a new handshake
+        // to be computed on the new system time before we trigger a reboot
+        let mut last_successful_handshake_check = Instant::now();
         loop {
             // first we check if we can reach the internet, if we can't for too long we reboot
 
@@ -32,9 +38,13 @@ pub fn start_rita_client_rescue_loop() {
             }
 
             // next we check for abandoned tunnels, if a tunnel has not had a handshke and the garbage collector thread
-            // has not reported in we can assume that thread is in a bad state and we should reboot. Check only 3 random tunnels
-            // If you're coming back and looking at expanding/improving this in the future, consider using an atomic instant to track the last
-            // loop iteration on the key threads and checking that instead of the last handshake time
+            // has not removed it we can assume that thread is in a bad state and we should reboot. Check only 3 random tunnels
+            // note this relies on the observation that connection issues happen across all tuneels at once, if only one tunnel is bad
+            // this will not trigger.
+            //
+            // If you're coming back and looking at expanding/improving this in the future, consider moving this out of a separate thread
+            // and into rita_client or rita_common loops using a shared Instant that exists only in the context of those two threads rather than
+            // a global lazy static Instant. This would keep us from having to make guesses around the system time
             let wg_interfaces = KI.get_list_of_wireguard_interfaces();
             info!("interfaces {:?}", wg_interfaces);
             if let Ok(interfaces) = wg_interfaces {
@@ -45,9 +55,21 @@ pub fn start_rita_client_rescue_loop() {
                         // we grab only the first timestamps because none of these tunnels should have multiple timestamps
                         if let Some((_, time)) = times.first() {
                             if let Ok(elapsed) = time.elapsed() {
-                                if elapsed > TUNNEL_HANDSHAKE_TIMEOUT * 2 {
-                                    let _res = KI.run_command("reboot", &[]);
+                                match (
+                                    elapsed > TUNNEL_HANDSHAKE_TIMEOUT * 2,
+                                    last_successful_handshake_check.elapsed() > REBOOT_TIMEOUT,
+                                ) {
+                                    (true, true) => {
+                                        let _res = KI.run_command("reboot", &[]);
+                                    }
+                                    // wait
+                                    (true, false) => {}
+                                    // tunnels have not reached timeouts yet
+                                    (false, _) => last_successful_handshake_check = Instant::now(),
                                 }
+                            } else {
+                                // timestamp in the future, that's definately not timed out
+                                last_successful_handshake_check = Instant::now();
                             }
                         }
                     }
