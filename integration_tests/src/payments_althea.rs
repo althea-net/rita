@@ -19,9 +19,6 @@ use settings::exit::RitaExitSettingsStruct;
 use std::thread;
 use std::time::Duration;
 
-/// 10c in wei if 1*10^18 wei = $1
-const USDC_TO_WEI_DECIMAL: u64 = 100_000_000_000_000_000u64;
-
 /// This is one of the validator private keys grabbed from setup-validators.sh
 const ALTHEA_EVM_PRIV_BYTES: &str =
     "3b23c86080c9abc8870936b2eb17ecb808f5ad3b318018b3e23873013379e4d6";
@@ -130,11 +127,14 @@ pub async fn run_althea_payments_test_scenario() {
 }
 
 fn althea_payment_conditions(debts: GetDebtsResult) -> bool {
-    let pay_sent = debts.payment_details.total_payment_sent;
+    info!(
+        "Althea debts are {:?} versus test threshold of {}",
+        debts, TEST_PAY_THRESH
+    );
     matches!(
         (
-            pay_sent > USDC_TO_WEI_DECIMAL.into(),
-            pay_sent < (2 * USDC_TO_WEI_DECIMAL).into(),
+            debts.payment_details.total_payment_sent > TEST_PAY_THRESH.into(),
+            debts.payment_details.debt < TEST_PAY_THRESH.into(),
         ),
         (true, true)
     )
