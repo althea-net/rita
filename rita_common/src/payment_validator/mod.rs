@@ -229,6 +229,14 @@ impl PaymentValidator {
     /// messaging to external modules should happen only in this function
     fn remove_and_update_debt_keeper(&mut self, tx: ToValidate, success: TxValidationStatus) {
         let was_present = self.unvalidated_transactions.remove(&tx);
+        let payment_settings = settings::get_rita_common().payment;
+        let payment_denom = match payment_settings.system_chain {
+            SystemChain::AltheaL1 => payment_settings.althea_l1_payment_denom.clone(),
+            SystemChain::Xdai | SystemChain::Ethereum | SystemChain::Sepolia => Denom {
+                denom: DEBT_KEEPER_DENOM.to_string(),
+                decimal: DEBT_KEEPER_DENOM_DECIMAL,
+            },
+        };
 
         match success {
             TxValidationStatus::FromUsSuccess => {
@@ -238,14 +246,7 @@ impl PaymentValidator {
                     .or_default();
 
                 // update debt keeper with details of this payment
-                let _ = payment_succeeded(
-                    tx.payment.to,
-                    tx.payment.amount,
-                    Denom {
-                        denom: DEBT_KEEPER_DENOM.to_string(),
-                        decimal: DEBT_KEEPER_DENOM_DECIMAL,
-                    },
-                );
+                let _ = payment_succeeded(tx.payment.to, tx.payment.amount, payment_denom.clone());
 
                 // update the usage tracker with the details of this payment
                 update_payments(tx.payment);
@@ -262,14 +263,7 @@ impl PaymentValidator {
                 self.successful_transactions.insert(tx.payment);
 
                 // update debt keeper with the details of this payment
-                let _ = payment_received(
-                    tx.payment.from,
-                    tx.payment.amount,
-                    Denom {
-                        denom: DEBT_KEEPER_DENOM.to_string(),
-                        decimal: DEBT_KEEPER_DENOM_DECIMAL,
-                    },
-                );
+                let _ = payment_received(tx.payment.from, tx.payment.amount, payment_denom.clone());
 
                 // update the usage tracker with the details of this payment
                 update_payments(tx.payment);

@@ -1043,7 +1043,7 @@ async fn wait_for_txids(txids: Vec<Result<Uint256, Web3Error>>, web3: &Web3) {
 pub async fn validate_debt_entry(
     from_node: Namespace,
     forward_node: Namespace,
-    f: &dyn Fn(GetDebtsResult) -> bool,
+    func: &dyn Fn(GetDebtsResult) -> bool,
 ) {
     let loop_init = Instant::now();
     loop {
@@ -1053,12 +1053,12 @@ pub async fn validate_debt_entry(
         let debts = res.get(&from_node).unwrap()[0].clone();
 
         // validate received debt
-        if f(debts.clone()) {
+        if func(debts.clone()) {
             break;
         } else {
             // If we continue to fail conditions after 90 secs, we failed test
             if Instant::now() - loop_init > Duration::from_secs(90) {
-                assert!(f(debts));
+                assert!(func(debts));
             }
             warn!("Debts not ready, waiting for 5 secs");
             thread::sleep(Duration::from_secs(5));
@@ -1072,7 +1072,7 @@ pub async fn validate_debt_entry(
     let res = query_debts(vec![from_node.clone()], Some(vec![forward_node.clone()])).await;
     info!("Recieved Debt values {:?}", res);
     let debts = res.get(&from_node).unwrap()[0].clone();
-    assert!(f(debts));
+    assert!(func(debts));
 }
 
 pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {

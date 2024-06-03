@@ -208,6 +208,7 @@ async fn make_althea_payment(
 ) -> Result<(ToValidate, Option<ResendInfo>), PaymentControllerError> {
     // On althea chain, we default to paying with usdc, config must specify this as an accepted denom
     let payment_denom = payment_settings.althea_l1_payment_denom;
+    assert!(payment_settings.system_chain == SystemChain::AltheaL1);
 
     let our_address = pmt.from.get_althea_address();
 
