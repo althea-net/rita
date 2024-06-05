@@ -1,28 +1,20 @@
-use std::{
-    error::Error,
-    fmt::{Display, Formatter, Result as FmtResult},
-    net::AddrParseError,
-    num::ParseIntError,
-    string::FromUtf8Error,
-};
-
 use althea_kernel_interface::KernelInterfaceError;
 use awc::error::{JsonPayloadError, SendRequestError};
 use babel_monitor::structs::BabelMonitorError;
 use compressed_log::builder::LoggerError;
 use log::SetLoggerError;
 use rita_common::RitaCommonError;
+use std::{
+    error::Error,
+    fmt::{Display, Formatter, Result as FmtResult},
+    num::ParseIntError,
+    string::FromUtf8Error,
+};
 
 use crate::dashboard;
 
 #[derive(Debug)]
 pub enum RitaClientError {
-    InterfaceModeError(String),
-    InterfaceToggleError {
-        main_error: Vec<KernelInterfaceError>,
-        revert_status: Option<KernelInterfaceError>,
-    },
-    AddrParseError(AddrParseError),
     MiscStringError(String),
     ValidationError(dashboard::wifi::ValidationError),
     SendRequestError(String),
@@ -56,11 +48,6 @@ impl From<KernelInterfaceError> for RitaClientError {
 impl From<settings::SettingsError> for RitaClientError {
     fn from(error: settings::SettingsError) -> Self {
         RitaClientError::RitaCommonError(RitaCommonError::SettingsError(error))
-    }
-}
-impl From<AddrParseError> for RitaClientError {
-    fn from(error: AddrParseError) -> Self {
-        RitaClientError::AddrParseError(error)
     }
 }
 impl From<dashboard::wifi::ValidationError> for RitaClientError {
@@ -112,17 +99,6 @@ impl From<std::io::Error> for RitaClientError {
 impl Display for RitaClientError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            RitaClientError::InterfaceModeError(a) => write!(f, "{a}",),
-            RitaClientError::InterfaceToggleError {
-                main_error,
-                revert_status,
-            } => {
-                write!(
-                    f,
-                    "Error running UCI commands! {main_error:?} \nRevert attempted: {revert_status:?}"
-                )
-            }
-            RitaClientError::AddrParseError(a) => write!(f, "{a}",),
             RitaClientError::MiscStringError(e) => write!(f, "{e}"),
             RitaClientError::ValidationError(e) => write!(f, "{e}"),
             RitaClientError::SendRequestError(e) => {

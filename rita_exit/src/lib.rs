@@ -25,6 +25,7 @@ pub use error::RitaExitError;
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
+use rita_common::dashboard::interfaces::*;
 use rita_common::dashboard::nickname::*;
 use rita_common::dashboard::own_info::READABLE_VERSION;
 use rita_common::dashboard::own_info::*;
@@ -88,6 +89,10 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     .route("/token_bridge/status", web::get().to(get_bridge_status))
                     .app_data(startup_status.clone())
                     .route("startup_status", web::get().to(get_startup_status))
+                    .route("/interfaces", web::get().to(get_interfaces_endpoint))
+                    .route("/interfaces", web::post().to(set_interfaces_exit_endpoint))
+                    .route("/interfaces/mesh", web::get().to(wlan_mesh_get))
+                    .route("/interfaces/mesh/{enabled}", web::post().to(wlan_mesh_set))
             })
             .bind(format!(
                 "[::0]:{}",

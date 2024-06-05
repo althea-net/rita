@@ -1,6 +1,7 @@
 use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
+    net::AddrParseError,
     time::SystemTimeError,
 };
 
@@ -16,6 +17,12 @@ use crate::tunnel_manager::error::TunnelManagerError;
 
 #[derive(Debug)]
 pub enum RitaCommonError {
+    AddrParseError(AddrParseError),
+    InterfaceModeError(String),
+    InterfaceToggleError {
+        main_error: Vec<KernelInterfaceError>,
+        revert_status: Option<KernelInterfaceError>,
+    },
     ConversionError(String),
     LoggerError(LoggerError),
     SetLoggerError(SetLoggerError),
@@ -95,10 +102,26 @@ impl From<TunnelManagerError> for RitaCommonError {
         RitaCommonError::TunnelManagerError(error)
     }
 }
+impl From<AddrParseError> for RitaCommonError {
+    fn from(error: AddrParseError) -> Self {
+        RitaCommonError::AddrParseError(error)
+    }
+}
 
 impl Display for RitaCommonError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
+            RitaCommonError::AddrParseError(a) => write!(f, "{a}",),
+            RitaCommonError::InterfaceModeError(a) => write!(f, "{a}",),
+            RitaCommonError::InterfaceToggleError {
+                main_error,
+                revert_status,
+            } => {
+                write!(
+                    f,
+                    "Error running UCI commands! {main_error:?} \nRevert attempted: {revert_status:?}"
+                )
+            }
             RitaCommonError::ConversionError(a) => write!(
                 f, "Conversion Error: {a}",
             ),

@@ -1,13 +1,11 @@
 //! A generalized interface for modifying networking interface assignments using UCI
+use crate::{RitaCommonError, KI};
 use actix_web_async::http::StatusCode;
 use actix_web_async::web::Path;
 use actix_web_async::{web::Json, HttpRequest, HttpResponse};
-use rita_common::{RitaCommonError, KI};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::net::Ipv4Addr;
-
-use crate::RitaClientError;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InterfacesToSet {
@@ -61,7 +59,7 @@ impl Display for InterfaceMode {
 }
 
 /// Gets a list of interfaces and their modes by parsing UCI
-pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, RitaClientError> {
+pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, RitaCommonError> {
     let mut retval = HashMap::new();
 
     // Wired
@@ -96,7 +94,7 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, RitaClientErro
 }
 
 /// Find out a wired interface's mode (mesh, LAN, WAN) from the setting name
-pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, RitaClientError> {
+pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, RitaCommonError> {
     trace!(
         "ethernet2mode: ifname {:?}, setting_name {:?}",
         ifname,
@@ -115,7 +113,7 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
             let proto = if let Some(val) = backhaul.get(&format!("{prefix}.proto")) {
                 val
             } else {
-                return Err(RitaClientError::InterfaceModeError(
+                return Err(RitaCommonError::InterfaceModeError(
                     "WAN network with no proto?".to_string(),
                 ));
             };
@@ -135,12 +133,12 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
                         gateway: gateway.parse()?,
                     });
                 } else {
-                    return Err(RitaClientError::InterfaceModeError(
+                    return Err(RitaCommonError::InterfaceModeError(
                         "Failed to parse static wan!".to_string(),
                     ));
                 }
             }
-            return Err(RitaClientError::InterfaceModeError(
+            return Err(RitaCommonError::InterfaceModeError(
                 "Failed to parse backhaul entry!".to_string(),
             ));
         }
@@ -155,23 +153,29 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
 }
 
 /// Set mode for an individual interface
-fn set_interface_mode(iface_name: String, mode: InterfaceMode) -> Result<(), RitaClientError> {
+fn set_interface_mode(iface_name: String, mode: InterfaceMode) -> Result<(), RitaCommonError> {
     let target_mode = mode;
     let interfaces = get_interfaces()?;
     let current_mode = get_current_interface_mode(&interfaces, &iface_name);
     if !interfaces.contains_key(&iface_name) {
-        return Err(RitaClientError::InterfaceModeError(
+        return Err(RitaCommonError::InterfaceModeError(
             "Attempted to configure non-existant or unavailable interface!".to_string(),
         ));
-    } else if target_mode == InterfaceMode::Wan {
+    } else if matches!(
+        target_mode,
+        InterfaceMode::Wan | InterfaceMode::StaticWan { .. } | InterfaceMode::LTE
+    ) {
         // we can only have one WAN interface, check for others
         // StaticWAN entries are not identified seperately but if they ever are
         // you'll have to handle them here
         for entry in interfaces {
             let mode = entry.1;
-            if mode == InterfaceMode::Wan {
-                return Err(RitaClientError::InterfaceModeError(
-                    "There can only be one WAN interface!".to_string(),
+            if matches!(
+                mode,
+                InterfaceMode::Wan | InterfaceMode::StaticWan { .. } | InterfaceMode::LTE
+            ) {
+                return Err(RitaCommonError::InterfaceModeError(
+                    "There can only be one WAN or LTE interface!".to_string(),
                 ));
             }
         }
@@ -183,36 +187,34 @@ fn set_interface_mode(iface_name: String, mode: InterfaceMode) -> Result<(), Rit
 fn multiset_interfaces(
     iface_name: Vec<String>,
     mode: Vec<InterfaceMode>,
-) -> Result<(), RitaClientError> {
+) -> Result<(), RitaCommonError> {
     trace!("InterfaceToSet received");
     if iface_name.len() != mode.len() {
-        return Err(RitaClientError::MiscStringError(
+        return Err(RitaCommonError::MiscStringError(
             "Extra mode or iface found!".to_string(),
         ));
     }
-    // for each interface sent through, we set its interface mode
-    let mut target_modes = mode.clone();
-
     // do not allow multiple WANs- this is checked for before we run through the setter so we do
     // not waste time on obviously incorrect configs
     let mut wan_count = 0;
-    for m in mode {
-        if matches!(m, InterfaceMode::Wan) || matches!(m, InterfaceMode::StaticWan { .. }) {
+    for m in mode.iter() {
+        if matches!(m, InterfaceMode::Wan)
+            || matches!(m, InterfaceMode::StaticWan { .. })
+            || matches!(m, InterfaceMode::LTE)
+        {
             wan_count += 1;
         }
     }
     if wan_count > 1 {
-        return Err(RitaClientError::MiscStringError(
-            "Only one WAN interface allowed!".to_string(),
+        return Err(RitaCommonError::MiscStringError(
+            "Only one WAN or LTE interface allowed!".to_string(),
         ));
     }
 
-    for iface in iface_name {
-        let mode = target_modes.remove(0);
-
+    for (iface, mode) in iface_name.into_iter().zip(mode.into_iter()) {
         let setter = set_interface_mode(iface.clone(), mode);
         if setter.is_err() {
-            return Err(RitaClientError::InterfaceModeError(iface));
+            return Err(RitaCommonError::InterfaceModeError(iface));
         }
     }
 
@@ -228,7 +230,7 @@ pub fn ethernet_transform_mode(
     ifname: &str,
     a: InterfaceMode,
     b: InterfaceMode,
-) -> Result<(), RitaClientError> {
+) -> Result<(), RitaCommonError> {
     trace!(
         "Ethernet mode transform: ifname {:?}, a {:?}, b {:?}",
         ifname,
@@ -239,7 +241,7 @@ pub fn ethernet_transform_mode(
         // noop that was easy!
         return Ok(());
     } else if a == InterfaceMode::Unknown || b == InterfaceMode::Unknown {
-        return Err(RitaClientError::InterfaceModeError(
+        return Err(RitaCommonError::InterfaceModeError(
             "We can't change Unknown interfaces!".to_string(),
         ));
     }
@@ -380,12 +382,12 @@ pub fn ethernet_transform_mode(
         settings::set_rita_client(rita_client);
         //bail!("Error running UCI commands! Revert attempted: {:?}", res);
         if let Err(re) = res {
-            return Err(RitaClientError::InterfaceToggleError {
+            return Err(RitaCommonError::InterfaceToggleError {
                 main_error: error_occured,
                 revert_status: Some(re),
             });
         } else {
-            return Err(RitaClientError::InterfaceToggleError {
+            return Err(RitaCommonError::InterfaceToggleError {
                 main_error: error_occured,
                 revert_status: None,
             });
@@ -400,7 +402,7 @@ pub fn ethernet_transform_mode(
 
     // try and save the config and fail if we can't
     if let Err(_e) = settings::write_config() {
-        return Err(RitaCommonError::SettingsError(_e).into());
+        return Err(RitaCommonError::SettingsError(_e));
     }
 
     trace!("Transforming ethernet");
@@ -416,9 +418,9 @@ pub fn ethernet_transform_mode(
 /// For example 'toggle user wlan off' or 'toggle phone sale network on' or 'toggle router
 /// to router wireless meshing'.
 
-fn wlan_toggle_get(uci_spec: &str) -> Result<bool, RitaClientError> {
+fn wlan_toggle_get(uci_spec: &str) -> Result<bool, RitaCommonError> {
     if !KI.is_openwrt() {
-        return Err(RitaClientError::MiscStringError(
+        return Err(RitaCommonError::MiscStringError(
             "Not an OpenWRT device!".to_string(),
         ));
     }
@@ -426,14 +428,14 @@ fn wlan_toggle_get(uci_spec: &str) -> Result<bool, RitaClientError> {
     let current_state = KI.uci_show(Some(uci_spec))?;
     let current_state = match current_state.get(uci_spec) {
         Some(val) => val,
-        None => return Err(RitaClientError::MiscStringError(bad_wireless.to_string())),
+        None => return Err(RitaCommonError::MiscStringError(bad_wireless.to_string())),
     };
     let current_state = if current_state.contains('0') {
         true
     } else if current_state.contains('1') {
         false
     } else {
-        return Err(RitaClientError::MiscStringError(bad_wireless.to_string()));
+        return Err(RitaCommonError::MiscStringError(bad_wireless.to_string()));
     };
 
     trace!(
@@ -456,20 +458,9 @@ pub async fn wlan_mesh_get(_: HttpRequest) -> HttpResponse {
     }
 }
 
-pub async fn wlan_lightclient_get(_: HttpRequest) -> HttpResponse {
-    let res = wlan_toggle_get("wireless.lightclient.disabled");
-    match res {
-        Ok(b) => HttpResponse::Ok().json(b),
-        Err(e) => {
-            error!("get lightclient failed with {:?}", e);
-            HttpResponse::InternalServerError().into()
-        }
-    }
-}
-
-fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaClientError> {
+fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaCommonError> {
     if !KI.is_openwrt() {
-        return Err(RitaClientError::MiscStringError(
+        return Err(RitaCommonError::MiscStringError(
             "Not an OpenWRT device!".to_string(),
         ));
     }
@@ -479,14 +470,14 @@ fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaClientError>
     let current_state = KI.uci_show(Some(uci_spec))?;
     let current_state = match current_state.get(uci_spec) {
         Some(val) => val,
-        None => return Err(RitaClientError::MiscStringError(bad_wireless.to_string())),
+        None => return Err(RitaCommonError::MiscStringError(bad_wireless.to_string())),
     };
     let current_state = if current_state.contains('0') {
         true
     } else if current_state.contains('1') {
         false
     } else {
-        return Err(RitaClientError::MiscStringError(bad_wireless.to_string()));
+        return Err(RitaCommonError::MiscStringError(bad_wireless.to_string()));
     };
 
     if enabled == current_state {
@@ -503,12 +494,12 @@ fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaClientError>
     if let Err(e) = res {
         let res_b = KI.uci_revert("wireless");
         if let Err(re) = res_b {
-            return Err(RitaClientError::InterfaceToggleError {
+            return Err(RitaCommonError::InterfaceToggleError {
                 main_error: vec![e],
                 revert_status: Some(re),
             });
         } else {
-            return Err(RitaClientError::InterfaceToggleError {
+            return Err(RitaCommonError::InterfaceToggleError {
                 main_error: vec![e],
                 revert_status: None,
             });
@@ -533,18 +524,6 @@ pub async fn wlan_mesh_set(enabled: Path<bool>) -> HttpResponse {
         Ok(_) => HttpResponse::Ok().into(),
         Err(e) => {
             error!("set mesh failed with {:?}", e);
-            HttpResponse::InternalServerError().into()
-        }
-    }
-}
-
-pub async fn wlan_lightclient_set(enabled: Path<bool>) -> HttpResponse {
-    let enabled = enabled.into_inner();
-    let res = wlan_toggle_set("wireless.lightclient.disabled", enabled);
-    match res {
-        Ok(_) => HttpResponse::Ok().into(),
-        Err(e) => {
-            error!("set lightclient failed with {:?}", e);
             HttpResponse::InternalServerError().into()
         }
     }
@@ -610,9 +589,30 @@ pub async fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
     }
 }
 
+/// Toggles interfaces on openwrt devices using the provided list of interfaces
 pub async fn set_interfaces_endpoint(interfaces: Json<InterfacesToSet>) -> HttpResponse {
     let interface = interfaces.into_inner();
     debug!("set /interfaces hit");
+
+    match multiset_interfaces(interface.interfaces, interface.modes) {
+        Ok(_) => HttpResponse::Ok().into(),
+        Err(e) => {
+            error!("Set interfaces failed with {:?}", e);
+            HttpResponse::InternalServerError().into()
+        }
+    }
+}
+
+/// An alterative to the set interfaces endpoint which performs exit specific validation
+/// for example exits should never have LTE ports and must always have at least one WAN port
+pub async fn set_interfaces_exit_endpoint(interfaces: Json<InterfacesToSet>) -> HttpResponse {
+    let interface = interfaces.into_inner();
+    debug!("set exit /interfaces hit");
+    for interface in interface.modes.iter() {
+        if matches!(interface, InterfaceMode::LTE) {
+            return HttpResponse::BadRequest().json("LTE interfaces are not allowed on exits");
+        }
+    }
 
     match multiset_interfaces(interface.interfaces, interface.modes) {
         Ok(_) => HttpResponse::Ok().into(),

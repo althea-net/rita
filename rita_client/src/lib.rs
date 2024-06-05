@@ -31,7 +31,6 @@ pub use crate::dashboard::eth_private_key::*;
 pub use crate::dashboard::exits::*;
 pub use crate::dashboard::extender_checkin::*;
 pub use crate::dashboard::installation_details::*;
-pub use crate::dashboard::interfaces::*;
 pub use crate::dashboard::localization::*;
 pub use crate::dashboard::logging::*;
 pub use crate::dashboard::mesh_ip::*;
