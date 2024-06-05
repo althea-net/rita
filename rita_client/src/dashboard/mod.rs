@@ -13,7 +13,6 @@ pub mod eth_private_key;
 pub mod exits;
 pub mod extender_checkin;
 pub mod installation_details;
-pub mod interfaces;
 pub mod localization;
 pub mod logging;
 pub mod mesh_ip;
@@ -37,7 +36,6 @@ use crate::dashboard::eth_private_key::*;
 use crate::dashboard::exits::*;
 use crate::dashboard::extender_checkin::*;
 use crate::dashboard::installation_details::*;
-use crate::dashboard::interfaces::*;
 use crate::dashboard::localization::*;
 use crate::dashboard::logging::*;
 use crate::dashboard::mesh_ip::*;
@@ -55,6 +53,7 @@ use actix_web_async::{web, App, HttpServer};
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
+use rita_common::dashboard::interfaces::*;
 use rita_common::dashboard::nickname::*;
 use rita_common::dashboard::own_info::*;
 use rita_common::dashboard::settings::*;
@@ -111,15 +110,7 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                     .route("/interfaces", web::get().to(get_interfaces_endpoint))
                     .route("/interfaces", web::post().to(set_interfaces_endpoint))
                     .route("/interfaces/mesh", web::get().to(wlan_mesh_get))
-                    .route(
-                        "/interfaces/lightclient",
-                        web::get().to(wlan_lightclient_get),
-                    )
                     .route("/interfaces/mesh/{enabled}", web::post().to(wlan_mesh_set))
-                    .route(
-                        "/interfaces/lightclient/{enabled}",
-                        web::post().to(wlan_lightclient_set),
-                    )
                     .route("/eth_private_key", web::get().to(get_eth_private_key))
                     .route("/mesh_ip", web::get().to(get_mesh_ip))
                     .route("/neighbors", web::get().to(get_neighbor_info))

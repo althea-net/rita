@@ -5,17 +5,17 @@
 //! tunnel if the signup was successful on the selected exit.
 
 use crate::exit_manager::get_current_exit;
-use crate::get_interfaces;
 use crate::heartbeat::get_selected_exit_server;
 use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::operator_fee_manager::tick_operator_payments;
-use crate::InterfaceMode;
 use actix_async::System as AsyncSystem;
 use althea_kernel_interface::KernelInterfaceError;
 use althea_kernel_interface::KI;
 use althea_types::ExitState;
 use antenna_forwarding_client::start_antenna_forwarding_proxy;
+use rita_common::dashboard::interfaces::get_interfaces;
+use rita_common::dashboard::interfaces::InterfaceMode;
 use rita_common::rita_loop::set_gateway;
 use rita_common::tunnel_manager::tm_get_neighbors;
 use rita_common::usage_tracker::get_current_hour;
