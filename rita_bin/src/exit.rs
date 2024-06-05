@@ -13,13 +13,13 @@
 #![allow(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
-use std::time::Duration;
-
-use actix_rt::time::Instant;
-use actix_rt::System;
 use althea_types::Identity;
+use clarity::Address;
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
+use std::sync::Arc;
+use std::sync::RwLock;
+use std::time::Duration;
 #[cfg(feature = "jemalloc")]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
@@ -46,6 +46,7 @@ use rita_exit::start_rita_exit_dashboard;
 use rita_exit::{get_exit_usage, Args};
 use settings::exit::RitaExitSettingsStruct;
 use settings::save_settings_on_shutdown;
+use web30::jsonrpc::error::Web3Error;
 
 /// used to crash the exit on first startup if config does not make sense
 /// as is usually desirable for cloud infrastruture
@@ -61,7 +62,8 @@ fn sanity_check_config() {
     assert!(exit_settings.exit_network.wg_v2_tunnel_port < 59999);
 }
 
-fn main() {
+#[actix_rt::main]
+async fn main() {
     //Setup a SIGTERM hadler
     ctrlc::set_handler(move || {
         info!("received Ctrl+C!");
@@ -139,83 +141,122 @@ fn main() {
     );
     trace!("Starting with Identity: {:?}", settings.get_identity());
 
-    // Exits require the ability to query the blockchain to setup the user list, they also need to
-    // have a backend database contract to store user data. This function checks that both of those
-    // are correct so that we can fail quickly if they are not.
-    let clients = check_startup_balance_and_contract();
+    // This lock will be shared between this thread and the dashboard thread, it will be
+    // set to true one the exit has started up and is ready to serve traffic. Before that
+    // it will show error messages on the dashboard to assist with setup.
+    let startup_status = Arc::new(RwLock::new(Some(String::from("Preparing to start"))));
+    start_rita_exit_dashboard(startup_status.clone());
 
-    // Now that we have migrated to async across the board I'm not actually sure if this is needed
-    // previously with pre-async actix this would initialize the thread that many actix functions required
-    // but now each individual thread spawns it's own system, this may simply be redundant.
-    let system = actix_async::System::new();
+    // Exits require the ability to query the blockchain to setup the user list, they also need to
+    // have a backend database contract to store user data. Exits always have backhaul internet
+    // otherwise they wouldn't be able to exit traffic out to the internet.
+    //
+    // This function will hold the program here until we have confirmed that everything is in good shape
+    // and perform startup
+    let clients =
+        check_startup_balance_and_contract(args.flag_fail_on_startup, startup_status).await;
+
+    let workers = settings.workers;
+    start_core_rita_endpoints(workers as usize);
+    start_rita_exit_endpoints(workers as usize);
 
     start_rita_common_loops();
-    start_rita_exit_loop(clients);
     start_operator_update_loop();
     save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(Box::new(
         settings::get_rita_exit(),
     )));
 
-    let workers = settings.workers;
-    start_core_rita_endpoints(workers as usize);
-    start_rita_exit_endpoints(workers as usize);
-    start_rita_exit_dashboard();
-
-    if let Err(e) = system.run() {
-        error!("Starting Exit failed with {}", e);
-    }
-
-    info!("Started rita Exit");
+    // this call blocks, transforming this startup thread into the main exit watchdog thread
+    start_rita_exit_loop(clients);
 }
 
-const STARTUP_RETRY_TIME: Duration = Duration::from_secs(10);
+/// This function performs startup integrity checks on the config and system. It checks that we can reach the internet
+/// reach the provided full node, query the provided contract and that the provided address has a balance. By the time this
+/// function returns we have the list of users and are ready to start the exit and forward traffic to the outside world.
+///
+/// This function will hold the program here until we have confirmed that everything is in good shape sening error messages
+/// using the startup_status RwLock to the dashboard to assist with setup.If the fail_on_startup flag is set the program will
+/// exit immediately if any of these checks fail.
+async fn check_startup_balance_and_contract(
+    fail_on_startup: bool,
+    startup_status: Arc<RwLock<Option<String>>>,
+) -> Vec<Identity> {
+    let payment_settings = settings::get_rita_common().payment;
+    let our_address = payment_settings.eth_address.expect("No address!");
 
-/// This functions checks the Exits balance before starting, this is required since the exit must
-/// be able to query the blockchain to setup the user list.
-fn check_startup_balance_and_contract() -> Vec<Identity> {
-    let runner = System::new();
-    runner.block_on(async move {
-        let payment_settings = settings::get_rita_common().payment;
-        let our_address = payment_settings.eth_address.expect("No address!");
-        let full_node = get_web3_server();
-        let web3 = web30::client::Web3::new(&full_node, Duration::from_secs(5));
-        let mut res = web3.eth_get_balance(our_address).await;
-        let start = Instant::now();
-        while res.is_err() {
-            error!("Failed to get balance, trying again, we must check this before starting");
-            res = web3.eth_get_balance(our_address).await;
-
-            if Instant::now() - start > STARTUP_RETRY_TIME {
-                println!("Could not successfully query the ETH node {}", full_node);
-                std::process::exit(1);
-            }
-        }
-        let balance = res.unwrap();
-        if balance == 0u8.into() {
-            println!(
-                "Rita Exit requires a balance to start, please fund your address {} and restart",
-                our_address
-            );
+    // spin here until basic conditions are met
+    while check_balance(our_address, startup_status.clone())
+        .await
+        .is_err()
+    {
+        if fail_on_startup {
             std::process::exit(1);
         }
+    }
 
-        let contract_address = settings::get_rita_exit()
-            .exit_network
-            .registered_users_contract_addr;
-        let mut users = get_all_regsitered_clients(&web3, our_address, contract_address).await;
-        let start = Instant::now();
-        while users.is_err() {
-            error!("Failed to get users, we must get these before starting!");
-            users = get_all_regsitered_clients(&web3, our_address, contract_address).await;
+    // Next we actually get the list of users
+    let mut users = get_registered_users().await;
+    while let Err(e) = users {
+        let error_message = format!("Failed to get registered users with error {:?}. Check your configured Registered Users Contract Address!", e);
+        error!("{error_message}");
+        startup_status
+            .write()
+            .unwrap()
+            .replace(error_message.clone());
+        if fail_on_startup {
+            std::process::exit(1);
+        }
+        users = get_registered_users().await;
+    }
 
-            if Instant::now() - start > STARTUP_RETRY_TIME {
-                println!(
-                    "Could not successfully query contract {} check you are on the right chain!",
-                    contract_address
+    users.unwrap()
+}
+
+async fn get_registered_users() -> Result<Vec<Identity>, Web3Error> {
+    let payment_settings = settings::get_rita_common().payment;
+    let our_address = payment_settings.eth_address.expect("No address!");
+    let full_node = get_web3_server();
+    let web3 = web30::client::Web3::new(&full_node, Duration::from_secs(5));
+    let contract_address = settings::get_rita_exit()
+        .exit_network
+        .registered_users_contract_addr;
+    get_all_regsitered_clients(&web3, our_address, contract_address).await
+}
+
+async fn check_balance(
+    our_address: Address,
+    startup_status: Arc<RwLock<Option<String>>>,
+) -> Result<(), String> {
+    let full_node = get_web3_server();
+    let web3 = web30::client::Web3::new(&full_node, Duration::from_secs(5));
+    let res = web3.eth_get_balance(our_address).await;
+    match res {
+        Ok(balance) => {
+            if balance == 0u8.into() {
+                let error_message = format!(
+                    "Rita Exit requires a balance to start, please fund your address {} with a small amount and restart",
+                    our_address
                 );
-                std::process::exit(1);
+                startup_status
+                    .write()
+                    .unwrap()
+                    .replace(error_message.clone());
+                Err(error_message)
+            } else {
+                Ok(())
             }
         }
-        users.unwrap()
-    })
+        Err(e) => {
+            let error_message = format!(
+                "Failed to get balance for account with error {:?}, Check backhaul network configuration and configured full node RPC",
+                e
+            );
+            error!("{error_message}");
+            startup_status
+                .write()
+                .unwrap()
+                .replace(error_message.clone());
+            Err(error_message)
+        }
+    }
 }

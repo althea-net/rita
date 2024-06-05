@@ -8,20 +8,20 @@ extern crate lazy_static;
 extern crate serde_derive;
 
 pub mod database;
+mod error;
 pub mod network_endpoints;
 pub mod operator_update;
 pub mod rita_loop;
 pub mod traffic_watcher;
 
-mod error;
+pub use crate::database::geoip::*;
+pub use crate::database::in_memory_database::*;
 use actix_async::System;
 use actix_web_async::web;
 use actix_web_async::App;
+use actix_web_async::HttpResponse;
 use actix_web_async::HttpServer;
 pub use error::RitaExitError;
-
-pub use crate::database::geoip::*;
-pub use crate::database::in_memory_database::*;
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
@@ -36,11 +36,14 @@ use rita_common::dashboard::wg_key::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::version;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::thread;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Args {
     pub flag_config: PathBuf,
+    pub flag_fail_on_startup: bool,
 }
 
 pub fn get_exit_usage(version: &str, git_hash: &str) -> String {
@@ -48,18 +51,21 @@ pub fn get_exit_usage(version: &str, git_hash: &str) -> String {
         "Usage: rita_exit --config=<settings>
 Options:
     -c, --config=<settings>   Name of config file
+    -f, --fail-on-startup     Exit immeidately if status checks fail on startup
 About:
     Version {READABLE_VERSION} - {version}
     git hash {git_hash}"
     )
 }
 
-pub fn start_rita_exit_dashboard() {
-    // Dashboard
+pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
+    let startup_status = web::Data::new(startup_status.clone());
+    // the dashboard runs in this thread and this function returns right away with that thread left running
+    // in the background
     thread::spawn(move || {
         let runner = System::new();
         runner.block_on(async move {
-            let _res = HttpServer::new(|| {
+            let _res = HttpServer::new(move || {
                 App::new()
                     .wrap(middleware::HeadersMiddlewareFactory)
                     .route("/info", web::get().to(get_own_info))
@@ -80,6 +86,8 @@ pub fn start_rita_exit_dashboard() {
                     .route("/nickname/set/", web::post().to(set_nickname))
                     .route("/usage/payments", web::get().to(get_payments))
                     .route("/token_bridge/status", web::get().to(get_bridge_status))
+                    .app_data(startup_status.clone())
+                    .route("startup_status", web::get().to(get_startup_status))
             })
             .bind(format!(
                 "[::0]:{}",
@@ -92,4 +100,13 @@ pub fn start_rita_exit_dashboard() {
             .await;
         });
     });
+}
+
+/// Retrieves the startup status of the exit, None or null (since we're converting to json)
+/// means the startup was successful, otherwise it will be a string with the error message
+pub async fn get_startup_status(
+    startup_status: web::Data<Arc<RwLock<Option<String>>>>,
+) -> HttpResponse {
+    trace!("/startup_status hit");
+    HttpResponse::Ok().json(startup_status.read().unwrap().clone())
 }

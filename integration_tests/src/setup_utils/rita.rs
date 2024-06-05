@@ -254,10 +254,7 @@ pub fn spawn_rita_exit(
         // pass the data to the calling thread via thread safe lock
         *router_identity_ref.write().unwrap() = Some(resettings.get_identity().unwrap());
 
-        let system = actix_async::System::new();
-
         start_rita_common_loops();
-        start_rita_exit_loop(vec![]);
         start_operator_update_loop();
         save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(Box::new(
             settings::get_rita_exit(),
@@ -266,11 +263,10 @@ pub fn spawn_rita_exit(
         let workers = 4;
         start_core_rita_endpoints(workers as usize);
         start_rita_exit_endpoints(workers as usize);
-        start_rita_exit_dashboard();
+        start_rita_exit_dashboard(Arc::new(RwLock::new(None)));
 
-        if let Err(e) = system.run() {
-            panic!("Starting exit failed with {}", e);
-        }
+        // this one blocks
+        start_rita_exit_loop(vec![]);
     });
 
     // wait for the child thread to finish initializing

@@ -74,37 +74,34 @@ pub fn start_rita_exit_loop(reg_clients_list: Vec<Identity>) {
     // overbilling users
     let usage_history = Arc::new(RwLock::new(HashMap::new()));
 
-    // outer thread is a watchdog, inner thread is the runner
-    thread::spawn(move || {
-        // this will always be an error, so it's really just a loop statement
-        // with some fancy destructuring
-        while let Err(e) = {
-            let reg_clients_list = reg_clients_list.clone();
-            // ARC will simply clone the same reference
-            let usage_history = usage_history.clone();
-            thread::spawn(move || {
-                // Internal exit cache that store state across multiple ticks
-                let mut rita_exit_cache = RitaExitCache::default();
-                let mut reg_clients_list = reg_clients_list.clone();
-                let runner = AsyncSystem::new();
-                runner.block_on(async move {
-                    loop {
-                        reg_clients_list = update_client_list(reg_clients_list).await;
+    // this will always be an error, so it's really just a loop statement
+    // with some fancy destructuring, blocking the caller thread as a watchdog
+    while let Err(e) = {
+        let reg_clients_list = reg_clients_list.clone();
+        // ARC will simply clone the same reference
+        let usage_history = usage_history.clone();
+        thread::spawn(move || {
+            // Internal exit cache that store state across multiple ticks
+            let mut rita_exit_cache = RitaExitCache::default();
+            let mut reg_clients_list = reg_clients_list.clone();
+            let runner = AsyncSystem::new();
+            runner.block_on(async move {
+                loop {
+                    reg_clients_list = update_client_list(reg_clients_list).await;
 
-                        rita_exit_cache = rita_exit_loop(
-                            reg_clients_list.clone(),
-                            rita_exit_cache,
-                            usage_history.clone(),
-                        )
-                        .await;
-                    }
-                })
+                    rita_exit_cache = rita_exit_loop(
+                        reg_clients_list.clone(),
+                        rita_exit_cache,
+                        usage_history.clone(),
+                    )
+                    .await;
+                }
             })
-            .join()
-        } {
-            error!("Exit loop thread panicked! Respawning {:?}", e);
-        }
-    });
+        })
+        .join()
+    } {
+        error!("Exit loop thread panicked! Respawning {:?}", e);
+    }
 }
 
 /// Updates the client list, if this is not successful the old client list is used
