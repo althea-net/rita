@@ -115,7 +115,7 @@ pub struct PaymentSettings {
     /// Payment denoms that payment validator accepts on Althea L1. Ex usdc -> Denom {ibc/hash, 1_000_000}
     /// the nubmer is the multiplier to convert one unit of this denom to $1 since these are all
     /// assumed to be stable coins
-    #[serde(default)]
+    #[serde(default = "default_althea_l1_accepted_denoms")]
     pub althea_l1_accepted_denoms: Vec<Denom>,
     /// By default when this node makes a payment it will use this denom
     #[serde(default = "default_althea_l1_payment_denom")]
@@ -178,6 +178,10 @@ fn default_althea_l1_payment_denom() -> Denom {
         denom: "uUSDC".to_string(),
         decimal: 1_000_000u64,
     }
+}
+
+fn default_althea_l1_accepted_denoms() -> Vec<Denom> {
+    vec![default_althea_l1_payment_denom()]
 }
 
 impl PaymentSettings {
