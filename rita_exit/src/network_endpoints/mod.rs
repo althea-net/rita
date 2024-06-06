@@ -328,7 +328,7 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
 
                 // only one payment type can be accepted for now, but this structure allows for
                 // multiple payment types in the future
-                let mut accepted_payments = HashSet::new(); 
+                let mut accepted_payments = HashSet::new();
                 accepted_payments.insert(exit_settings.payment.system_chain);
 
                 if exit_regions.is_empty() || accepted_payments.is_empty() {
