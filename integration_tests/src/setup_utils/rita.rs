@@ -17,9 +17,9 @@ use rita_common::rita_loop::{
     write_to_disk::{save_to_disk_loop, SettingsOnDisk},
 };
 use rita_exit::{
+    dashboard::start_rita_exit_dashboard,
     operator_update::update_loop::start_operator_update_loop,
     rita_loop::{start_rita_exit_endpoints, start_rita_exit_loop},
-    dashboard::start_rita_exit_dashboard,
 };
 use settings::set_flag_config;
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};

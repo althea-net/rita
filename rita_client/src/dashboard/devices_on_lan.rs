@@ -1,17 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    convert::TryInto,
-    net::IpAddr,
-};
-
+use crate::dashboard::extend_hardware_info;
 use actix_web_async::{HttpRequest, HttpResponse};
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::HardwareInfo;
 use mac_address::MacAddress;
 use rita_common::KI;
 use serde::Serializer;
-
-use crate::extend_hardware_info;
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryInto,
+    net::IpAddr,
+};
 
 /// Devices can have multiple ip addresses but mac addresses on a wlan should be unique to each device
 fn consolidate_wlan_arp_table(

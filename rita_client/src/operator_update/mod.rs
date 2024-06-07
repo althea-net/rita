@@ -3,13 +3,12 @@ pub mod tests;
 pub mod update_loop;
 pub mod updater;
 extern crate openssh_keys;
-use crate::dashboard::system_chain::set_system_blockchain;
+use crate::dashboard::extender_checkin::extend_hardware_info;
+use crate::dashboard::router::set_router_update_instruction;
+use crate::dashboard::wifi::{reset_wifi_pass, set_wifi_multi_internal};
 use crate::exit_manager::{get_client_pub_ipv6, get_current_exit};
 use crate::rita_loop::is_gateway_client;
-use crate::{
-    extend_hardware_info, reset_wifi_pass, set_router_update_instruction, set_wifi_multi_internal,
-    RitaClientError,
-};
+use crate::RitaClientError;
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::{get_sequence_num, UsageTrackerTransfer};
 use althea_types::{
@@ -17,6 +16,7 @@ use althea_types::{
     HardwareInfo, OperatorAction, OperatorCheckinMessage, OperatorUpdateMessage,
 };
 use num256::Uint256;
+use rita_common::dashboard::system_chain::set_system_blockchain;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;

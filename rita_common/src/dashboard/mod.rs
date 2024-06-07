@@ -9,6 +9,7 @@ pub mod interfaces;
 pub mod nickname;
 pub mod own_info;
 pub mod settings;
+pub mod system_chain;
 pub mod token_bridge;
 pub mod usage;
 pub mod wallet;
