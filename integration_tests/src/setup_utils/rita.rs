@@ -19,7 +19,7 @@ use rita_common::rita_loop::{
 use rita_exit::{
     operator_update::update_loop::start_operator_update_loop,
     rita_loop::{start_rita_exit_endpoints, start_rita_exit_loop},
-    start_rita_exit_dashboard,
+    dashboard::start_rita_exit_dashboard,
 };
 use settings::set_flag_config;
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
