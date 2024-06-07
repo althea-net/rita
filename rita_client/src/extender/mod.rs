@@ -1,6 +1,6 @@
-use crate::dashboard::wifi::WifiInterface;
 use althea_kernel_interface::hardware_info::maybe_get_single_line_string;
 use althea_types::WgKey;
+use rita_common::dashboard::wifi::WifiInterface;
 use settings::logging::LoggingSettings;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

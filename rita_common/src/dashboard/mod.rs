@@ -14,3 +14,4 @@ pub mod token_bridge;
 pub mod usage;
 pub mod wallet;
 pub mod wg_key;
+pub mod wifi;

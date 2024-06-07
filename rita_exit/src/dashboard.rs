@@ -18,6 +18,7 @@ use rita_common::dashboard::token_bridge::*;
 use rita_common::dashboard::usage::*;
 use rita_common::dashboard::wallet::*;
 use rita_common::dashboard::wg_key::*;
+use rita_common::dashboard::wifi::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::version;
 use std::sync::Arc;
@@ -57,6 +58,16 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                         web::post().to(set_system_blockchain_endpoint),
                     )
                     .route("/blockchain/get", web::get().to(get_system_blockchain))
+                    .route("/wifi_settings", web::post().to(set_wifi_multi))
+                    .route(
+                        "/wifi_settings/get_channels/{radio}",
+                        web::get().to(get_allowed_wifi_channels),
+                    )
+                    .route(
+                        "/wifi_settings/get_encryption/{radio}",
+                        web::get().to(get_allowed_encryption_modes),
+                    )
+                    .route("/wifi_settings", web::get().to(get_wifi_config))
                     .app_data(startup_status.clone())
                     .route("startup_status", web::get().to(get_startup_status))
                     .route("/interfaces", web::get().to(get_interfaces_endpoint))
