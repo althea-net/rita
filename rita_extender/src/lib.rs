@@ -8,18 +8,16 @@ use actix_async::System as AsyncSystem;
 use althea_types::OpkgCommand;
 use althea_types::WifiSsid;
 use error::RitaExtenderError;
+use rita_client::dashboard::wifi::get_wifi_config_internal;
+use rita_client::dashboard::wifi::set_ssid;
 use rita_client::dashboard::wifi::WifiInterface;
 use rita_client::extender::get_device_mac;
 use rita_client::extender::ExtenderCheckin;
-use rita_client::get_wifi_config_internal;
-use rita_client::set_ssid;
+use rita_client::extender::ExtenderUpdate;
 use rita_common::KI;
-
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
-
-use rita_client::extender::ExtenderUpdate;
 
 const EXTENDER_CHECKIN_TIMEOUT: Duration = Duration::from_secs(5);
 const EXTENDER_LOOP_SPEED: Duration = Duration::from_secs(30);

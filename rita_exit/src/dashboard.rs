@@ -12,6 +12,8 @@ use rita_common::dashboard::interfaces::*;
 use rita_common::dashboard::nickname::*;
 use rita_common::dashboard::own_info::*;
 use rita_common::dashboard::settings::*;
+use rita_common::dashboard::system_chain::get_system_blockchain;
+use rita_common::dashboard::system_chain::set_system_blockchain_endpoint;
 use rita_common::dashboard::token_bridge::*;
 use rita_common::dashboard::usage::*;
 use rita_common::dashboard::wallet::*;
@@ -50,6 +52,11 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     .route("/nickname/set/", web::post().to(set_nickname))
                     .route("/usage/payments", web::get().to(get_payments))
                     .route("/token_bridge/status", web::get().to(get_bridge_status))
+                    .route(
+                        "/blockchain/set/{chain_id}",
+                        web::post().to(set_system_blockchain_endpoint),
+                    )
+                    .route("/blockchain/get", web::get().to(get_system_blockchain))
                     .app_data(startup_status.clone())
                     .route("startup_status", web::get().to(get_startup_status))
                     .route("/interfaces", web::get().to(get_interfaces_endpoint))

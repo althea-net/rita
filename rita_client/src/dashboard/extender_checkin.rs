@@ -5,9 +5,9 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::{
-    extender::{get_device_mac, ExtenderAdditionalSettings, ExtenderCheckin, ExtenderUpdate},
-    get_wifi_config_internal,
+use super::get_wifi_config_internal;
+use crate::extender::{
+    get_device_mac, ExtenderAdditionalSettings, ExtenderCheckin, ExtenderUpdate,
 };
 
 lazy_static! {
