@@ -23,7 +23,6 @@ pub mod prices;
 pub mod remote_access;
 pub mod router;
 pub mod usage;
-pub mod wifi;
 
 use std::thread;
 
@@ -45,7 +44,6 @@ use crate::dashboard::prices::*;
 use crate::dashboard::remote_access::*;
 use crate::dashboard::router::*;
 use crate::dashboard::usage::*;
-use crate::dashboard::wifi::*;
 use actix_async::System;
 use actix_web_async::{web, App, HttpServer};
 use rita_common::dashboard::babel::*;
@@ -60,6 +58,7 @@ use rita_common::dashboard::token_bridge::*;
 use rita_common::dashboard::usage::*;
 use rita_common::dashboard::wallet::*;
 use rita_common::dashboard::wg_key::*;
+use rita_common::dashboard::wifi::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::*;
 

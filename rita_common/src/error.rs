@@ -2,6 +2,7 @@ use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
     net::AddrParseError,
+    num::ParseIntError,
     time::SystemTimeError,
 };
 
@@ -13,7 +14,7 @@ use log::SetLoggerError;
 use settings::SettingsError;
 use std::boxed::Box;
 
-use crate::tunnel_manager::error::TunnelManagerError;
+use crate::{dashboard, tunnel_manager::error::TunnelManagerError};
 
 #[derive(Debug)]
 pub enum RitaCommonError {
@@ -44,6 +45,9 @@ pub enum RitaCommonError {
     DuplicatePayment,
     PaymentFailed(String),
     TunnelManagerError(TunnelManagerError),
+    ValidationError(dashboard::wifi::ValidationError),
+    ParseIntError(ParseIntError),
+    SerdeJsonError(serde_json::Error),
 }
 
 impl From<LoggerError> for RitaCommonError {
@@ -71,7 +75,11 @@ impl From<std::io::Error> for RitaCommonError {
         RitaCommonError::StdError(error)
     }
 }
-
+impl From<serde_json::Error> for RitaCommonError {
+    fn from(error: serde_json::Error) -> Self {
+        RitaCommonError::SerdeJsonError(error)
+    }
+}
 impl From<BabelMonitorError> for RitaCommonError {
     fn from(error: BabelMonitorError) -> Self {
         RitaCommonError::BabelMonitorError(error)
@@ -105,6 +113,16 @@ impl From<TunnelManagerError> for RitaCommonError {
 impl From<AddrParseError> for RitaCommonError {
     fn from(error: AddrParseError) -> Self {
         RitaCommonError::AddrParseError(error)
+    }
+}
+impl From<dashboard::wifi::ValidationError> for RitaCommonError {
+    fn from(error: dashboard::wifi::ValidationError) -> Self {
+        RitaCommonError::ValidationError(error)
+    }
+}
+impl From<ParseIntError> for RitaCommonError {
+    fn from(error: ParseIntError) -> Self {
+        RitaCommonError::ParseIntError(error)
     }
 }
 
@@ -153,6 +171,9 @@ impl Display for RitaCommonError {
             RitaCommonError::BincodeError(e) => write!(f, "{e}"),
             RitaCommonError::SendRequestError(e) => write!(f, "{e}"),
             RitaCommonError::JsonPayloadError(e) => write!(f, "{e}"),
+            RitaCommonError::ValidationError(e) => write!(f, "{e}"),
+            RitaCommonError::ParseIntError(e) => write!(f, "{e}"),
+            RitaCommonError::SerdeJsonError(e) => write!(f, "{e}"),
         }
     }
 }

@@ -11,12 +11,9 @@ use std::{
     string::FromUtf8Error,
 };
 
-use crate::dashboard;
-
 #[derive(Debug)]
 pub enum RitaClientError {
     MiscStringError(String),
-    ValidationError(dashboard::wifi::ValidationError),
     SendRequestError(String),
     JsonPayloadError(String),
     OldJsonPayloadError(String),
@@ -48,11 +45,6 @@ impl From<KernelInterfaceError> for RitaClientError {
 impl From<settings::SettingsError> for RitaClientError {
     fn from(error: settings::SettingsError) -> Self {
         RitaClientError::RitaCommonError(RitaCommonError::SettingsError(error))
-    }
-}
-impl From<dashboard::wifi::ValidationError> for RitaClientError {
-    fn from(error: dashboard::wifi::ValidationError) -> Self {
-        RitaClientError::ValidationError(error)
     }
 }
 impl From<SendRequestError> for RitaClientError {
@@ -100,7 +92,6 @@ impl Display for RitaClientError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
             RitaClientError::MiscStringError(e) => write!(f, "{e}"),
-            RitaClientError::ValidationError(e) => write!(f, "{e}"),
             RitaClientError::SendRequestError(e) => {
                 write!(f, "Error with get request for exit info: {e}")
             }

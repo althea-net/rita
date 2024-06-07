@@ -1,5 +1,7 @@
 //! These endpoints are used to modify mundane wireless settings
 
+use crate::dashboard::nickname::maybe_set_nickname;
+use crate::{RitaCommonError, KI};
 use ::actix_web_async::http::StatusCode;
 use ::actix_web_async::web::Path;
 use ::actix_web_async::{web::Json, HttpRequest, HttpResponse};
@@ -7,14 +9,10 @@ use althea_types::{
     FromStr, WifiChannel, WifiDisabled, WifiDisabledReturn, WifiPass, WifiSecurity, WifiSsid,
     WifiToken,
 };
-use rita_common::dashboard::nickname::maybe_set_nickname;
-use rita_common::{RitaCommonError, KI};
 use serde::{Deserialize, Deserializer, Serializer};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-
-use crate::RitaClientError;
 
 /// legal in the US and around the world, don't allow odd channels
 pub const ALLOWED_TWO: [u16; 3] = [1, 6, 11];
@@ -123,7 +121,7 @@ impl Display for EncryptionModes {
     }
 }
 impl FromStr for EncryptionModes {
-    type Err = RitaClientError;
+    type Err = RitaCommonError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -140,7 +138,7 @@ impl FromStr for EncryptionModes {
             | "psk-mixed"
             | "WPA+WPA2" => Ok(EncryptionModes::Psk2MixedTkipCcmp),
             _ => {
-                let e = RitaClientError::MiscStringError("Invalid encryption mode!".to_string());
+                let e = RitaCommonError::MiscStringError("Invalid encryption mode!".to_string());
                 Err(e)
             }
         }
@@ -199,7 +197,7 @@ impl Display for ValidationError {
     }
 }
 
-pub fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), RitaClientError> {
+pub fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), RitaCommonError> {
     if let Err(e) = validate_config_value(&wifi_ssid.ssid) {
         info!("Setting of invalid SSID was requested: {}", e);
         return Err(e.into());
@@ -224,7 +222,7 @@ pub fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), RitaClientError> {
 }
 
 /// Resets the wifi password to the stock value for all radios
-pub fn reset_wifi_pass() -> Result<(), RitaClientError> {
+pub fn reset_wifi_pass() -> Result<(), RitaCommonError> {
     let config = get_wifi_config_internal()?;
     for interface in config {
         let pass = WifiPass {
@@ -246,7 +244,7 @@ pub fn reset_wifi_pass() -> Result<(), RitaClientError> {
     Ok(())
 }
 
-fn set_pass(wifi_pass: &WifiPass) -> Result<(), RitaClientError> {
+fn set_pass(wifi_pass: &WifiPass) -> Result<(), RitaCommonError> {
     let wifi_pass_len = wifi_pass.pass.len();
     if wifi_pass_len < MINIMUM_PASS_CHARS {
         return Err(ValidationError::TooShort(MINIMUM_PASS_CHARS).into());
@@ -266,7 +264,7 @@ fn set_pass(wifi_pass: &WifiPass) -> Result<(), RitaClientError> {
     Ok(())
 }
 
-fn set_channel(wifi_channel: &WifiChannel) -> Result<(), RitaClientError> {
+fn set_channel(wifi_channel: &WifiChannel) -> Result<(), RitaCommonError> {
     let current_channel: u16 = KI
         .get_uci_var(&format!("wireless.{}.channel", wifi_channel.radio))?
         .parse()?;
@@ -291,7 +289,7 @@ fn set_channel(wifi_channel: &WifiChannel) -> Result<(), RitaClientError> {
 }
 
 /// Changes the wifi encryption mode from a given dropdown menu
-fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaClientError> {
+fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaCommonError> {
     // check that the given string is one of the approved strings for encryption mode
     if let Ok(parsed) = EncryptionModes::from_str(&wifi_security.encryption) {
         // think radio0, radio1
@@ -304,14 +302,14 @@ fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaClientError> {
 
         Ok(())
     } else {
-        Err(RitaClientError::MiscStringError(
+        Err(RitaCommonError::MiscStringError(
             "Could not set wifi encryption; invalid encryption mode".to_string(),
         ))
     }
 }
 
 /// Disables the wifi on the specified radio
-fn set_disabled(wifi_disabled: &WifiDisabled) -> Result<WifiDisabledReturn, RitaClientError> {
+fn set_disabled(wifi_disabled: &WifiDisabled) -> Result<WifiDisabledReturn, RitaCommonError> {
     let current_disabled: bool =
         KI.get_uci_var(&format!("wireless.{}.disabled", wifi_disabled.radio))? == "1";
 
@@ -460,7 +458,7 @@ fn validate_channel(
     let channel_width_is_40 = channel_width.contains("40");
     let channel_width_is_80 = channel_width.contains("80");
     let channel_width_is_160 = channel_width.contains("160");
-    let model = settings::get_rita_client().network.device;
+    let model = settings::get_rita_common().network.device;
     // trying to swap from 5ghz to 2.4ghz or vice versa, usually this
     // is impossible, although some multifunction cards allow it
     if (old_is_two && new_is_five) || (old_is_five && new_is_two) {
@@ -563,7 +561,7 @@ pub async fn get_allowed_wifi_channels(radio: Path<String>) -> HttpResponse {
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e}"));
         }
     };
-    let model = settings::get_rita_client().network.device;
+    let model = settings::get_rita_common().network.device;
 
     if current_channel < 20 {
         HttpResponse::Ok().json(ALLOWED_TWO)
@@ -641,7 +639,7 @@ pub async fn get_wifi_config(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(config)
 }
 
-pub fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaClientError> {
+pub fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaCommonError> {
     let mut interfaces = Vec::new();
     let mut devices = HashMap::new();
     let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")?;
@@ -652,8 +650,7 @@ pub fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaClientError>
             error!("No \"values\" key in parsed wifi config!");
             return Err(RitaCommonError::ConversionError(
                 "No \"values\" key in parsed wifi config!".to_string(),
-            )
-            .into());
+            ));
         }
     };
     for (k, v) in items {
