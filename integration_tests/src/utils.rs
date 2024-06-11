@@ -417,7 +417,7 @@ pub fn get_default_settings(
 
     let mut exit = exit.clone();
     let mut client = client.clone();
-    client.exit_client.contact_info = Some(
+    client.payment.contact_info = Some(
         ContactType::Both {
             number: get_test_runner_magic_phone(),
             email: "fake@fake.com".parse().unwrap(),

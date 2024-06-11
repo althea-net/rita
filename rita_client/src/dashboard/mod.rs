@@ -7,7 +7,6 @@
 pub mod auth;
 pub mod backup_created;
 pub mod bandwidth_limit;
-pub mod contact_info;
 pub mod devices_on_lan;
 pub mod eth_private_key;
 pub mod exits;
@@ -24,12 +23,9 @@ pub mod remote_access;
 pub mod router;
 pub mod usage;
 
-use std::thread;
-
 use crate::dashboard::auth::*;
 use crate::dashboard::backup_created::*;
 use crate::dashboard::bandwidth_limit::*;
-use crate::dashboard::contact_info::*;
 use crate::dashboard::eth_private_key::*;
 use crate::dashboard::exits::*;
 use crate::dashboard::extender_checkin::*;
@@ -47,6 +43,7 @@ use crate::dashboard::usage::*;
 use actix_async::System;
 use actix_web_async::{web, App, HttpServer};
 use rita_common::dashboard::babel::*;
+use rita_common::dashboard::contact_info::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
 use rita_common::dashboard::interfaces::*;
@@ -61,6 +58,7 @@ use rita_common::dashboard::wg_key::*;
 use rita_common::dashboard::wifi::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::*;
+use std::thread;
 
 use self::devices_on_lan::get_devices_lan_endpoint;
 
