@@ -2914,7 +2914,6 @@ dependencies = [
  "clu",
  "compressed_log",
  "futures 0.3.30",
- "hex-literal",
  "ipnetwork",
  "lazy_static",
  "lettre",
@@ -2930,7 +2929,6 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "settings",
- "sha3",
  "sodiumoxide",
  "web30",
 ]
@@ -2980,6 +2978,7 @@ dependencies = [
  "env_logger",
  "flate2",
  "futures 0.3.30",
+ "hex-literal",
  "ipnetwork",
  "lazy_static",
  "lettre",
@@ -2995,6 +2994,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "settings",
+ "sha3",
  "web30",
 ]
 

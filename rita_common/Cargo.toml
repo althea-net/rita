@@ -43,6 +43,8 @@ althea_proto = {workspace = true}
 crossbeam = "0.8"
 phonenumber = "0.3.5"
 lettre = "0.10"
+sha3 = "0.10"
+hex-literal = "0.4"
 
 [dependencies.regex]
 version = "1.6"

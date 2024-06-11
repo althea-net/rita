@@ -4,7 +4,6 @@
 //!
 //! For more documentation on specific functions see the router-dashboard file in the docs folder
 
-pub mod auth;
 pub mod bandwidth_limit;
 pub mod devices_on_lan;
 pub mod exits;
@@ -20,7 +19,6 @@ pub mod remote_access;
 pub mod router;
 pub mod usage;
 
-use crate::dashboard::auth::*;
 use crate::dashboard::bandwidth_limit::*;
 use crate::dashboard::exits::*;
 use crate::dashboard::extender_checkin::*;
@@ -36,6 +34,7 @@ use crate::dashboard::router::*;
 use crate::dashboard::usage::*;
 use actix_async::System;
 use actix_web_async::{web, App, HttpServer};
+use rita_common::dashboard::auth::*;
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::backup_created::*;
 use rita_common::dashboard::contact_info::*;

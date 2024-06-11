@@ -23,6 +23,7 @@ use rita_common::dashboard::usage::*;
 use rita_common::dashboard::wallet::*;
 use rita_common::dashboard::wg_key::*;
 use rita_common::dashboard::wifi::*;
+use rita_common::dashboard::auth::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::version;
 use std::sync::Arc;
@@ -39,6 +40,7 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
             let _res = HttpServer::new(move || {
                 App::new()
                     .wrap(middleware::HeadersMiddlewareFactory)
+                    .wrap(middleware::AuthMiddlewareFactory)
                     .route("/info", web::get().to(get_own_info))
                     .route("/local_fee", web::get().to(get_local_fee))
                     .route("/local_fee/{fee}", web::post().to(set_local_fee))
@@ -73,7 +75,7 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     )
                     .route("/wifi_settings", web::get().to(get_wifi_config))
                     .app_data(startup_status.clone())
-                    .route("startup_status", web::get().to(get_startup_status))
+                    .route("/startup_status", web::get().to(get_startup_status))
                     .route("/interfaces", web::get().to(get_interfaces_endpoint))
                     .route("/interfaces", web::post().to(set_interfaces_exit_endpoint))
                     .route("/interfaces/mesh", web::get().to(wlan_mesh_get))
@@ -89,6 +91,7 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                         web::post().to(set_backup_created),
                     )
                     .route("/eth_private_key", web::get().to(get_eth_private_key))
+                    .route("/router/password", web::post().to(set_pass))
             })
             .bind(format!(
                 "[::0]:{}",
