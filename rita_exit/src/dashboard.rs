@@ -18,6 +18,7 @@ use rita_common::dashboard::token_bridge::*;
 use rita_common::dashboard::usage::*;
 use rita_common::dashboard::wallet::*;
 use rita_common::dashboard::wg_key::*;
+use rita_common::dashboard::contact_info::*;
 use rita_common::dashboard::wifi::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::version;
@@ -74,6 +75,10 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     .route("/interfaces", web::post().to(set_interfaces_exit_endpoint))
                     .route("/interfaces/mesh", web::get().to(wlan_mesh_get))
                     .route("/interfaces/mesh/{enabled}", web::post().to(wlan_mesh_set))
+                    .route("/phone", web::get().to(get_phone_number))
+                    .route("/phone", web::post().to(set_phone_number))
+                    .route("/email", web::get().to(get_email))
+                    .route("/email", web::post().to(set_email))
             })
             .bind(format!(
                 "[::0]:{}",

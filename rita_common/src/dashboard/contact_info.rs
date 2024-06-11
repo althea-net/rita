@@ -2,8 +2,7 @@
 //! we end up processing and moving contact data in a few other places (exit registration, text notifications) the contact_details member of
 //! the exit settings struct is the one true source. All the others are updated as needed and you should try to phase them out if practical.
 
-use rita_common::utils::option_convert;
-
+use crate::utils::option_convert;
 use actix_web_async::HttpRequest;
 use actix_web_async::HttpResponse;
 use althea_types::ContactType;
@@ -32,10 +31,10 @@ pub async fn set_phone_number(req: String) -> HttpResponse {
         }
     };
 
-    let mut rita_client = settings::get_rita_client();
+    let mut settings = settings::get_rita_common();
 
     // merge the new value into the existing struct, for the various possibilities
-    let res = match option_convert(rita_client.exit_client.contact_info.clone()) {
+    let res = match option_convert(settings.payment.contact_info.clone()) {
         Some(ContactType::Phone {
             number: _,
             sequence_number,
@@ -73,9 +72,9 @@ pub async fn set_phone_number(req: String) -> HttpResponse {
             sequence_number: Some(0),
         }),
     };
-    rita_client.exit_client.contact_info = option_convert(res);
+    settings.payment.contact_info = option_convert(res);
 
-    settings::set_rita_client(rita_client);
+    settings::set_rita_common(settings);
 
     // save immediately
     if let Err(_e) = settings::write_config() {
@@ -86,9 +85,8 @@ pub async fn set_phone_number(req: String) -> HttpResponse {
 }
 
 pub async fn get_phone_number(_req: HttpRequest) -> HttpResponse {
-    let rita_client = settings::get_rita_client();
-    let exit_client = rita_client.exit_client;
-    match &option_convert(exit_client.contact_info) {
+    let settings= settings::get_rita_common();
+    match &option_convert(settings.payment.contact_info) {
         Some(ContactType::Phone {
             number,
             sequence_number: _,
@@ -113,10 +111,10 @@ pub async fn set_email(req: String) -> HttpResponse {
         }
     };
 
-    let mut rita_client = settings::get_rita_client();
+    let mut settings = settings::get_rita_common();
 
     // merge the new value into the existing struct, for the various possibilities
-    let res = match option_convert(rita_client.exit_client.contact_info.clone()) {
+    let res = match option_convert(settings.payment.contact_info.clone()) {
         Some(ContactType::Phone {
             number,
             sequence_number,
@@ -155,8 +153,8 @@ pub async fn set_email(req: String) -> HttpResponse {
         }),
     };
 
-    rita_client.exit_client.contact_info = option_convert(res);
-    settings::set_rita_client(rita_client);
+    settings.payment.contact_info = option_convert(res);
+    settings::set_rita_common(settings);
 
     if let Err(_e) = settings::write_config() {
         return HttpResponse::InternalServerError().finish();
@@ -166,9 +164,8 @@ pub async fn set_email(req: String) -> HttpResponse {
 }
 
 pub async fn get_email(_req: HttpRequest) -> HttpResponse {
-    let rita_client = settings::get_rita_client();
-    let exit_client = rita_client.exit_client;
-    match &option_convert(exit_client.contact_info) {
+    let settings = settings::get_rita_common();
+    match &option_convert(settings.payment.contact_info) {
         Some(ContactType::Email {
             email,
             sequence_number: _,

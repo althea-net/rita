@@ -84,7 +84,7 @@ pub async fn operator_update(
     // So we accept either of these conditions being true.
     let is_gateway = is_gateway() || is_gateway_client();
 
-    let contact_info = option_convert(rita_client.exit_client.contact_info.clone());
+    let contact_info = option_convert(rita_client.payment.contact_info.clone());
     let install_details = operator_settings.installation_details.clone();
     let billing_details = operator_settings.billing_details;
     let user_bandwidth_limit = rita_client.network.user_bandwidth_limit;
@@ -185,11 +185,11 @@ pub async fn operator_update(
     let mut rita_client = rita_client;
 
     let update = check_contacts_update(
-        rita_client.exit_client.contact_info.clone(),
+        rita_client.payment.contact_info.clone(),
         new_settings.contact_info.clone(),
     );
     if update {
-        rita_client.exit_client.contact_info = option_convert(new_settings.contact_info.clone());
+        rita_client.payment.contact_info = option_convert(new_settings.contact_info.clone());
     }
 
     let mut operator = rita_client.operator.clone();

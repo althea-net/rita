@@ -1,3 +1,4 @@
+use althea_types::ContactStorage;
 use althea_types::Denom;
 use althea_types::SystemChain;
 use auto_bridge::default_bridge_addresses;
@@ -169,6 +170,11 @@ pub struct PaymentSettings {
     /// post-eip1599 networks that do not respect min-fee
     #[serde(default = "default_min_gas")]
     pub min_gas: Uint256,
+    /// Contact info for this node
+    /// ContactStorage is a TOML serialized representation of ContactType, use the .into()
+    /// traits to get ContactType for actual operations. This struct represents a full range
+    /// of possibilities for contact info.
+    pub contact_info: Option<ContactStorage>,
 }
 
 /// TODO this is currently a testnet only placeholder it should be replaced
@@ -239,6 +245,7 @@ impl Default for PaymentSettings {
             min_gas: default_min_gas(),
             althea_l1_accepted_denoms: vec![default_althea_l1_payment_denom()],
             althea_l1_payment_denom: default_althea_l1_payment_denom(),
+            contact_info: None,
         }
     }
 }

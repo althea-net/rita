@@ -4,8 +4,7 @@ use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_client, SettingsError};
-use althea_types::{ContactStorage, ExitState, Identity};
-
+use althea_types::{ExitState, Identity};
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -114,10 +113,6 @@ pub struct ExitClientSettings {
     /// This is the port which the exit wireguard tunnel will listen on
     /// NOTE: must be under `wg_start_port` in `NetworkSettings`
     pub wg_listen_port: u16,
-    /// ContactStorage is a TOML serialized representation of ContactType, use the .into()
-    /// traits to get ContactType for actual operations. This struct represents a full range
-    /// of possibilities for contact info.
-    pub contact_info: Option<ContactStorage>,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
     /// Specifies if the user would like to receive low balance messages from the exit
@@ -130,7 +125,6 @@ impl Default for ExitClientSettings {
         ExitClientSettings {
             exits: HashMap::new(),
             wg_listen_port: 59999,
-            contact_info: None,
             lan_nics: HashSet::new(),
             low_balance_notification: true,
         }
