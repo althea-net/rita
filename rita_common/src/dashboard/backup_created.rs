@@ -1,5 +1,5 @@
-use actix_web_async::{http::StatusCode, web::Path, HttpRequest, HttpResponse};
 use crate::RitaCommonError;
+use actix_web_async::{http::StatusCode, web::Path, HttpRequest, HttpResponse};
 use std::collections::HashMap;
 
 pub async fn get_backup_created(_req: HttpRequest) -> HttpResponse {

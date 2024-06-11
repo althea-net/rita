@@ -85,7 +85,7 @@ pub async fn set_phone_number(req: String) -> HttpResponse {
 }
 
 pub async fn get_phone_number(_req: HttpRequest) -> HttpResponse {
-    let settings= settings::get_rita_common();
+    let settings = settings::get_rita_common();
     match &option_convert(settings.payment.contact_info) {
         Some(ContactType::Phone {
             number,
