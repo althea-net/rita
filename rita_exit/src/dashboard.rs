@@ -12,6 +12,7 @@ use rita_common::dashboard::interfaces::*;
 use rita_common::dashboard::nickname::*;
 use rita_common::dashboard::own_info::*;
 use rita_common::dashboard::settings::*;
+use rita_common::dashboard::localization::*;
 use rita_common::dashboard::system_chain::get_system_blockchain;
 use rita_common::dashboard::system_chain::set_system_blockchain_endpoint;
 use rita_common::dashboard::token_bridge::*;
@@ -79,6 +80,7 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     .route("/phone", web::post().to(set_phone_number))
                     .route("/email", web::get().to(get_email))
                     .route("/email", web::post().to(set_email))
+                    .route("/localization", web::get().to(get_localization))
             })
             .bind(format!(
                 "[::0]:{}",
