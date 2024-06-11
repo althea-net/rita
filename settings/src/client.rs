@@ -1,4 +1,3 @@
-use crate::localization::LocalizationSettings;
 use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
@@ -139,7 +138,6 @@ impl RitaClientSettings {
             payment: PaymentSettings::default(),
             log: LoggingSettings::default(),
             operator: OperatorSettings::default(),
-            localization: LocalizationSettings::default(),
             network: NetworkSettings::default(),
             exit_client: ExitClientSettings::default(),
             app_name: APP_NAME.to_string(),
@@ -193,8 +191,6 @@ pub struct RitaClientSettings {
     pub log: LoggingSettings,
     #[serde(default)]
     pub operator: OperatorSettings,
-    #[serde(default)]
-    pub localization: LocalizationSettings,
     pub network: NetworkSettings,
     pub exit_client: ExitClientSettings,
     #[serde(default = "default_app_name")]

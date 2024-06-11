@@ -7,6 +7,8 @@ use clarity::{Address, PrivateKey};
 use num256::Int256;
 use num256::Uint256;
 
+use crate::localization::LocalizationSettings;
+
 fn default_max_fee() -> u32 {
     200_000_000u32 // denominated in wei/byte
 }
@@ -175,6 +177,9 @@ pub struct PaymentSettings {
     /// traits to get ContactType for actual operations. This struct represents a full range
     /// of possibilities for contact info.
     pub contact_info: Option<ContactStorage>,
+    /// Contains information like the support number for the local operator and currency symbol
+    #[serde(default)]
+    pub localization: LocalizationSettings,
 }
 
 /// TODO this is currently a testnet only placeholder it should be replaced
@@ -246,6 +251,7 @@ impl Default for PaymentSettings {
             althea_l1_accepted_denoms: vec![default_althea_l1_payment_denom()],
             althea_l1_payment_denom: default_althea_l1_payment_denom(),
             contact_info: None,
+            localization: LocalizationSettings::default(),
         }
     }
 }
