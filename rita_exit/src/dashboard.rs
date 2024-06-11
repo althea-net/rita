@@ -6,9 +6,11 @@ use actix_web_async::App;
 use actix_web_async::HttpResponse;
 use actix_web_async::HttpServer;
 use rita_common::dashboard::babel::*;
+use rita_common::dashboard::backup_created::*;
 use rita_common::dashboard::contact_info::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
+use rita_common::dashboard::eth_private_key::get_eth_private_key;
 use rita_common::dashboard::interfaces::*;
 use rita_common::dashboard::localization::*;
 use rita_common::dashboard::nickname::*;
@@ -19,7 +21,6 @@ use rita_common::dashboard::system_chain::set_system_blockchain_endpoint;
 use rita_common::dashboard::token_bridge::*;
 use rita_common::dashboard::usage::*;
 use rita_common::dashboard::wallet::*;
-use rita_common::dashboard::backup_created::*;
 use rita_common::dashboard::wg_key::*;
 use rita_common::dashboard::wifi::*;
 use rita_common::middleware;
@@ -87,6 +88,7 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                         "/backup_created/{status}",
                         web::post().to(set_backup_created),
                     )
+                    .route("/eth_private_key", web::get().to(get_eth_private_key))
             })
             .bind(format!(
                 "[::0]:{}",
