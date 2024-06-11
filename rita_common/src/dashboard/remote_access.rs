@@ -4,11 +4,9 @@ use actix_web_async::HttpRequest;
 use actix_web_async::HttpResponse;
 use althea_kernel_interface::file_io::get_lines;
 use althea_kernel_interface::file_io::write_out;
-use rita_common::RitaCommonError;
-use rita_common::KI;
-
-use crate::RitaClientError;
-use rita_common::DROPBEAR_CONFIG;
+use crate::RitaCommonError;
+use crate::KI;
+use crate::DROPBEAR_CONFIG;
 static FIREWALL_CONFIG: &str = "/etc/config/firewall";
 
 pub async fn get_remote_access_status(_req: HttpRequest) -> HttpResponse {
@@ -26,14 +24,14 @@ pub async fn get_remote_access_status(_req: HttpRequest) -> HttpResponse {
 // todo try and combine the above function with this one and maintain
 // the http responses at some point
 #[allow(dead_code)]
-pub fn get_remote_access_internal() -> Result<bool, RitaClientError> {
+pub fn get_remote_access_internal() -> Result<bool, RitaCommonError> {
     if !KI.is_openwrt() {
         return Err(RitaCommonError::ConversionError("Not Openwrt!".to_string()).into());
     }
     check_dropbear_config()
 }
 
-fn check_dropbear_config() -> Result<bool, RitaClientError> {
+fn check_dropbear_config() -> Result<bool, RitaCommonError> {
     let lines = get_lines(DROPBEAR_CONFIG)?;
     // the old style config has one server, the new style config has two
     // the old style has 'option interface' which indicates LAN only listening
@@ -67,7 +65,7 @@ pub async fn set_remote_access_status(path: Path<bool>) -> HttpResponse {
     HttpResponse::Ok().json(())
 }
 
-pub fn set_remote_access_internal(remote_access: bool) -> Result<(), RitaClientError> {
+pub fn set_remote_access_internal(remote_access: bool) -> Result<(), RitaCommonError> {
     let mut lines: Vec<String> = Vec::new();
     // the wonky spacing is actually important, keep it around.
     // dropbear server one is ours for remote access, it never allows password

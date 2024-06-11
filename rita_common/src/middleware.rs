@@ -143,7 +143,7 @@ where
     actix_service::forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let password = settings::get_rita_client().network.rita_dashboard_password;
+        let password = settings::get_rita_common().network.rita_dashboard_password;
         trace!("Password set is {:?}", password);
 
         let req_path = req.path().to_string();

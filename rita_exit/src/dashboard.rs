@@ -5,6 +5,7 @@ use actix_web_async::web;
 use actix_web_async::App;
 use actix_web_async::HttpResponse;
 use actix_web_async::HttpServer;
+use rita_common::dashboard::auth::*;
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::backup_created::*;
 use rita_common::dashboard::contact_info::*;
@@ -23,7 +24,7 @@ use rita_common::dashboard::usage::*;
 use rita_common::dashboard::wallet::*;
 use rita_common::dashboard::wg_key::*;
 use rita_common::dashboard::wifi::*;
-use rita_common::dashboard::auth::*;
+use rita_common::dashboard::remote_access::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::version;
 use std::sync::Arc;
@@ -39,8 +40,8 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
         runner.block_on(async move {
             let _res = HttpServer::new(move || {
                 App::new()
-                    .wrap(middleware::HeadersMiddlewareFactory)
                     .wrap(middleware::AuthMiddlewareFactory)
+                    .wrap(middleware::HeadersMiddlewareFactory)
                     .route("/info", web::get().to(get_own_info))
                     .route("/local_fee", web::get().to(get_local_fee))
                     .route("/local_fee/{fee}", web::post().to(set_local_fee))
@@ -92,6 +93,11 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     )
                     .route("/eth_private_key", web::get().to(get_eth_private_key))
                     .route("/router/password", web::post().to(set_pass))
+                    .route("/remote_access", web::get().to(get_remote_access_status))
+                    .route(
+                        "/remote_access/{status}",
+                        web::post().to(set_remote_access_status),
+                    )
             })
             .bind(format!(
                 "[::0]:{}",

@@ -20,3 +20,4 @@ pub mod wallet;
 pub mod wg_key;
 pub mod wifi;
 pub mod auth;
+pub mod remote_access;
