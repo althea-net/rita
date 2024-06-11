@@ -17,3 +17,4 @@ pub mod wg_key;
 pub mod wifi;
 pub mod contact_info;
 pub mod localization;
+pub mod backup_created;

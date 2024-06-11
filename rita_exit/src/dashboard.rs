@@ -6,20 +6,21 @@ use actix_web_async::App;
 use actix_web_async::HttpResponse;
 use actix_web_async::HttpServer;
 use rita_common::dashboard::babel::*;
+use rita_common::dashboard::contact_info::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
 use rita_common::dashboard::interfaces::*;
+use rita_common::dashboard::localization::*;
 use rita_common::dashboard::nickname::*;
 use rita_common::dashboard::own_info::*;
 use rita_common::dashboard::settings::*;
-use rita_common::dashboard::localization::*;
 use rita_common::dashboard::system_chain::get_system_blockchain;
 use rita_common::dashboard::system_chain::set_system_blockchain_endpoint;
 use rita_common::dashboard::token_bridge::*;
 use rita_common::dashboard::usage::*;
 use rita_common::dashboard::wallet::*;
+use rita_common::dashboard::backup_created::*;
 use rita_common::dashboard::wg_key::*;
-use rita_common::dashboard::contact_info::*;
 use rita_common::dashboard::wifi::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::version;
@@ -81,6 +82,11 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     .route("/email", web::get().to(get_email))
                     .route("/email", web::post().to(set_email))
                     .route("/localization", web::get().to(get_localization))
+                    .route("/backup_created", web::get().to(get_backup_created))
+                    .route(
+                        "/backup_created/{status}",
+                        web::post().to(set_backup_created),
+                    )
             })
             .bind(format!(
                 "[::0]:{}",

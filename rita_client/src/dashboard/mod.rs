@@ -5,7 +5,6 @@
 //! For more documentation on specific functions see the router-dashboard file in the docs folder
 
 pub mod auth;
-pub mod backup_created;
 pub mod bandwidth_limit;
 pub mod devices_on_lan;
 pub mod eth_private_key;
@@ -23,13 +22,11 @@ pub mod router;
 pub mod usage;
 
 use crate::dashboard::auth::*;
-use crate::dashboard::backup_created::*;
 use crate::dashboard::bandwidth_limit::*;
 use crate::dashboard::eth_private_key::*;
 use crate::dashboard::exits::*;
 use crate::dashboard::extender_checkin::*;
 use crate::dashboard::installation_details::*;
-use rita_common::dashboard::localization::*;
 use crate::dashboard::logging::*;
 use crate::dashboard::mesh_ip::*;
 use crate::dashboard::neighbors::*;
@@ -42,10 +39,12 @@ use crate::dashboard::usage::*;
 use actix_async::System;
 use actix_web_async::{web, App, HttpServer};
 use rita_common::dashboard::babel::*;
+use rita_common::dashboard::backup_created::*;
 use rita_common::dashboard::contact_info::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
 use rita_common::dashboard::interfaces::*;
+use rita_common::dashboard::localization::*;
 use rita_common::dashboard::nickname::*;
 use rita_common::dashboard::own_info::*;
 use rita_common::dashboard::settings::*;
