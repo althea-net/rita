@@ -1,7 +1,7 @@
 use actix_web_async::{http::StatusCode, web::Json, HttpResponse};
 use clarity::utils::bytes_to_hex_str;
-use rita_common::{RitaCommonError, KI};
-use settings::set_rita_client;
+use crate::{RitaCommonError, KI};
+use settings::set_rita_common;
 use sha3::{Digest, Sha3_512};
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -19,9 +19,9 @@ pub async fn set_pass(router_pass: Json<RouterPassword>) -> HttpResponse {
     hasher.update(input_string.as_bytes());
     let hashed_pass = bytes_to_hex_str(&hasher.finalize());
 
-    let mut rita_client = settings::get_rita_client();
-    rita_client.network.rita_dashboard_password = Some(hashed_pass);
-    set_rita_client(rita_client);
+    let mut settings = settings::get_rita_common();
+    settings.network.rita_dashboard_password = Some(hashed_pass);
+    set_rita_common(settings);
 
     if let Err(e) = settings::write_config() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
