@@ -7,7 +7,6 @@
 pub mod auth;
 pub mod bandwidth_limit;
 pub mod devices_on_lan;
-pub mod eth_private_key;
 pub mod exits;
 pub mod extender_checkin;
 pub mod installation_details;
@@ -23,7 +22,6 @@ pub mod usage;
 
 use crate::dashboard::auth::*;
 use crate::dashboard::bandwidth_limit::*;
-use crate::dashboard::eth_private_key::*;
 use crate::dashboard::exits::*;
 use crate::dashboard::extender_checkin::*;
 use crate::dashboard::installation_details::*;
@@ -43,6 +41,7 @@ use rita_common::dashboard::backup_created::*;
 use rita_common::dashboard::contact_info::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
+use rita_common::dashboard::eth_private_key::*;
 use rita_common::dashboard::interfaces::*;
 use rita_common::dashboard::localization::*;
 use rita_common::dashboard::nickname::*;
