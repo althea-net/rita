@@ -550,6 +550,7 @@ fn get_ethernet_operation_mode(speed: u64, duplex: String) -> EthOperationMode {
         (25000, _) => EthOperationMode::FullDup25GBase,
         (10000, _) => EthOperationMode::FullDup10GBase,
         (5000, _) => EthOperationMode::FullDup5GBase,
+        (2500, _) => EthOperationMode::FullDup2500MBBase,
         (1000, true) => EthOperationMode::FullDup1000MBBase,
         (1000, false) => EthOperationMode::HalfDup1000MBBase,
         (100, true) => EthOperationMode::FullDup100MBBase,
