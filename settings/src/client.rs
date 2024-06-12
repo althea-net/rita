@@ -12,10 +12,6 @@ pub const APP_NAME: &str = "rita";
 
 pub const DUMMY_ROOT_IP: &str = "1.1.1.1";
 
-pub fn default_app_name() -> String {
-    APP_NAME.to_string()
-}
-
 pub fn default_save_interval() -> u64 {
     172800
 }
@@ -140,7 +136,6 @@ impl RitaClientSettings {
             operator: OperatorSettings::default(),
             network: NetworkSettings::default(),
             exit_client: ExitClientSettings::default(),
-            app_name: APP_NAME.to_string(),
         };
         settings.network.mesh_ip = Some(our_id.mesh_ip);
         settings.network.wg_public_key = Some(our_id.wg_public_key);
@@ -193,8 +188,6 @@ pub struct RitaClientSettings {
     pub operator: OperatorSettings,
     pub network: NetworkSettings,
     pub exit_client: ExitClientSettings,
-    #[serde(default = "default_app_name")]
-    pub app_name: String,
 }
 
 impl RitaClientSettings {
