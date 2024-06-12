@@ -917,6 +917,7 @@ pub enum EthOperationMode {
     FullDup25GBase,
     FullDup10GBase,
     FullDup5GBase,
+    FullDup2500MBBase,
     FullDup1000MBBase,
     HalfDup1000MBBase,
     FullDup100MBBase,
