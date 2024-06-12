@@ -1,6 +1,6 @@
+use crate::{RitaCommonError, KI};
 use actix_web_async::{http::StatusCode, web::Json, HttpResponse};
 use clarity::utils::bytes_to_hex_str;
-use crate::{RitaCommonError, KI};
 use settings::set_rita_common;
 use sha3::{Digest, Sha3_512};
 

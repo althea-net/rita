@@ -1,10 +1,10 @@
+use crate::KI;
 use actix_web_async::http::StatusCode;
 use actix_web_async::{web::Path, HttpRequest, HttpResponse};
 use log::LevelFilter;
-use rita_common::KI;
 
 pub async fn get_remote_logging(_req: HttpRequest) -> HttpResponse {
-    HttpResponse::Ok().json(settings::get_rita_client().log.enabled)
+    HttpResponse::Ok().json(settings::get_rita_common().log.enabled)
 }
 
 pub async fn remote_logging(path: Path<bool>) -> HttpResponse {
@@ -12,22 +12,24 @@ pub async fn remote_logging(path: Path<bool>) -> HttpResponse {
     debug!("/remote_logging/enable/{} hit", enabled);
 
     // try and save the config and fail if we can't
-    let mut rita_client = settings::get_rita_client();
+    let mut settings = settings::get_rita_common();
 
-    rita_client.log.enabled = enabled;
+    settings.log.enabled = enabled;
 
-    let service_path: String = format!("/etc/init.d/{}", rita_client.app_name);
+    let service_path: String = format!("/etc/init.d/{}", settings.get_app_name());
 
-    settings::set_rita_client(rita_client);
+    settings::set_rita_common(settings);
 
     if let Err(e) = settings::write_config() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
             .json(format!("Failed to write config {e:?}"));
     }
 
-    if let Err(e) = KI.run_command(service_path.as_str(), &["restart"]) {
-        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-            .json(format!("Failed to restart service {e:?}"));
+    if KI.is_openwrt() {
+        if let Err(e) = KI.run_command(service_path.as_str(), &["restart"]) {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+                .json(format!("Failed to restart service {e:?}"));
+        }
     }
 
     HttpResponse::Ok().json(())
@@ -51,13 +53,13 @@ pub async fn remote_logging_level(path: Path<String>) -> HttpResponse {
         }
     };
 
-    let mut rita_client = settings::get_rita_client();
+    let mut settings = settings::get_rita_common();
 
-    rita_client.log.level = log_level.to_string();
+    settings.log.level = log_level.to_string();
 
-    let service_path: String = format!("/etc/init.d/{}", rita_client.app_name);
+    let service_path: String = format!("/etc/init.d/{}", settings.get_app_name());
 
-    settings::set_rita_client(rita_client);
+    settings::set_rita_common(settings);
 
     if let Err(e) = settings::write_config() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)

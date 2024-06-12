@@ -38,11 +38,7 @@ use rita_common::{
     payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT},
 };
 use settings::{
-    client::RitaClientSettings,
-    exit::{ExitNetworkSettings, RitaExitSettingsStruct},
-    localization::LocalizationSettings,
-    network::NetworkSettings,
-    payment::PaymentSettings,
+    client::RitaClientSettings, exit::{ExitNetworkSettings, RitaExitSettingsStruct}, localization::LocalizationSettings, logging::LoggingSettings, network::NetworkSettings, payment::PaymentSettings
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -395,6 +391,7 @@ pub fn get_default_settings(
         network: NetworkSettings::default(),
         exit_network: ExitNetworkSettings::test_default(),
         allowed_countries: HashSet::new(),
+        log: LoggingSettings::default(),
     };
     let client = RitaClientSettings::default();
 

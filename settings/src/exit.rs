@@ -1,4 +1,5 @@
 use crate::localization::LocalizationSettings;
+use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_exit, SettingsError};
@@ -8,6 +9,8 @@ use ipnetwork::IpNetwork;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
+
+pub const APP_NAME: &str = "rita_exit";
 
 /// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -96,6 +99,8 @@ pub struct RitaExitSettingsStruct {
     /// if we should log remotely or if we should send our logs to the logging server
     #[serde(default = "default_remote_log")]
     pub remote_log: bool,
+    #[serde(default)]
+    pub log: LoggingSettings,
     /// The description of this exit, what is sent to clients and displayed to the user
     pub description: String,
     pub payment: PaymentSettings,
@@ -128,6 +133,7 @@ impl RitaExitSettingsStruct {
             network: NetworkSettings::default(),
             exit_network: ExitNetworkSettings::test_default(),
             allowed_countries: HashSet::new(),
+            log: LoggingSettings::default(),
         }
     }
 
