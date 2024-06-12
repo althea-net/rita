@@ -6,7 +6,7 @@ pub async fn get_mesh_ip(_req: HttpRequest) -> HttpResponse {
 
     let mut ret = HashMap::new();
 
-    match settings::get_rita_client().network.mesh_ip {
+    match settings::get_rita_common().network.mesh_ip {
         Some(ip) => {
             ret.insert("mesh_ip".to_owned(), format!("{ip}"));
         }

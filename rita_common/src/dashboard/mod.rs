@@ -12,6 +12,7 @@ pub mod eth_private_key;
 pub mod interfaces;
 pub mod localization;
 pub mod logging;
+pub mod mesh_ip;
 pub mod nickname;
 pub mod own_info;
 pub mod remote_access;

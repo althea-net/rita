@@ -14,6 +14,7 @@ use rita_common::dashboard::development::*;
 use rita_common::dashboard::eth_private_key::get_eth_private_key;
 use rita_common::dashboard::interfaces::*;
 use rita_common::dashboard::localization::*;
+use rita_common::dashboard::mesh_ip::*;
 use rita_common::dashboard::nickname::*;
 use rita_common::dashboard::own_info::*;
 use rita_common::dashboard::remote_access::*;
@@ -98,6 +99,7 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                         "/remote_access/{status}",
                         web::post().to(set_remote_access_status),
                     )
+                    .route("/mesh_ip", web::get().to(get_mesh_ip))
             })
             .bind(format!(
                 "[::0]:{}",
