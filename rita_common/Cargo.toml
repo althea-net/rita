@@ -1,6 +1,6 @@
 [package]
 name = "rita_common"
-version = "0.21.14"
+version = "0.21.15"
 edition = "2018"
 license = "Apache-2.0"
 
