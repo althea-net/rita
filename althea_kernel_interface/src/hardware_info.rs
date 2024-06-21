@@ -338,17 +338,22 @@ fn get_ethernet_stats() -> Option<Vec<EthernetStats>> {
 
 fn get_wifi_devices() -> Vec<WifiDevice> {
     match parse_wifi_device_names() {
-        Ok(devices) => devices
-            .into_iter()
-            .map(|dev| WifiDevice {
-                name: dev.clone(),
-                survey_data: get_wifi_survey_info(&dev),
-                station_data: get_wifi_station_info(&dev),
-                ssid: get_radio_ssid(&dev),
-                channel: get_radio_channel(&dev),
-                enabled: get_radio_enabled(&dev),
-            })
-            .collect(),
+        Ok(devices) => {
+            let mut wifi_devices = Vec::new();
+            for dev in devices {
+                let wifi_device = WifiDevice {
+                    name: dev.clone(),
+                    survey_data: get_wifi_survey_info(&dev),
+                    station_data: get_wifi_station_info(&dev),
+                    ssid: get_radio_ssid(&dev),
+                    channel: get_radio_channel(&dev),
+                    enabled: get_radio_enabled(&dev),
+                };
+                wifi_devices.push(wifi_device);
+                info!("wifi {:?}", wifi_devices); // Log output at each iteration
+            }
+            wifi_devices
+        }
         Err(err) => {
             warn!("Unable to get wifi devices: {:?}", err);
             Vec::new()
@@ -408,7 +413,7 @@ fn parse_wifi_device_names() -> Result<Vec<String>, Error> {
 
         // trying to get lines 'wireless.default_radio1.ifname='wlan1''
         for line in lines {
-            if line.contains("wireless.default_radio") && line.contains("ifname") {
+            if line.contains("wireless.default_radio") && line.contains("device") {
                 let name = match line.split('=').collect::<Vec<&str>>().last() {
                     Some(a) => *a,
                     None => {
@@ -517,6 +522,7 @@ pub fn get_radio_enabled(radio: &str) -> Option<bool> {
 
 /// Expected input wlan0, wlan1, etc
 /// map this to radio0, radio1 etc
+/// for newer routers (beta21rc15 onwards) we may get radio0. radio1 directly
 /// query /etc/config/wireless for channel
 /// In the case of an unexpected input, we simply print an error and return None
 pub fn get_radio_channel(radio: &str) -> Option<u16> {
