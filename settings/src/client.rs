@@ -1,11 +1,9 @@
-use crate::localization::LocalizationSettings;
 use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_client, SettingsError};
-use althea_types::{ContactStorage, ExitState, Identity};
-
+use althea_types::{ExitState, Identity};
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -13,10 +11,6 @@ use std::path::{Path, PathBuf};
 pub const APP_NAME: &str = "rita";
 
 pub const DUMMY_ROOT_IP: &str = "1.1.1.1";
-
-pub fn default_app_name() -> String {
-    APP_NAME.to_string()
-}
 
 pub fn default_save_interval() -> u64 {
     172800
@@ -114,10 +108,6 @@ pub struct ExitClientSettings {
     /// This is the port which the exit wireguard tunnel will listen on
     /// NOTE: must be under `wg_start_port` in `NetworkSettings`
     pub wg_listen_port: u16,
-    /// ContactStorage is a TOML serialized representation of ContactType, use the .into()
-    /// traits to get ContactType for actual operations. This struct represents a full range
-    /// of possibilities for contact info.
-    pub contact_info: Option<ContactStorage>,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
     /// Specifies if the user would like to receive low balance messages from the exit
@@ -130,7 +120,6 @@ impl Default for ExitClientSettings {
         ExitClientSettings {
             exits: HashMap::new(),
             wg_listen_port: 59999,
-            contact_info: None,
             lan_nics: HashSet::new(),
             low_balance_notification: true,
         }
@@ -145,10 +134,8 @@ impl RitaClientSettings {
             payment: PaymentSettings::default(),
             log: LoggingSettings::default(),
             operator: OperatorSettings::default(),
-            localization: LocalizationSettings::default(),
             network: NetworkSettings::default(),
             exit_client: ExitClientSettings::default(),
-            app_name: APP_NAME.to_string(),
         };
         settings.network.mesh_ip = Some(our_id.mesh_ip);
         settings.network.wg_public_key = Some(our_id.wg_public_key);
@@ -199,12 +186,8 @@ pub struct RitaClientSettings {
     pub log: LoggingSettings,
     #[serde(default)]
     pub operator: OperatorSettings,
-    #[serde(default)]
-    pub localization: LocalizationSettings,
     pub network: NetworkSettings,
     pub exit_client: ExitClientSettings,
-    #[serde(default = "default_app_name")]
-    pub app_name: String,
 }
 
 impl RitaClientSettings {

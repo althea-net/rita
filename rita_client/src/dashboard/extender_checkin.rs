@@ -1,13 +1,12 @@
+use crate::extender::{
+    get_device_mac, ExtenderAdditionalSettings, ExtenderCheckin, ExtenderUpdate,
+};
 use actix_web_async::{web::Json, HttpResponse};
 use althea_types::{ClientExtender, HardwareInfo};
+use rita_common::dashboard::wifi::get_wifi_config_internal;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
-};
-
-use crate::{
-    extender::{get_device_mac, ExtenderAdditionalSettings, ExtenderCheckin, ExtenderUpdate},
-    get_wifi_config_internal,
 };
 
 lazy_static! {

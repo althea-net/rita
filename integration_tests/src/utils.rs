@@ -41,6 +41,7 @@ use settings::{
     client::RitaClientSettings,
     exit::{ExitNetworkSettings, RitaExitSettingsStruct},
     localization::LocalizationSettings,
+    logging::LoggingSettings,
     network::NetworkSettings,
     payment::PaymentSettings,
 };
@@ -395,6 +396,7 @@ pub fn get_default_settings(
         network: NetworkSettings::default(),
         exit_network: ExitNetworkSettings::test_default(),
         allowed_countries: HashSet::new(),
+        log: LoggingSettings::default(),
     };
     let client = RitaClientSettings::default();
 
@@ -417,7 +419,7 @@ pub fn get_default_settings(
 
     let mut exit = exit.clone();
     let mut client = client.clone();
-    client.exit_client.contact_info = Some(
+    client.payment.contact_info = Some(
         ContactType::Both {
             number: get_test_runner_magic_phone(),
             email: "fake@fake.com".parse().unwrap(),

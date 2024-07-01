@@ -19,6 +19,7 @@ extern crate arrayvec;
 
 use althea_kernel_interface::KI;
 use althea_types::Identity;
+use logging::LoggingSettings;
 use network::NetworkSettings;
 use payment::PaymentSettings;
 use serde::Serialize;
@@ -126,9 +127,11 @@ pub fn set_adaptor<T: 'static + WrappedSettingsAdaptor + Send + Sync>(adaptor: T
 pub struct RitaSettings {
     pub payment: PaymentSettings,
     pub network: NetworkSettings,
+    pub log: LoggingSettings,
     /// This member kept private to prevent modification since it's not
     /// saved in set_rita_common()
     identity: Option<Identity>,
+    app_name: String,
 }
 
 impl RitaSettings {
@@ -138,6 +141,11 @@ impl RitaSettings {
     /// Returns true if the settings are valid
     pub fn validate(&self) -> bool {
         self.payment.validate()
+    }
+
+    /// returns the app name
+    pub fn get_app_name(&self) -> String {
+        self.app_name.clone()
     }
 }
 
@@ -243,18 +251,24 @@ pub fn get_rita_common() -> RitaSettings {
             RitaSettings {
                 network: settings.network.clone(),
                 payment: settings.payment.clone(),
+                log: settings.log.clone(),
                 identity: settings.get_identity(),
+                app_name: crate::client::APP_NAME.to_string(),
             }
         }
         Some(Settings::Client(settings)) => RitaSettings {
             network: settings.network.clone(),
             payment: settings.payment.clone(),
+            log: settings.log.clone(),
             identity: settings.get_identity(),
+            app_name: crate::client::APP_NAME.to_string(),
         },
         Some(Settings::Exit(settings)) => RitaSettings {
             network: settings.network.clone(),
             payment: settings.payment.clone(),
+            log: settings.log.clone(),
             identity: settings.get_identity(),
+            app_name: crate::exit::APP_NAME.to_string(),
         },
         None => panic!("expected settings but got none"),
     }
