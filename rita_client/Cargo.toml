@@ -1,6 +1,6 @@
 [package]
 name = "rita_client"
-version = "0.20.33"
+version = "0.20.34"
 edition = "2018"
 license = "Apache-2.0"
 
