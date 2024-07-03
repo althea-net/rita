@@ -599,7 +599,7 @@ pub struct TunnelChange {
 /// ensure that this is only done when required. We further optimize by checking the qdisc before
 /// performing the update here
 fn tunnel_bw_limit_update(tunnels: &[Tunnel]) -> Result<(), RitaCommonError> {
-    info!("Running tunnel bw limit update!");
+    trace!("Running tunnel bw limit update!");
 
     let payment = settings::get_rita_common().payment;
     let bw_per_iface = payment.free_tier_throughput;
