@@ -252,9 +252,11 @@ fn build_interface_config_string(config: BabeldInterfaceConfig) -> String {
     } else {
         command.push_str("split-horizon no ");
     }
-    command.push_str(&format!("max-rtt-penalty {} ", config.max_rtt_penalty));
-    command.push_str(&format!("rtt-min {} ", config.rtt_min));
-    command.push_str(&format!("rtt-max {} ", config.rtt_max));
+    if config.max_rtt_penalty != 0 && config.link_quality {
+        command.push_str(&format!("max-rtt-penalty {} ", config.max_rtt_penalty));
+        command.push_str(&format!("rtt-min {} ", config.rtt_min));
+        command.push_str(&format!("rtt-max {} ", config.rtt_max));
+    }
     command.push_str(&format!("hello-interval {} ", config.hello_interval));
     command.push_str(&format!("update-interval {} ", config.update_interval));
     command.push_str("enable-timestamps true");
