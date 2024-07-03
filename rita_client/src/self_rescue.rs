@@ -46,7 +46,7 @@ pub fn start_rita_client_rescue_loop() {
             // and into rita_client or rita_common loops using a shared Instant that exists only in the context of those two threads rather than
             // a global lazy static Instant. This would keep us from having to make guesses around the system time
             let wg_interfaces = KI.get_list_of_wireguard_interfaces();
-            info!("interfaces {:?}", wg_interfaces);
+            trace!("interfaces {:?}", wg_interfaces);
             if let Ok(interfaces) = wg_interfaces {
                 let mut rng = rand::thread_rng();
                 let sample = interfaces.choose_multiple(&mut rng, 3);
