@@ -213,7 +213,6 @@ pub async fn operator_update(
     operator.installation_details = None;
     rita_client.operator = operator;
 
-    let network = rita_client.network.clone();
     trace!("Updating from operator settings");
     update_payment_and_network_settings(
         &mut rita_client.payment,
@@ -237,7 +236,7 @@ pub async fn operator_update(
         (_, Some(new)) => Some(new),
     };
     set_router_update_instruction(update_instructions);
-    perform_operator_update(new_settings.clone(), rita_client, network);
+    perform_operator_action(new_settings.clone(), rita_client);
     Ok(new_settings.ops_last_seen_usage_hour)
 }
 
@@ -270,10 +269,9 @@ fn hardware_info_logs(info: &Option<HardwareInfo>) {
 }
 
 /// checks the operatoraction and performs it, if any.
-fn perform_operator_update(
+fn perform_operator_action(
     new_settings: OperatorUpdateMessage,
     mut rita_client: RitaClientSettings,
-    mut network: NetworkSettings,
 ) {
     match new_settings.operator_action {
         Some(OperatorAction::ResetShaper) => flag_reset_shaper(),
@@ -287,7 +285,7 @@ fn perform_operator_update(
             }
         }
         Some(OperatorAction::ResetRouterPassword) => {
-            network.rita_dashboard_password = None;
+            rita_client.network.rita_dashboard_password = None;
         }
         Some(OperatorAction::ResetWiFiPassword) => {
             let _res = reset_wifi_pass();
@@ -339,14 +337,23 @@ fn perform_operator_update(
         None => {}
     }
     if let Some(shaper_settings) = new_settings.shaper_settings {
-        network.shaper_settings = shaper_settings;
+        rita_client.network.shaper_settings = shaper_settings;
     }
     if let Some(babeld_settings) = new_settings.babeld_settings {
-        network.babeld_settings = babeld_settings;
+        // copy off the price and metric factor, which are stored in this object logically in local
+        // settings but we do not wish to update from the ops side, we have specific fields (and user opt outs)
+        // for these values elsewhere in the operator update flow
+        let price = rita_client.network.babeld_settings.local_fee;
+        let metric_factor = rita_client.network.babeld_settings.metric_factor;
+
+        rita_client.network.babeld_settings = babeld_settings;
+
+        // set the price and metric factor back to their original values
+        rita_client.network.babeld_settings.local_fee = price;
+        rita_client.network.babeld_settings.metric_factor = metric_factor;
     }
-    rita_client.network = network;
     settings::set_rita_client(rita_client);
-    trace!("Successfully completed OperatorUpdate");
+    info!("Successfully completed OperatorUpdate");
 }
 
 // cycles in/out ssh pubkeys for recovery access
@@ -485,7 +492,7 @@ fn update_payment_and_network_settings(
             network.babeld_settings.local_fee = new_settings.relay;
         }
     } else {
-        info!("User has disabled the OperatorUpdate!");
+        trace!("User has selected to use their local price");
     }
     payment.max_fee = new_settings.max;
     payment.balance_warning_level = new_settings.warning.into();
@@ -557,6 +564,7 @@ fn check_billing_update(current: Option<BillingDetails>, incoming: Option<Billin
 /// Merges an arbitrary settings string, after first filtering for several
 /// forbidden values
 fn merge_settings_safely(client_settings: &mut RitaClientSettings, new_settings: Value) {
+    trace!("we have settings from our config {:?}", client_settings);
     trace!("Got new settings from server {:?}", new_settings);
     // merge in arbitrary setting change string if it's not blank
     if new_settings != "" {
@@ -564,7 +572,7 @@ fn merge_settings_safely(client_settings: &mut RitaClientSettings, new_settings:
             let contains_forbidden_key = contains_forbidden_key(map, &FORBIDDEN_MERGE_VALUES);
             if !contains_forbidden_key {
                 match client_settings.merge(new_settings.clone()) {
-                    Ok(_) => trace!("Merged new settings successfully {:?}", new_settings),
+                    Ok(_) => trace!("Merged new settings successfully {:?}", client_settings),
                     Err(e) => error!(
                         "Failed to merge OperatorUpdate settings {:?} {:?}",
                         new_settings, e
