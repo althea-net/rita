@@ -72,11 +72,33 @@ pub fn cleanup() -> Result<(), NewCluError> {
     Ok(())
 }
 
-/// Given a list of interfaces, deletes all them in parallel
+/// Given a list of interfaces, deletes all them in parallel, does not return
+/// until all interfaces are deleted
 pub fn del_multiple_interfaces(interfaces: Vec<String>) {
+    const BATCH_SIZE: usize = 50;
+    let mut batch = 0;
+    let mut batched_interfaces: Vec<String> = Vec::new();
     for name in interfaces {
-        // run each command in its own thread to prevent
-        thread::spawn(move || KI.del_interface(&name.clone()));
+        // have to add outside the inner loop to avoid missing one
+        batched_interfaces.push(name.clone());
+
+        // build up a batch then execute in batch size increment
+        if batch < BATCH_SIZE {
+            batch += 1;
+        } else {
+            let mut threads = Vec::new();
+            // for lifetime reasons
+            let ifaces = batched_interfaces.clone();
+            for name in ifaces {
+                threads.push(thread::spawn(move || KI.del_interface(&name.clone())));
+            }
+            for thread in threads {
+                // we want to wait for these to complete, we don't care that much if they fail
+                let _ = thread.join();
+            }
+            batch = 0;
+            batched_interfaces.clear();
+        }
     }
 }
 
