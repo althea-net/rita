@@ -327,8 +327,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "776fb0fcafc88fda8474fd5d2aaf5af94438ceb7e04322a3a3be7e36c7b05a00"
 dependencies = [
  "cosmos-sdk-proto-althea",
- "prost",
- "prost-types",
+ "prost 0.12.4",
+ "prost-types 0.12.4",
  "tonic",
 ]
 
@@ -927,8 +927,8 @@ version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02749095f4edf5ecb676a2a77a8ed0b2198a14ef0a5f819fd6ec15841a40c27f"
 dependencies = [
- "prost",
- "prost-types",
+ "prost 0.12.4",
+ "prost-types 0.12.4",
  "tonic",
 ]
 
@@ -1043,8 +1043,8 @@ dependencies = [
  "num-traits",
  "num256",
  "pbkdf2",
- "prost",
- "prost-types",
+ "prost 0.12.4",
+ "prost-types 0.12.4",
  "rand",
  "ripemd",
  "rust_decimal",
@@ -2604,7 +2604,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0f5d036824e4761737860779c906171497f6d55681139d8312388f8fe398922"
 dependencies = [
  "bytes",
- "prost-derive",
+ "prost-derive 0.12.5",
+]
+
+[[package]]
+name = "prost"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac47baaef3631368888abc13a62cb6d42b88bfd5c3fc6f920a9cbe4d7d3ddc9d"
+dependencies = [
+ "bytes",
+ "prost-derive 0.13.0",
 ]
 
 [[package]]
@@ -2621,12 +2631,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost-derive"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5834058badd2cf6cfcd9c92998ceb2bab614f012cccf3728de3edf2c57b9132"
+dependencies = [
+ "anyhow",
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.63",
+]
+
+[[package]]
 name = "prost-types"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3235c33eb02c1f1e212abdbe34c78b264b038fb58ca612664343271e36e55ffe"
 dependencies = [
- "prost",
+ "prost 0.12.4",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36c1964ef64b94480df8c92ae14e5764d470014ad951d2f99e5a6c0c7712710c"
+dependencies = [
+ "prost 0.13.0",
 ]
 
 [[package]]
@@ -2985,7 +3017,7 @@ dependencies = [
  "log",
  "num-traits",
  "num256",
- "prost-types",
+ "prost-types 0.13.0",
  "rand",
  "regex",
  "serde",
@@ -3852,7 +3884,7 @@ dependencies = [
  "hyper-timeout",
  "percent-encoding",
  "pin-project",
- "prost",
+ "prost 0.12.4",
  "rustls",
  "rustls-native-certs",
  "rustls-pemfile 1.0.4",
