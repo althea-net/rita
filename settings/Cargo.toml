@@ -18,7 +18,7 @@ log = "0.4"
 lazy_static = "1.4"
 clarity = {workspace = true}
 arrayvec = {version= "0.7", features = ["serde"]}
-phonenumber = "0.3.5"
+phonenumber = "0.3.6"
 ipnetwork = "0.20"
 
 [features]
