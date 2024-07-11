@@ -80,36 +80,50 @@ pub fn cleanup() -> Result<(), NewCluError> {
     interfaces.push("wg_exit".to_string());
     interfaces.push("wg_exit_v2".to_string());
 
-    del_multiple_interfaces(interfaces);
+    del_multiple_interfaces(interfaces.clone());
+    del_multiple_interfaces_sync(interfaces)?;
+    Ok(())
+}
+
+/// Deletes a list of wg interfcaes in parallel syncronously, this is used to clean up
+/// any stragglers after parallel delete, this is a workaround for a bug where some interfaces
+/// are not deleted correctly with parallel deletion on some systems
+pub fn del_multiple_interfaces_sync(interfaces: Vec<String>) -> Result<(), NewCluError> {
+    for interface in interfaces {
+        KI.del_interface(&interface)?;
+    }
     Ok(())
 }
 
 /// Given a list of interfaces, deletes all them in parallel, does not return
-/// until all interfaces are deleted
+/// until all interfaces are deleted, this has an odd error where some interfaces
+/// are not deleted correctly on some systems, so it must be followed up with a
+/// synchronous delete. The reason we don't just use the sync delete is that on some
+/// systems we have several hundred interfaces to delete and this can take a long time
+/// especially when the system becomes bogged down under load and deleting an indvidual interface
+/// can take several sceonds in that case we're talking about minutes or tens of minutes to restart
+/// without parallelism in this step
 pub fn del_multiple_interfaces(interfaces: Vec<String>) {
     const BATCH_SIZE: usize = 50;
-    let mut batch = 0;
-    let mut batched_interfaces: Vec<String> = Vec::new();
-    for name in interfaces {
-        // have to add outside the inner loop to avoid missing one
-        batched_interfaces.push(name.clone());
-
-        // build up a batch then execute in batch size increment
-        if batch < BATCH_SIZE {
-            batch += 1;
-        } else {
-            let mut threads = Vec::new();
-            // for lifetime reasons
-            let ifaces = batched_interfaces.clone();
-            for name in ifaces {
-                threads.push(thread::spawn(move || KI.del_interface(&name.clone())));
-            }
-            for thread in threads {
-                // we want to wait for these to complete, we don't care that much if they fail
-                let _ = thread.join();
-            }
-            batch = 0;
-            batched_interfaces.clear();
+    let mut batched_interfaces: Vec<Vec<String>> = Vec::new();
+    let mut iter = interfaces.iter();
+    let mut current_batch = Vec::new();
+    while let Some(name) = iter.next() {
+        current_batch.push(name.clone());
+        if current_batch.len() >= BATCH_SIZE {
+            batched_interfaces.push(current_batch);
+            current_batch = Vec::new();
+        }
+    }
+    for batch in batched_interfaces {
+        let mut threads = Vec::new();
+        // for lifetime reasons
+        for name in batch {
+            threads.push(thread::spawn(move || KI.del_interface(&name.clone())));
+        }
+        for thread in threads {
+            // we want to wait for these to complete, we don't care that much if they fail
+            let _  = thread.join();
         }
     }
 }
