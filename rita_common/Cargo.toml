@@ -31,7 +31,7 @@ serde_cbor = "0.11"
 lazy_static = "1.4"
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.8.0"}
-actix-web-async = { package="actix-web", version = "4.3", default_features = false, features= ["openssl"]}
+actix-web-async = { package="actix-web", version = "4.3", default-features = false, features= ["openssl"]}
 awc = {workspace = true}
 actix-service = "2.0.2"
 web30 = {workspace = true}

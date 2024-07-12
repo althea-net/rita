@@ -26,7 +26,7 @@ pub async fn get_remote_access_status(_req: HttpRequest) -> HttpResponse {
 #[allow(dead_code)]
 pub fn get_remote_access_internal() -> Result<bool, RitaCommonError> {
     if !KI.is_openwrt() {
-        return Err(RitaCommonError::ConversionError("Not Openwrt!".to_string()).into());
+        return Err(RitaCommonError::ConversionError("Not Openwrt!".to_string()));
     }
     check_dropbear_config()
 }

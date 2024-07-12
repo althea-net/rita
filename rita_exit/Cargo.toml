@@ -28,7 +28,7 @@ lettre = { version = "0.10", features = ["file-transport"] }
 phonenumber = "0.3.5"
 log = { version = "0.4", features = ["release_max_level_info"] }
 reqwest = { version = "0.12", features = ["blocking", "json"] }
-actix-web-async = { package = "actix-web", version = "4.3", default_features = false, features = [
+actix-web-async = { package = "actix-web", version = "4.3", default-features = false, features = [
     "openssl",
 ] }
 deep_space = { workspace = true }

@@ -29,7 +29,6 @@ use std::sync::RwLock;
 use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
-use std::usize;
 use structs::*;
 
 pub mod structs;

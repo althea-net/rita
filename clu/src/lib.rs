@@ -106,9 +106,9 @@ pub fn del_multiple_interfaces_sync(interfaces: Vec<String>) -> Result<(), NewCl
 pub fn del_multiple_interfaces(interfaces: Vec<String>) {
     const BATCH_SIZE: usize = 50;
     let mut batched_interfaces: Vec<Vec<String>> = Vec::new();
-    let mut iter = interfaces.iter();
+    let iter = interfaces.iter();
     let mut current_batch = Vec::new();
-    while let Some(name) = iter.next() {
+    for name in iter {
         current_batch.push(name.clone());
         if current_batch.len() >= BATCH_SIZE {
             batched_interfaces.push(current_batch);

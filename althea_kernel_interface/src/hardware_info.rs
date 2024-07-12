@@ -19,7 +19,6 @@ use std::process::Command;
 use std::process::Stdio;
 use std::str::from_utf8;
 use std::time::Duration;
-use std::u64;
 
 /// Gets the load average and memory of the system from /proc should be plenty
 /// efficient and safe to run. Requires the device name to be passed in because

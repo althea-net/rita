@@ -30,7 +30,7 @@ web30 = {workspace = true}
 awc = {workspace = true}
 ipnetwork = "0.20"
 actix-async = {package="actix", version = "0.13"}
-actix-web-async = { package="actix-web", version = "4.3", default_features = false, features= ["openssl"]}
+actix-web-async = { package="actix-web", version = "4.3", default-features = false, features= ["openssl"]}
 actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.8.0"}
 clarity = {workspace = true}
 openssh-keys = "0.6"
