@@ -29,7 +29,6 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
     trace!("Setting install details with {:?}", input);
 
     let mut rita_client = settings::get_rita_client();
-    let mut exit_client = rita_client.exit_client;
     let contact_details = match (input.phone, input.email) {
         (None, None) => {
             return HttpResponse::BadRequest().json("Must input at least one contact method!")
@@ -94,8 +93,7 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
     // update the contact info, we display this as part of the forum but it's
     // stored separately since it's used elsewhere and sent to the operator tools
     // on it's own.
-    exit_client.contact_info = Some(contact_details.into());
-    rita_client.exit_client = exit_client;
+    rita_client.payment.contact_info = Some(contact_details.into());
     settings::set_rita_client(rita_client);
 
     let new_installation_details = InstallationDetails {

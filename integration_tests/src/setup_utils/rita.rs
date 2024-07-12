@@ -17,9 +17,9 @@ use rita_common::rita_loop::{
     write_to_disk::{save_to_disk_loop, SettingsOnDisk},
 };
 use rita_exit::{
+    dashboard::start_rita_exit_dashboard,
     operator_update::update_loop::start_operator_update_loop,
     rita_loop::{start_rita_exit_endpoints, start_rita_exit_loop},
-    start_rita_exit_dashboard,
 };
 use settings::set_flag_config;
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
@@ -234,8 +234,8 @@ pub fn spawn_rita_exit(
         resettings.exit_network.registered_users_contract_addr = db_addr;
         resettings.network.wg_private_key = Some(instance.wg_priv_key);
         resettings.network.wg_public_key = Some(instance.exit_id.wg_public_key);
-        resettings.exit_network.wg_private_key = instance.wg_priv_key;
-        resettings.exit_network.wg_public_key = instance.exit_id.wg_public_key;
+        resettings.exit_network.wg_private_key = Some(instance.wg_priv_key);
+        resettings.exit_network.wg_public_key = Some(instance.exit_id.wg_public_key);
         resettings.network.wg_private_key_path = wg_keypath;
         resettings.exit_network.wg_private_key_path = wg_keypath_exit;
         resettings.network.peer_interfaces = veth_interfaces;

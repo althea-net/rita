@@ -4,66 +4,54 @@
 //!
 //! For more documentation on specific functions see the router-dashboard file in the docs folder
 
-pub mod auth;
-pub mod backup_created;
 pub mod bandwidth_limit;
-pub mod contact_info;
 pub mod devices_on_lan;
-pub mod eth_private_key;
 pub mod exits;
 pub mod extender_checkin;
 pub mod installation_details;
-pub mod interfaces;
-pub mod localization;
-pub mod logging;
-pub mod mesh_ip;
 pub mod neighbors;
 pub mod notifications;
 pub mod operator;
 pub mod prices;
-pub mod remote_access;
 pub mod router;
-pub mod system_chain;
 pub mod usage;
-pub mod wifi;
 
-use std::thread;
-
-use crate::dashboard::auth::*;
-use crate::dashboard::backup_created::*;
 use crate::dashboard::bandwidth_limit::*;
-use crate::dashboard::contact_info::*;
-use crate::dashboard::eth_private_key::*;
 use crate::dashboard::exits::*;
 use crate::dashboard::extender_checkin::*;
 use crate::dashboard::installation_details::*;
-use crate::dashboard::interfaces::*;
-use crate::dashboard::localization::*;
-use crate::dashboard::logging::*;
-use crate::dashboard::mesh_ip::*;
 use crate::dashboard::neighbors::*;
 use crate::dashboard::notifications::*;
 use crate::dashboard::operator::*;
 use crate::dashboard::prices::*;
-use crate::dashboard::remote_access::*;
 use crate::dashboard::router::*;
-use crate::dashboard::system_chain::*;
 use crate::dashboard::usage::*;
-use crate::dashboard::wifi::*;
 use actix_async::System;
 use actix_web_async::{web, App, HttpServer};
+use rita_common::dashboard::auth::*;
 use rita_common::dashboard::babel::*;
+use rita_common::dashboard::backup_created::*;
+use rita_common::dashboard::contact_info::*;
 use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
+use rita_common::dashboard::eth_private_key::*;
+use rita_common::dashboard::interfaces::*;
+use rita_common::dashboard::localization::*;
+use rita_common::dashboard::logging::*;
+use rita_common::dashboard::mesh_ip::*;
 use rita_common::dashboard::nickname::*;
 use rita_common::dashboard::own_info::*;
+use rita_common::dashboard::remote_access::*;
 use rita_common::dashboard::settings::*;
+use rita_common::dashboard::system_chain::*;
 use rita_common::dashboard::token_bridge::*;
 use rita_common::dashboard::usage::*;
 use rita_common::dashboard::wallet::*;
 use rita_common::dashboard::wg_key::*;
+use rita_common::dashboard::wifi::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::*;
+use std::thread;
 
 use self::devices_on_lan::get_devices_lan_endpoint;
 
@@ -111,15 +99,7 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                     .route("/interfaces", web::get().to(get_interfaces_endpoint))
                     .route("/interfaces", web::post().to(set_interfaces_endpoint))
                     .route("/interfaces/mesh", web::get().to(wlan_mesh_get))
-                    .route(
-                        "/interfaces/lightclient",
-                        web::get().to(wlan_lightclient_get),
-                    )
                     .route("/interfaces/mesh/{enabled}", web::post().to(wlan_mesh_set))
-                    .route(
-                        "/interfaces/lightclient/{enabled}",
-                        web::post().to(wlan_lightclient_set),
-                    )
                     .route("/eth_private_key", web::get().to(get_eth_private_key))
                     .route("/mesh_ip", web::get().to(get_mesh_ip))
                     .route("/neighbors", web::get().to(get_neighbor_info))

@@ -4,7 +4,6 @@ use crate::KernelInterfaceError as Error;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::prelude::*;
-use std::u16;
 
 /// Returns a kernel interface runtime error with the given message.
 fn runtime_error<T>(msg: &str) -> Result<T, Error> {

@@ -416,15 +416,15 @@ async fn send_exit_status_request(
 /// Registration is simply one of the exits requesting an update to a global smart contract
 /// with our information.
 pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientError> {
-    let exit_client = settings::get_rita_client().exit_client;
+    let client_settings = settings::get_rita_client();
 
-    for (_, exit) in exit_client.exits {
+    for (_, exit) in client_settings.exit_client.exits {
         match &exit.info {
             ExitState::New { .. } | ExitState::Pending { .. } => {
                 let exit_pubkey = exit.exit_id.wg_public_key;
 
                 let mut reg_details: ExitRegistrationDetails =
-                    match settings::get_rita_client().exit_client.contact_info {
+                    match client_settings.payment.contact_info {
                         Some(val) => val.into(),
                         None => {
                             return Err(RitaClientError::MiscStringError(
@@ -445,7 +445,7 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
                             ));
                         }
                     },
-                    wg_port: exit_client.wg_listen_port,
+                    wg_port: client_settings.exit_client.wg_listen_port,
                     reg_details,
                 };
 
@@ -501,7 +501,7 @@ async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
             return Err(RitaClientError::NoExitError(exit.to_string()));
         }
     };
-    let reg_details = match settings::get_rita_client().exit_client.contact_info {
+    let reg_details = match settings::get_rita_client().payment.contact_info {
         Some(val) => val.into(),
         None => {
             return Err(RitaClientError::MiscStringError(
@@ -555,7 +555,7 @@ async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> {
     };
 
     let exit_pubkey = current_exit.exit_id.wg_public_key;
-    let reg_details = match settings::get_rita_client().exit_client.contact_info {
+    let reg_details = match settings::get_rita_client().payment.contact_info {
         Some(val) => val.into(),
         None => {
             return Err(RitaClientError::MiscStringError(

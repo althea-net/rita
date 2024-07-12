@@ -1,8 +1,8 @@
+use crate::blockchain_oracle::set_oracle_balance;
 use actix_web_async::http::StatusCode;
 use actix_web_async::web::Path;
 use actix_web_async::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
-use rita_common::blockchain_oracle::set_oracle_balance;
 use settings::payment::PaymentSettings;
 
 /// Changes the full node configuration value between test/prod and other networks
@@ -15,11 +15,11 @@ pub async fn set_system_blockchain_endpoint(path: Path<String>) -> HttpResponse 
     }
     let id = id.unwrap();
 
-    let mut rita_client = settings::get_rita_client();
-    let mut payment = rita_client.payment;
+    let mut rita_settings = settings::get_rita_common();
+    let mut payment = rita_settings.payment;
     set_system_blockchain(id, &mut payment);
-    rita_client.payment = payment;
-    settings::set_rita_client(rita_client);
+    rita_settings.payment = payment;
+    settings::set_rita_common(rita_settings);
 
     if let Err(e) = settings::write_config() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
@@ -32,7 +32,7 @@ pub async fn set_system_blockchain_endpoint(path: Path<String>) -> HttpResponse 
 pub async fn get_system_blockchain(_req: HttpRequest) -> HttpResponse {
     debug!("/blockchain/ GET hit");
 
-    HttpResponse::Ok().json(settings::get_rita_client().payment.system_chain)
+    HttpResponse::Ok().json(settings::get_rita_common().payment.system_chain)
 }
 
 pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {

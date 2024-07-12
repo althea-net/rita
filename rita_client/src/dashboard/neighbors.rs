@@ -98,7 +98,7 @@ fn generate_neighbors_list(
         if maybe_route.is_err() {
             output.push(nonviable_node_info(
                 nickname,
-                u16::max_value(),
+                u16::MAX,
                 identity.mesh_ip.to_string(),
                 *identity,
                 neigh.speed_limit,
@@ -190,7 +190,7 @@ fn nonviable_node_info(
         debt: 0.into(),
         link_cost: 0,
         price_to_exit: 0,
-        route_metric_to_exit: u16::max_value(),
+        route_metric_to_exit: u16::MAX,
         route_metric: neigh_metric,
         speed_limit,
         stats: IfaceStats::default(),

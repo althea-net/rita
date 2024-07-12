@@ -1,3 +1,4 @@
+use althea_types::ContactStorage;
 use althea_types::Denom;
 use althea_types::SystemChain;
 use auto_bridge::default_bridge_addresses;
@@ -5,6 +6,8 @@ use auto_bridge::TokenBridgeAddresses;
 use clarity::{Address, PrivateKey};
 use num256::Int256;
 use num256::Uint256;
+
+use crate::localization::LocalizationSettings;
 
 fn default_max_fee() -> u32 {
     200_000_000u32 // denominated in wei/byte
@@ -115,7 +118,7 @@ pub struct PaymentSettings {
     /// Payment denoms that payment validator accepts on Althea L1. Ex usdc -> Denom {ibc/hash, 1_000_000}
     /// the nubmer is the multiplier to convert one unit of this denom to $1 since these are all
     /// assumed to be stable coins
-    #[serde(default)]
+    #[serde(default = "default_althea_l1_accepted_denoms")]
     pub althea_l1_accepted_denoms: Vec<Denom>,
     /// By default when this node makes a payment it will use this denom
     #[serde(default = "default_althea_l1_payment_denom")]
@@ -169,6 +172,14 @@ pub struct PaymentSettings {
     /// post-eip1599 networks that do not respect min-fee
     #[serde(default = "default_min_gas")]
     pub min_gas: Uint256,
+    /// Contact info for this node
+    /// ContactStorage is a TOML serialized representation of ContactType, use the .into()
+    /// traits to get ContactType for actual operations. This struct represents a full range
+    /// of possibilities for contact info.
+    pub contact_info: Option<ContactStorage>,
+    /// Contains information like the support number for the local operator and currency symbol
+    #[serde(default)]
+    pub localization: LocalizationSettings,
 }
 
 /// TODO this is currently a testnet only placeholder it should be replaced
@@ -178,6 +189,10 @@ fn default_althea_l1_payment_denom() -> Denom {
         denom: "uUSDC".to_string(),
         decimal: 1_000_000u64,
     }
+}
+
+fn default_althea_l1_accepted_denoms() -> Vec<Denom> {
+    vec![default_althea_l1_payment_denom()]
 }
 
 impl PaymentSettings {
@@ -235,6 +250,8 @@ impl Default for PaymentSettings {
             min_gas: default_min_gas(),
             althea_l1_accepted_denoms: vec![default_althea_l1_payment_denom()],
             althea_l1_payment_denom: default_althea_l1_payment_denom(),
+            contact_info: None,
+            localization: LocalizationSettings::default(),
         }
     }
 }
