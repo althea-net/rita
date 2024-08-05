@@ -48,7 +48,7 @@
     "prettier-plugin-solidity": "^1.0.0-beta.1",
     "shelljs": "^0.8.4",
     "solc": "0.8.7-fixed",
-    "solhint": "^3.2.1",
+    "solhint": "^5.0.3",
     "solhint-plugin-prettier": "^0.0.5",
     "solidity-coverage": "^0.7.12",
     "ts-generator": "^0.1.1",
