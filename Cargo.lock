@@ -217,6 +217,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "actix-web-actors"
+version = "4.3.1+deprecated"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f98c5300b38fd004fe7d2a964f9a90813fdbe8a81fed500587e78b1b71c6f980"
+dependencies = [
+ "actix",
+ "actix-codec",
+ "actix-http",
+ "actix-web",
+ "bytes",
+ "bytestring",
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "actix-web-httpauth"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2752,6 +2770,7 @@ version = "0.21.17"
 dependencies = [
  "actix",
  "actix-web",
+ "actix-web-actors",
  "actix-web-httpauth",
  "althea_kernel_interface",
  "althea_types",
@@ -2781,6 +2800,7 @@ dependencies = [
  "settings",
  "sha3",
  "sodiumoxide",
+ "tokio",
  "web30",
 ]
 

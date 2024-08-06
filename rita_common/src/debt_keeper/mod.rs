@@ -489,13 +489,13 @@ impl DebtKeeper {
 
     fn save(&mut self) -> Result<(), IOError> {
         let mut new_settings = settings::get_rita_common();
-        let mut file_path: String = new_settings.payment.debts_file;
+        let mut file_path: String = new_settings.payment.debts_file.clone();
         // convert to the serializeable format and dump to the disk
         if file_path.ends_with("json") {
             file_path.drain(0..file_path.len() - 4);
             file_path.push_str("bincode");
         }
-        new_settings.payment.debts_file = file_path.clone();
+        new_settings.payment.debts_file.clone_from(&file_path);
         settings::set_rita_common(new_settings);
 
         let serialized = bincode::serialize(&debt_data_to_ser(self.debt_data.clone())).unwrap();

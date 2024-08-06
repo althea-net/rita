@@ -4,6 +4,7 @@ use actix_web_async::web::Path;
 use actix_web_async::{web::Json, HttpRequest, HttpResponse};
 use rita_common::{RitaCommonError, KI};
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::net::Ipv4Addr;
 
 use crate::RitaClientError;
@@ -46,15 +47,15 @@ pub enum InterfaceMode {
     Unknown,
 }
 
-impl ToString for InterfaceMode {
-    fn to_string(&self) -> String {
+impl Display for InterfaceMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InterfaceMode::Mesh => "mesh".to_owned(),
-            InterfaceMode::Lan => "LAN".to_owned(),
-            InterfaceMode::Wan => "WAN".to_owned(),
-            InterfaceMode::StaticWan { .. } => "StaticWAN".to_owned(),
-            InterfaceMode::Unknown => "unknown".to_owned(),
-            InterfaceMode::LTE => "LTE".to_owned(),
+            InterfaceMode::Mesh => write!(f, "mesh"),
+            InterfaceMode::Lan => write!(f, "LAN"),
+            InterfaceMode::Wan => write!(f, "WAN"),
+            InterfaceMode::StaticWan { .. } => write!(f, "StaticWAN"),
+            InterfaceMode::Unknown => write!(f, "Unknown"),
+            InterfaceMode::LTE => write!(f, "LTE"),
         }
     }
 }
