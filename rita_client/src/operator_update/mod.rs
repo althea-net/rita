@@ -2,6 +2,7 @@
 pub mod tests;
 pub mod update_loop;
 pub mod updater;
+pub mod ops_websocket;
 extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
 use crate::exit_manager::{get_client_pub_ipv6, get_selected_exit_ip};
@@ -68,7 +69,7 @@ pub async fn operator_update(
     if cfg!(feature = "dev_env") {
         url = "http://7.7.7.7:8080/checkin";
     } else if cfg!(feature = "operator_debug") {
-        url = "http://192.168.10.2:8080/checkin";
+        url = "http://192.168.1.214:8080/checkin";
     } else {
         url = "https://operator.althea.net:8080/checkin";
     }
