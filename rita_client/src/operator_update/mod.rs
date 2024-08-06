@@ -1,6 +1,6 @@
 //! This module is responsible for checking in with the operator server and getting updated local settings
+pub mod ops_websocket;
 pub mod tests;
-pub mod update_loop;
 pub mod updater;
 extern crate openssh_keys;
 use crate::dashboard::extender_checkin::extend_hardware_info;
@@ -34,7 +34,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{remove_file, rename, File};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use updater::update_system;
 /// Things that you are not allowed to put into the merge json field of the OperatorUpdate,
 /// this mostly includes dangerous local things like eth private keys (erase money)
@@ -52,27 +52,10 @@ lazy_static! {
     static ref RITA_UPTIME: Instant = Instant::now();
 }
 
-/// Operator update has a randomized exponential backoff, meaning if checkins fail
-/// we will back off and try again after a longer interval
-const TARGET_UPDATE_FREQUENCY: Duration = Duration::from_secs(5);
-/// This is the cap for the exponential backoff, no matter how many consecutive checkins fail
-/// we will not go above this amount of time
-const UPDATE_FREQUENCY_CAP: Duration = Duration::from_secs(3600);
-
-/// Checks in with the operator server
-pub async fn operator_update(
+/// Get the data to send to the operator server via websocket
+pub fn get_operator_checkin_data(
     ops_last_seen_usage_hour: Option<u64>,
-    timeout: Duration,
-) -> Result<u64, RitaClientError> {
-    let url: &str;
-    if cfg!(feature = "dev_env") {
-        url = "http://7.7.7.7:8080/checkin";
-    } else if cfg!(feature = "operator_debug") {
-        url = "http://192.168.10.2:8080/checkin";
-    } else {
-        url = "https://operator.althea.net:8080/checkin";
-    }
-
+) -> Result<OperatorCheckinMessage, RitaClientError> {
     let rita_client = settings::get_rita_client();
     let id = rita_client.get_identity().unwrap();
     let logging_enabled = rita_client.log.enabled;
@@ -95,15 +78,9 @@ pub async fn operator_update(
     if operator_address.is_none() && !logging_enabled {
         info!("No Operator configured and logging disabled, not checking in!");
         // return ok as this is not an error case
-        return Ok(ops_last_seen_usage_hour.unwrap_or_default());
-    }
-
-    match operator_address {
-        Some(address) => info!("Operator checkin using {} and {}", url, address),
-        None => info!(
-            "Operator checkin for default settings {} and {}",
-            url, system_chain
-        ),
+        return Err(RitaClientError::MiscStringError(
+            "No Operator configured and logging disabled, not checking in!".to_string(),
+        ));
     }
 
     let status = get_neighbor_status();
@@ -139,50 +116,35 @@ pub async fn operator_update(
         client_pub_ipv6: get_client_pub_ipv6(),
     });
 
-    let client = awc::Client::default();
-    let response = client
-        .post(url)
-        .timeout(timeout)
-        .send_json(&OperatorCheckinMessage {
-            id,
-            operator_address,
-            system_chain,
-            exit_con,
-            neighbor_info,
-            contact_info,
-            install_details,
-            billing_details,
-            hardware_info,
-            user_bandwidth_limit,
-            rita_uptime: RITA_UPTIME.elapsed(),
-            user_bandwidth_usage: None,
-            user_bandwidth_usage_v2: prepare_usage_data_for_upload(ops_last_seen_usage_hour)?,
-            client_mbps: get_current_throughput(UsageType::Client),
-            relay_mbps: get_current_throughput(UsageType::Relay),
-        })
-        .await;
-
-    let response = match response {
-        Ok(mut response) => {
-            trace!("Response is {:?}", response.status());
-            trace!("Response is {:?}", response.headers());
-            response.json().await
-        }
-        Err(e) => {
-            error!("Failed to perform operator checkin with {:?}", e);
-            return Err(e.into());
-        }
+    let message = OperatorCheckinMessage {
+        id,
+        operator_address,
+        system_chain,
+        exit_con,
+        neighbor_info,
+        contact_info,
+        install_details,
+        billing_details,
+        hardware_info,
+        user_bandwidth_limit,
+        rita_uptime: RITA_UPTIME.elapsed(),
+        user_bandwidth_usage: None,
+        user_bandwidth_usage_v2: prepare_usage_data_for_upload(ops_last_seen_usage_hour)?,
+        client_mbps: get_current_throughput(UsageType::Client),
+        relay_mbps: get_current_throughput(UsageType::Relay),
     };
+    Ok(message)
+}
 
-    let new_settings: OperatorUpdateMessage = match response {
-        Ok(a) => a,
-        Err(e) => {
-            error!("Failed to perform operator checkin with {:?}", e);
-            return Err(e.into());
-        }
-    };
-
+/// Handle updates to settings received from operator server in OperatorUpdateMessage
+pub fn handle_operator_update(new_settings: OperatorUpdateMessage) -> Result<u64, RitaClientError> {
+    let rita_client = settings::get_rita_client();
     let mut rita_client = rita_client;
+    let operator_settings = rita_client.operator.clone();
+    // a node is logically a gateway from a users perspective if it is directly connected to the
+    // exit as a mesh client, even if the is_gateway var mostly governs things related to WAN use.
+    // So we accept either of these conditions being true.
+    let is_gateway = is_gateway() || is_gateway_client();
 
     let update = check_contacts_update(
         rita_client.payment.contact_info.clone(),

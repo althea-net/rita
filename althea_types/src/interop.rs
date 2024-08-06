@@ -1057,6 +1057,13 @@ pub struct AuthorizedKeys {
     pub flush: bool,
 }
 
+/// Operator update that we get from the operator server from websocket checkin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperatorWebsocketMessage {
+    /// The websocket url a specific router will use to connect to the ops websocket server
+    pub url: String,
+}
+
 #[cfg(test)]
 mod test {
 

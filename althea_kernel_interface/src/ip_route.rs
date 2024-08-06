@@ -1,7 +1,8 @@
 use crate::KernelInterface;
 use crate::KernelInterfaceError as Error;
 use althea_types::FromStr;
-use std::fmt;
+use std::fmt::Display;
+use std::fmt::Write as _;
 use std::net::IpAddr;
 
 /// Stores a default route of the format
@@ -150,20 +151,16 @@ impl FromStr for IpRoute {
     }
 }
 
-/// Converts this route object into a string that is a ready-to-run command
-/// for applying this route, once appended 'ip route add'
-impl fmt::Display for IpRoute {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for IpRoute {
+    /// Converts this route object into a string that is a ready-to-run command
+    /// for applying this route, once appended 'ip route add'
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.clone() {
             IpRoute::DefaultRoute(DefaultRoute { via, nic, src, .. }) => {
                 if let Some(src) = src {
-                    write!(
-                        f,
-                        "default via {} dev {} proto static src {}",
-                        via, nic, src
-                    )
+                    write!(f, "default via {via} dev {nic} proto static src {src}")
                 } else {
-                    write!(f, "default via {} dev {} proto static", via, nic)
+                    write!(f, "default via {via} dev {nic} proto static")
                 }
             }
 
@@ -175,19 +172,19 @@ impl fmt::Display for IpRoute {
                 src,
                 ..
             }) => {
-                if subnet == 32 {
-                    write!(f, "{}", dst)?;
+                let mut out = if subnet == 32 {
+                    format!("{dst} ")
                 } else {
-                    write!(f, "{}/{}", dst, subnet)?;
-                }
+                    format!("{dst}/{subnet} ")
+                };
                 if let Some(via) = via {
-                    write!(f, " via {}", via)?;
+                    write!(out, " via {via} ").unwrap();
                 }
-                write!(f, " dev {} proto static", nic)?;
+                write!(out, " dev {nic} proto static ").unwrap();
                 if let Some(src) = src {
-                    write!(f, " src {}", src)?;
+                    write!(out, " src {src} ").unwrap();
                 }
-                Ok(())
+                write!(f, "{}", out)
             }
         }
     }

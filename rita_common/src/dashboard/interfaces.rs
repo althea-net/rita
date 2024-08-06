@@ -52,7 +52,7 @@ impl Display for InterfaceMode {
             InterfaceMode::Lan => write!(f, "LAN"),
             InterfaceMode::Wan => write!(f, "WAN"),
             InterfaceMode::StaticWan { .. } => write!(f, "StaticWAN"),
-            InterfaceMode::Unknown => write!(f, "unknown"),
+            InterfaceMode::Unknown => write!(f, "Unknown"),
             InterfaceMode::LTE => write!(f, "LTE"),
         }
     }

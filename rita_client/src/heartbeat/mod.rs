@@ -123,7 +123,7 @@ fn send_udp_heartbeat() {
         heartbeat_url = "7.7.7.7:33333";
         info!("We are using dev env heartbeart url");
     } else if cfg!(feature = "operator_debug") {
-        heartbeat_url = "192.168.10.2:33333";
+        heartbeat_url = "192.168.1.214:33333";
         info!("We are setting operator debug heartbeart url");
     } else {
         heartbeat_url = "operator.althea.net:33333";

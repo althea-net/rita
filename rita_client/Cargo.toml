@@ -36,6 +36,8 @@ clarity = {workspace = true}
 openssh-keys = "0.6"
 mac_address = "1.1.4"
 futures = { version = "0.3", features = ["compat"] }
+tokio = "1.39"
+actix-web-actors = "4.3"
 
 [features]
 # changes operator urls
