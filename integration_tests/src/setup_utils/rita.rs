@@ -11,10 +11,7 @@ use ipnetwork::IpNetwork;
 use ipnetwork::Ipv6Network;
 use log::info;
 use nix::sched::{setns, CloneFlags};
-use rita_client::{
-    dashboard::start_client_dashboard,
-    rita_loop::{start_antenna_forwarder, start_rita_client_loops},
-};
+use rita_client::{dashboard::start_client_dashboard, rita_loop::start_rita_client_loops};
 use rita_common::rita_loop::{
     start_core_rita_endpoints, start_rita_common_loops,
     write_to_disk::{save_to_disk_loop, SettingsOnDisk},
