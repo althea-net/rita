@@ -161,10 +161,13 @@ pub async fn deploy_contracts() -> Address {
 
     let location_a = "/althea_rs/solidity/contract-deployer.ts";
     let location_b = "solidity/contract-deployer.ts";
+    let location_c = "/tmp/althea_rs/solidity/contract-deployer.ts";
     let location = if std::path::Path::new(location_a).exists() {
         location_a
     } else if std::path::Path::new(location_b).exists() {
         location_b
+    } else if std::path::Path::new(location_c).exists() {
+        location_c
     } else {
         panic!("Could not find contract deployer file!")
     };
