@@ -155,6 +155,7 @@ pub fn start_rita_client_loop() {
 }
 
 pub fn start_rita_client_loops() {
+    info!("Starting Rita Client loops");
     if metrics_permitted() {
         send_heartbeat_loop();
     }
@@ -162,6 +163,8 @@ pub fn start_rita_client_loops() {
     crate::rita_loop::start_rita_client_loop();
     crate::self_rescue::start_rita_client_rescue_loop();
     crate::operator_update::update_loop::start_operator_update_loop();
+    info!("Trying to start socket update loop");
+    crate::operator_update::update_loop::start_operator_socket_update_loop();
 }
 
 /// There is a complicated corner case where the gateway is a client and a relay to
@@ -214,7 +217,7 @@ pub fn start_antenna_forwarder(settings: RitaClientSettings) {
         if cfg!(feature = "dev_env") {
             url = "7.7.7.7:33300";
         } else if cfg!(feature = "operator_debug") {
-            url = "192.168.10.2:33334";
+            url = "192.168.1.214:33334";
         } else {
             url = "operator.althea.net:33334";
         }

@@ -1,6 +1,7 @@
 //! Independent loop for operator updates, this prevents errors in the rita fast loop from causing the
 //! router to become unresponsive to updates or reboot instructions
 
+use crate::operator_update::ops_websocket::send_websocket_update;
 use crate::operator_update::{operator_update, TARGET_UPDATE_FREQUENCY, UPDATE_FREQUENCY_CAP};
 use actix_async::System as AsyncSystem;
 use althea_kernel_interface::KI;
@@ -9,7 +10,7 @@ use std::cmp::{max, min};
 use std::thread;
 use std::time::{Duration, Instant};
 
-/// This function spawns a thread soley responsible for performing the operator update
+/// This function spawns a thread solely responsible for performing the operator update
 /// the sends large format data to operator tools (versus the heartbeat which is about 1200 bytes)
 /// this update also gets instructions from operator tools, such as updates, reboots, or any OperatorAction
 #[allow(unused_assignments)]
@@ -79,4 +80,11 @@ pub fn start_operator_update_loop() {
             last_restart = Instant::now();
         }
     });
+}
+
+/// This function spawns a thread solely responsible for performing the websocket operator update
+pub fn start_operator_socket_update_loop() {
+    // first actually get the websocket address
+    info!("Starting operator socket update loop");
+    send_websocket_update();
 }
