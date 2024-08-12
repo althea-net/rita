@@ -9,7 +9,7 @@ rand = "0.8.0"
 ipnetwork = "0.20"
 serde_derive = "1.0"
 serde = "1.0"
-bytes = "1.0"
+bytes = "1.7"
 compressed_log = "0.5.4"
 byteorder = { version = "1.4", features = ["i128"] }
 arrayvec = { version = "0.7", features = ["serde"] }
