@@ -6,8 +6,7 @@ use ::actix_web_async::http::StatusCode;
 use ::actix_web_async::web::Path;
 use ::actix_web_async::{web::Json, HttpRequest, HttpResponse};
 use althea_types::{
-    FromStr, WifiChannel, WifiDisabled, WifiDisabledReturn, WifiPass, WifiSecurity, WifiSsid,
-    WifiToken,
+    FromStr, WifiChannel, WifiDisabled, WifiPass, WifiSecurity, WifiSsid, WifiToken,
 };
 use serde::{Deserialize, Deserializer, Serializer};
 use serde_json::Value;
@@ -309,22 +308,19 @@ fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaCommonError> {
 }
 
 /// Disables the wifi on the specified radio
-fn set_disabled(wifi_disabled: &WifiDisabled) -> Result<WifiDisabledReturn, RitaCommonError> {
+fn set_disabled(wifi_disabled: &WifiDisabled) -> Result<(), RitaCommonError> {
     let current_disabled: bool =
         KI.get_uci_var(&format!("wireless.{}.disabled", wifi_disabled.radio))? == "1";
 
     if current_disabled == wifi_disabled.disabled {
-        return Ok(WifiDisabledReturn {
-            needs_reboot: false,
-        });
+        return Ok(());
     }
 
     KI.set_uci_var(
         &format!("wireless.{}.disabled", wifi_disabled.radio),
         if wifi_disabled.disabled { "1" } else { "0" },
     )?;
-
-    Ok(WifiDisabledReturn { needs_reboot: true })
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -353,7 +349,6 @@ pub async fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> HttpResponse 
 
 pub fn set_wifi_multi_internal(wifi_changes: Vec<WifiToken>) -> HttpResponse {
     trace!("Got multi wifi change!");
-    let mut needs_reboot = false;
 
     for token in wifi_changes.iter() {
         match token {
@@ -379,19 +374,13 @@ pub fn set_wifi_multi_internal(wifi_changes: Vec<WifiToken>) -> HttpResponse {
                 }
             }
             WifiToken::WifiDisabled(val) => {
-                let result = match set_disabled(val) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(
-                            ErrorJsonResponse {
-                                error: format!("{e}"),
-                            },
-                        );
-                    }
+                if let Err(e) = set_disabled(val) {
+                    return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(
+                        ErrorJsonResponse {
+                            error: format!("{e}"),
+                        },
+                    );
                 };
-                if result.needs_reboot {
-                    needs_reboot = true;
-                }
             }
             WifiToken::WifiSecurity(val) => {
                 if let Err(e) = set_security(val) {
@@ -425,18 +414,6 @@ pub fn set_wifi_multi_internal(wifi_changes: Vec<WifiToken>) -> HttpResponse {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(ErrorJsonResponse {
             error: format!("{e}"),
         });
-    }
-
-    if needs_reboot {
-        info!("Changed a radio's active state, rebooting");
-        if let Err(e) = KI.run_command("reboot", &[]) {
-            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(
-                ErrorJsonResponse {
-                    error: format!("{e}"),
-                },
-            );
-        }
-        return HttpResponse::Ok().json(RebootJsonResponse { needs_reboot: true });
     }
 
     HttpResponse::Ok().json(())

@@ -585,10 +585,6 @@ pub struct WifiSecurity {
     pub radio: String,
     pub encryption: String,
 }
-#[derive(Clone, Debug)]
-pub struct WifiDisabledReturn {
-    pub needs_reboot: bool,
-}
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct WifiDisabled {
