@@ -1,6 +1,7 @@
 use crate::localization::LocalizationSettings;
 use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
+use crate::operator::ExitOperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_exit, SettingsError};
 use althea_types::{regions::Regions, ExitIdentity, Identity, WgKey};
@@ -108,6 +109,8 @@ pub struct RitaExitSettingsStruct {
     pub localization: LocalizationSettings,
     pub network: NetworkSettings,
     pub exit_network: ExitNetworkSettings,
+    #[serde(default)]
+    pub operator: ExitOperatorSettings,
     /// Countries which the clients to the exit are allowed from, blank for no geoip validation.
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
@@ -131,6 +134,7 @@ impl RitaExitSettingsStruct {
             payment: PaymentSettings::default(),
             localization: LocalizationSettings::default(),
             network: NetworkSettings::default(),
+            operator: ExitOperatorSettings::default(),
             exit_network: ExitNetworkSettings::test_default(),
             allowed_countries: HashSet::new(),
             log: LoggingSettings::default(),

@@ -74,3 +74,18 @@ impl Default for OperatorSettings {
         }
     }
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct ExitOperatorSettings {
+    /// The operator managing this router
+    #[serde(default = "default_operator_address")]
+    pub operator_address: Option<Address>,
+}
+
+impl Default for ExitOperatorSettings {
+    fn default() -> ExitOperatorSettings {
+        ExitOperatorSettings {
+            operator_address: default_operator_address(),
+        }
+    }
+}

@@ -342,6 +342,18 @@ pub fn get_rita_exit() -> RitaExitSettingsStruct {
     }
 }
 
+/// This code checks to see if the current device/setting is client or not
+pub fn check_if_client() -> bool {
+    let netns = KI.check_integration_test_netns();
+    match SETTINGS.read().unwrap().get(&netns) {
+        Some(Settings::Adaptor(_)) => false,
+        Some(Settings::Client(_)) => true,
+        Some(Settings::Exit(_)) => false,
+        None => false,
+    }
+}
+
+
 /// This code checks to see if the current device/setting is an exit or not
 pub fn check_if_exit() -> bool {
     let netns = KI.check_integration_test_netns();

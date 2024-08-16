@@ -23,3 +23,4 @@ pub mod usage;
 pub mod wallet;
 pub mod wg_key;
 pub mod wifi;
+pub mod operator;

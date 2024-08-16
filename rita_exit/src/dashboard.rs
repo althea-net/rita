@@ -17,6 +17,7 @@ use rita_common::dashboard::localization::*;
 use rita_common::dashboard::logging::*;
 use rita_common::dashboard::mesh_ip::*;
 use rita_common::dashboard::nickname::*;
+use rita_common::dashboard::operator::*;
 use rita_common::dashboard::own_info::*;
 use rita_common::dashboard::remote_access::*;
 use rita_common::dashboard::settings::*;
@@ -45,6 +46,9 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     .wrap(middleware::AuthMiddlewareFactory)
                     .wrap(middleware::HeadersMiddlewareFactory)
                     .route("/info", web::get().to(get_own_info))
+                    .route("/operator", web::get().to(get_operator))
+                    .route("/operator/{address}", web::post().to(change_operator))
+                    .route("/operator/remove", web::post().to(remove_operator))
                     .route("/local_fee", web::get().to(get_local_fee))
                     .route("/local_fee/{fee}", web::post().to(set_local_fee))
                     .route("/metric_factor", web::get().to(get_metric_factor))
