@@ -353,7 +353,6 @@ pub fn check_if_client() -> bool {
     }
 }
 
-
 /// This code checks to see if the current device/setting is an exit or not
 pub fn check_if_exit() -> bool {
     let netns = KI.check_integration_test_netns();

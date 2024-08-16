@@ -38,7 +38,13 @@ use rita_common::{
     payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT},
 };
 use settings::{
-    client::RitaClientSettings, exit::{ExitNetworkSettings, RitaExitSettingsStruct}, localization::LocalizationSettings, logging::LoggingSettings, network::NetworkSettings, operator::ExitOperatorSettings, payment::PaymentSettings
+    client::RitaClientSettings,
+    exit::{ExitNetworkSettings, RitaExitSettingsStruct},
+    localization::LocalizationSettings,
+    logging::LoggingSettings,
+    network::NetworkSettings,
+    operator::ExitOperatorSettings,
+    payment::PaymentSettings,
 };
 use std::{
     collections::{HashMap, HashSet},
