@@ -94,10 +94,6 @@ pub enum ExitSwitchingCode {
     ResetTracking,
 }
 
-fn default_balance_notification() -> bool {
-    true
-}
-
 /// This struct is used by rita to encapsulate all the state/information needed to connect/register
 /// to a exit and to setup the exit tunnel
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -110,9 +106,6 @@ pub struct ExitClientSettings {
     pub wg_listen_port: u16,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
-    /// Specifies if the user would like to receive low balance messages from the exit
-    #[serde(default = "default_balance_notification")]
-    pub low_balance_notification: bool,
 }
 
 impl Default for ExitClientSettings {
@@ -121,7 +114,6 @@ impl Default for ExitClientSettings {
             exits: HashMap::new(),
             wg_listen_port: 59999,
             lan_nics: HashSet::new(),
-            low_balance_notification: true,
         }
     }
 }

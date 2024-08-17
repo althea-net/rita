@@ -318,7 +318,7 @@ fn send_udp_heartbeat_packet(
     let rita_client = settings::get_rita_client();
     let network_settings = rita_client.network;
     let low_balance_notification = settings::get_rita_client()
-        .exit_client
+        .operator
         .low_balance_notification;
     let our_publickey = network_settings.wg_public_key.expect("No public key?");
     let our_secretkey = network_settings

@@ -36,6 +36,10 @@ fn default_force_use_operator_price() -> bool {
     false
 }
 
+fn default_balance_notification() -> bool {
+    true
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct OperatorSettings {
     /// The operator managing this router
@@ -59,6 +63,9 @@ pub struct OperatorSettings {
     /// If we should display the operator setup on the dashboard
     #[serde(default = "default_display_operator_setup")]
     pub display_operator_setup: bool,
+    /// Specifies if the user would like to receive low balance messages from the exit
+    #[serde(default = "default_balance_notification")]
+    pub low_balance_notification: bool,
 }
 
 impl Default for OperatorSettings {
@@ -71,6 +78,7 @@ impl Default for OperatorSettings {
             installation_details: None,
             billing_details: None,
             display_operator_setup: true,
+            low_balance_notification: default_balance_notification(),
         }
     }
 }
