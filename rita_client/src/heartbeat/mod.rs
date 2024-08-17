@@ -278,7 +278,7 @@ pub fn get_selected_exit_server() -> Option<ExitServer> {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
     let exit = match get_current_exit() {
-        Some(ip) => exit_client.exits.get(&ip),
+        Some(ip) => exit_client.bootstrapping_exits.get(&ip),
         None => None,
     };
 

@@ -53,6 +53,9 @@ use std::time::Instant;
 /// The number of times ExitSwitcher will try to connect to an unresponsive exit before blacklisting its ip
 const MAX_BLACKLIST_STRIKES: u16 = 100;
 
+/// TODO replace with a component in the exit config struct
+const DEFAULT_WG_LISTEN_PORT: u16 = 59998;
+
 lazy_static! {
     pub static ref SELECTED_EXIT_DETAILS: Arc<RwLock<SelectedExitDetails>> =
         Arc::new(RwLock::new(SelectedExitDetails::default()));
@@ -162,7 +165,7 @@ fn linux_setup_exit_tunnel(
         ),
         pubkey: selected_exit.exit_id.wg_public_key,
         private_key_path: network.wg_private_key_path.clone(),
-        listen_port: rita_client.exit_client.wg_listen_port,
+        listen_port: DEFAULT_WG_LISTEN_PORT,
         local_ip: our_details.client_internal_ip,
         netmask: general_details.netmask,
         rita_hello_port: network.rita_hello_port,
@@ -309,7 +312,7 @@ fn decrypt_exit_state(
 /// This allows these exits to move to GotInfo state, allowing us to switch or connect quickly
 pub fn add_exits_to_exit_server_list(list: ExitListV2) {
     let mut rita_client = settings::get_rita_client();
-    let mut exits = rita_client.exit_client.exits;
+    let mut exits = rita_client.exit_client.bootstrapping_exits;
 
     for e in list.exit_list {
         exits.entry(e.mesh_ip).or_insert(ExitServer {
@@ -321,7 +324,7 @@ pub fn add_exits_to_exit_server_list(list: ExitListV2) {
     }
 
     // Update settings with new exits
-    rita_client.exit_client.exits = exits;
+    rita_client.exit_client.bootstrapping_exits = exits;
     set_rita_client(rita_client);
 }
 
@@ -418,7 +421,7 @@ async fn send_exit_status_request(
 pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientError> {
     let client_settings = settings::get_rita_client();
 
-    for (_, exit) in client_settings.exit_client.exits {
+    for (_, exit) in client_settings.exit_client.bootstrapping_exits {
         match &exit.info {
             ExitState::New { .. } | ExitState::Pending { .. } => {
                 let exit_pubkey = exit.exit_id.wg_public_key;
@@ -445,7 +448,7 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
                             ));
                         }
                     },
-                    wg_port: client_settings.exit_client.wg_listen_port,
+                    wg_port: DEFAULT_WG_LISTEN_PORT,
                     reg_details,
                 };
 
@@ -461,7 +464,7 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
                 info!("Setting an exit setup response");
                 let mut rita_client = get_rita_client();
                 if let Some(exit_to_update) =
-                    rita_client.exit_client.exits.get_mut(&exit.exit_id.mesh_ip)
+                    rita_client.exit_client.bootstrapping_exits.get_mut(&exit.exit_id.mesh_ip)
                 {
                     exit_to_update.info = exit_response;
                 } else {
@@ -495,7 +498,7 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
 }
 
 async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
-    let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
+    let current_exit = match settings::get_rita_client().exit_client.bootstrapping_exits.get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
             return Err(RitaClientError::NoExitError(exit.to_string()));
@@ -520,7 +523,7 @@ async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
                 ));
             }
         },
-        wg_port: settings::get_rita_client().exit_client.wg_listen_port,
+        wg_port: DEFAULT_WG_LISTEN_PORT,
         reg_details,
     };
 
@@ -534,7 +537,7 @@ async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
 
     let exit_response = send_exit_status_request(exit_pubkey, &endpoint, ident).await?;
     let mut rita_client = settings::get_rita_client();
-    let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
+    let current_exit = match rita_client.exit_client.bootstrapping_exits.get_mut(&exit) {
         Some(exit_struct) => exit_struct,
         None => return Err(RitaClientError::ExitNotFound(exit.to_string())),
     };
@@ -547,7 +550,7 @@ async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
 
 /// Hits the exit_list endpoint for a given exit.
 async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> {
-    let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
+    let current_exit = match settings::get_rita_client().exit_client.bootstrapping_exits.get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
             return Err(RitaClientError::NoExitError(exit.to_string()));
@@ -572,7 +575,7 @@ async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> {
                 ));
             }
         },
-        wg_port: settings::get_rita_client().exit_client.wg_listen_port,
+        wg_port: DEFAULT_WG_LISTEN_PORT,
         reg_details,
     };
 
@@ -675,7 +678,7 @@ fn get_routes_hashmap(routes: Vec<Route>) -> HashMap<IpAddr, Route> {
 
 /// Exits are ready to switch to when they are in the Registered State, we return list of exits that are
 pub fn get_ready_to_switch_exits(exit_list: ExitListV2) -> Vec<Identity> {
-    let exits = get_rita_client().exit_client.exits;
+    let exits = get_rita_client().exit_client.bootstrapping_exits;
 
     let mut ret = vec![];
     for exit in exit_list.exit_list {
@@ -697,7 +700,7 @@ pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
     let rita_settings = settings::get_rita_client();
     let current_exit = get_current_exit();
     if let Some(exit) = current_exit {
-        let exit_ser = rita_settings.exit_client.exits.get(&exit);
+        let exit_ser = rita_settings.exit_client.bootstrapping_exits.get(&exit);
         if let Some(exit_ser) = exit_ser {
             let exit_info = exit_ser.info.clone();
 

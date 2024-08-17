@@ -22,7 +22,7 @@ pub fn default_config_path() -> PathBuf {
 
 /// This struct represents a single exit server. It contains all the details
 /// needed to contact and register to the exit.
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct ExitServer {
     /// This is the unique identity of the exit. Previously exit
     /// had a shared wg key and mesh ip, this struct needs to have unique
@@ -94,16 +94,40 @@ pub enum ExitSwitchingCode {
     ResetTracking,
 }
 
+fn exit_db_smart_contract_on_xdai() -> String {
+    "0x29a3800C28dc133f864C22533B649704c6CD7e15".to_string()
+}
+
+fn default_boostrapping_exits() -> HashMap<IpAddr, ExitServer> {
+    HashMap::new()
+}
+
+fn default_registration_state() -> ExitState {
+    ExitState::default()
+}
+
 /// This struct is used by rita to encapsulate all the state/information needed to connect/register
 /// to a exit and to setup the exit tunnel
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitClientSettings {
-    /// This stores a mapping between an identifier (any string) to exits
-    #[serde(rename = "new_exits", default)]
-    pub exits: HashMap<IpAddr, ExitServer>,
-    /// This is the port which the exit wireguard tunnel will listen on
-    /// NOTE: must be under `wg_start_port` in `NetworkSettings`
-    pub wg_listen_port: u16,
+    #[serde(default = "default_boostrapping_exits")]
+    /// This map of exits is populated in the routers initial config. Once the router is up and running is it will query
+    /// one or more of these exits to understand it's current status and to register with the exit database smart contract.
+    /// Once regsitered and online this list may be populated with new exits through the chain of trust established by the
+    /// bootstrapping process
+    pub bootstrapping_exits: HashMap<IpAddr, ExitServer>,
+    /// The registration state of this router with the exit database smart contract
+    /// note this value may be affected by what contract is currently selected and what
+    /// chain we are on. Since different chains may reference different registration smart contracts
+    #[serde(default = "default_registration_state", flatten)]
+    pub registration_state: ExitState,
+    /// This is the address of the exit database contract on the xDai chain, this value is a config value in case
+    /// a new version of the contract is ever deployed. Otherwise it won't change much. What this contract contains
+    /// is the registration data for all routers, facilitating key exchange between new exits in the cluster and clients
+    /// So the client registers with the smart contract and the exit takes it's registration data (wireguard key) and sets
+    /// up a tunnel, vice versa for the client after bootstrapping by talking to an exit in it's config
+    #[serde(default = "exit_db_smart_contract_on_xdai")]
+    pub exit_db_smart_contract_on_xdai: String,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
 }
@@ -111,8 +135,9 @@ pub struct ExitClientSettings {
 impl Default for ExitClientSettings {
     fn default() -> Self {
         ExitClientSettings {
-            exits: HashMap::new(),
-            wg_listen_port: 59999,
+            registration_state: default_registration_state(),
+            bootstrapping_exits: default_boostrapping_exits(),
+            exit_db_smart_contract_on_xdai: exit_db_smart_contract_on_xdai(),
             lan_nics: HashSet::new(),
         }
     }

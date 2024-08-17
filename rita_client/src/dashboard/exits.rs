@@ -70,7 +70,7 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                     let exit_client = rita_client.exit_client;
                     let current_exit = get_selected_exit_server();
 
-                    for exit in exit_client.exits.clone().into_iter() {
+                    for exit in exit_client.bootstrapping_exits.clone().into_iter() {
                         let selected = is_selected(&exit.1, current_exit.clone());
                         info!("Trying to get exit: {}", exit.0.clone());
                         let route_ip = exit.0;
@@ -111,12 +111,12 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
 pub async fn add_exits(new_exits: Json<HashMap<IpAddr, ExitServer>>) -> HttpResponse {
     debug!("/exits POST hit with {:?}", new_exits);
     let mut rita_client = settings::get_rita_client();
-    let mut exits = rita_client.exit_client.exits;
+    let mut exits = rita_client.exit_client.bootstrapping_exits;
     exits.extend(new_exits.into_inner());
 
     let copy = exits.clone();
 
-    rita_client.exit_client.exits = exits;
+    rita_client.exit_client.bootstrapping_exits = exits;
     trace!("Rita settings looks like : {:?}", rita_client);
     settings::set_rita_client(rita_client);
     if let Err(e) = write_config() {
@@ -139,7 +139,7 @@ pub async fn reset_exit(path: Path<IpAddr>) -> HttpResponse {
     debug!("/exits/{}/reset hit", exit_name);
     let mut rita_client = settings::get_rita_client();
 
-    let mut exits = rita_client.exit_client.exits;
+    let mut exits = rita_client.exit_client.bootstrapping_exits;
     let mut ret = HashMap::new();
 
     if let Some(exit) = exits.get_mut(&exit_name) {
@@ -152,7 +152,7 @@ pub async fn reset_exit(path: Path<IpAddr>) -> HttpResponse {
         if let Err(e) = KI.del_interface("wg_exit") {
             error!("Failed to delete wg_exit {:?}", e)
         };
-        rita_client.exit_client.exits = exits;
+        rita_client.exit_client.bootstrapping_exits = exits;
         settings::set_rita_client(rita_client);
         let res = write_config();
         if let Err(e) = res {
@@ -178,7 +178,7 @@ pub async fn select_exit(path: Path<IpAddr>) -> HttpResponse {
     let exit_client = rita_client.exit_client;
     let mut ret = HashMap::new();
 
-    if exit_client.exits.contains_key(&exit_name) {
+    if exit_client.bootstrapping_exits.contains_key(&exit_name) {
         info!("Selecting exit {:?}", exit_name);
         set_selected_exit(SelectedExit {
             selected_id: Some(exit_name),

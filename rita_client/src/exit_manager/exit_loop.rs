@@ -51,7 +51,7 @@ pub fn start_exit_manager_loop() {
                         let current_exit = get_current_exit();
 
                         let last_exit_states = em_state.last_exit_state.clone();
-                        let mut exits = rita_client.exit_client.exits;
+                        let mut exits = rita_client.exit_client.bootstrapping_exits;
 
                         trace!("Current exit is {:?}", current_exit);
 
@@ -230,7 +230,7 @@ pub fn start_exit_manager_loop() {
                         let mut general_requests = Vec::new();
                         let mut status_requests = Vec::new();
                         let mut exit_status_requested = false;
-                        let servers = { settings::get_rita_client().exit_client.exits };
+                        let servers = { settings::get_rita_client().exit_client.bootstrapping_exits };
                         for (k, s) in servers {
                             match s.info {
                                 // Once one exit is registered, this moves all exits from New -> Registered
