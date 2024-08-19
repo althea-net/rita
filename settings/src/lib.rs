@@ -412,7 +412,7 @@ mod tests {
         const TEST_FILE: &str = "/tmp/rita-settings-ci-test.toml";
         let ret = RitaClientSettings::default();
         ret.write(TEST_FILE.into()).unwrap();
-        let _ = RitaClientSettings::new(&TEST_FILE).unwrap();
+        let _ = RitaClientSettings::new(TEST_FILE).unwrap();
     }
 
     #[test]
@@ -420,6 +420,6 @@ mod tests {
         const TEST_FILE: &str = "/tmp/rita-exit-settings-ci-test.toml";
         let ret = RitaExitSettingsStruct::test_default();
         ret.write(TEST_FILE.into()).unwrap();
-        let _ = RitaExitSettingsStruct::new(&TEST_FILE).unwrap();
+        let _ = RitaExitSettingsStruct::new(TEST_FILE).unwrap();
     }
 }

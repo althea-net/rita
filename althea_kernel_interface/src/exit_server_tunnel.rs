@@ -331,10 +331,6 @@ impl dyn KernelInterface {
 fn test_iproute_parsing() {
     let str = "fbad::/64,feee::/64";
 
-    if str.is_empty() {
-        return;
-    }
-
     let ipv6_list: Vec<&str> = str.split(',').collect();
 
     for ip in ipv6_list {
