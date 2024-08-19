@@ -1120,7 +1120,10 @@ mod tests {
         let path = "./src/exit_manager/config_in_use.toml".to_string();
         let settings = RitaClientSettings::new(&path).unwrap();
 
-        println!("\n\n\n\nNew Settings: {:#?}", settings.exit_client.bootstrapping_exits);
+        println!(
+            "\n\n\n\nNew Settings: {:#?}",
+            settings.exit_client.bootstrapping_exits
+        );
     }
 
     #[test]

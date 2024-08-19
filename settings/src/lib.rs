@@ -422,5 +422,4 @@ mod tests {
         ret.write(TEST_FILE.into()).unwrap();
         let _ = RitaExitSettingsStruct::new(&TEST_FILE).unwrap();
     }
-
 }

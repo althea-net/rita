@@ -463,8 +463,10 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
 
                 info!("Setting an exit setup response");
                 let mut rita_client = get_rita_client();
-                if let Some(exit_to_update) =
-                    rita_client.exit_client.bootstrapping_exits.get_mut(&exit.exit_id.mesh_ip)
+                if let Some(exit_to_update) = rita_client
+                    .exit_client
+                    .bootstrapping_exits
+                    .get_mut(&exit.exit_id.mesh_ip)
                 {
                     exit_to_update.info = exit_response;
                 } else {
@@ -498,7 +500,11 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
 }
 
 async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
-    let current_exit = match settings::get_rita_client().exit_client.bootstrapping_exits.get(&exit) {
+    let current_exit = match settings::get_rita_client()
+        .exit_client
+        .bootstrapping_exits
+        .get(&exit)
+    {
         Some(current_exit) => current_exit.clone(),
         None => {
             return Err(RitaClientError::NoExitError(exit.to_string()));
@@ -550,7 +556,11 @@ async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
 
 /// Hits the exit_list endpoint for a given exit.
 async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> {
-    let current_exit = match settings::get_rita_client().exit_client.bootstrapping_exits.get(&exit) {
+    let current_exit = match settings::get_rita_client()
+        .exit_client
+        .bootstrapping_exits
+        .get(&exit)
+    {
         Some(current_exit) => current_exit.clone(),
         None => {
             return Err(RitaClientError::NoExitError(exit.to_string()));
