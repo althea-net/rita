@@ -13,7 +13,7 @@ log = "0.4"
 docopt = "1.1"
 ctrlc = {version = "3.2.1", features = ["termination"]}
 awc = {workspace = true}
-actix-rt = "2.8"
+actix-rt = "2.10"
 integration_tests = { path = "../integration_tests" }
 althea_types = { path = "../althea_types" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }

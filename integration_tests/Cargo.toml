@@ -27,7 +27,7 @@ ctrlc = { version = "3.2.1", features = ["termination"] }
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 diesel_migrations = { version = "1.4", features = ["postgres"] }
 awc = {workspace = true}
-actix-rt = "2.8"
+actix-rt = "2.10"
 deep_space = {workspace = true}
 clarity = {workspace = true}
 althea_proto = {workspace = true}
