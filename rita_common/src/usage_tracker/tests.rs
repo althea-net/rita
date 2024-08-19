@@ -47,6 +47,7 @@ pub mod test {
     #[test]
     fn save_usage_tracker_bincode() {
         let rset = RitaClientSettings::new("../settings/test.toml").unwrap();
+        let rset = RitaClientSettings::default();
         set_rita_client(rset);
         let mut newrc = get_rita_common();
         newrc.network.usage_tracker_file = "/tmp/usage_tracker.bincode".to_string();
@@ -70,7 +71,7 @@ pub mod test {
         // makes sure the file exists
         // deserialize the file using the upgrade function
         // make sure it's equal to the original dummy we made
-        let rset = RitaClientSettings::new("../settings/test.toml").unwrap();
+        let rset = RitaClientSettings::default();
         set_rita_client(rset);
         let mut newrc = get_rita_common();
         newrc.network.usage_tracker_file = "/tmp/usage_tracker.bincode".to_string();
