@@ -16,6 +16,7 @@
 //!
 //! Signup is complete and the user may use the connection
 
+pub mod encryption;
 pub mod exit_loop;
 pub mod exit_switcher;
 pub mod time_sync;
@@ -29,21 +30,20 @@ use althea_kernel_interface::{
 };
 use althea_types::exit_identity_to_id;
 use althea_types::ExitClientDetails;
+use althea_types::ExitDetails;
 use althea_types::ExitListV2;
 use althea_types::Identity;
 use althea_types::WgKey;
-use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
-use althea_types::{EncryptedExitList, ExitDetails};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState};
 use babel_monitor::structs::Route;
+use encryption::decrypt_exit_list;
+use encryption::decrypt_exit_state;
+use encryption::encrypt_exit_client_id;
 use ipnetwork::IpNetwork;
 use rita_common::KI;
 use settings::client::{ExitServer, SelectedExit};
 use settings::get_rita_client;
 use settings::set_rita_client;
-use sodiumoxide::crypto::box_;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -166,66 +166,6 @@ fn remove_nat() {
     if let Err(e) = KI.block_client_nat() {
         error!("Failed to block client nat! {:?}", e);
     }
-}
-
-fn encrypt_exit_client_id(
-    exit_pubkey: &PublicKey,
-    id: ExitClientIdentity,
-) -> EncryptedExitClientIdentity {
-    let network_settings = settings::get_rita_client().network;
-    let our_publickey = network_settings.wg_public_key.expect("No public key?");
-    let our_secretkey = network_settings
-        .wg_private_key
-        .expect("No private key?")
-        .into();
-
-    let plaintext = serde_json::to_string(&id)
-        .expect("Failed to serialize ExitState!")
-        .into_bytes();
-    let nonce = box_::gen_nonce();
-    let ciphertext = box_::seal(&plaintext, &nonce, exit_pubkey, &our_secretkey);
-
-    EncryptedExitClientIdentity {
-        nonce: nonce.0,
-        pubkey: our_publickey,
-        encrypted_exit_client_id: ciphertext,
-    }
-}
-
-fn decrypt_exit_state(
-    exit_state: EncryptedExitState,
-    exit_pubkey: PublicKey,
-) -> Result<ExitState, RitaClientError> {
-    let rita_client = settings::get_rita_client();
-    let network_settings = rita_client.network;
-    let our_secretkey = network_settings
-        .wg_private_key
-        .expect("No private key?")
-        .into();
-    let ciphertext = exit_state.encrypted_exit_state;
-    let nonce = Nonce(exit_state.nonce);
-    let decrypted_exit_state: ExitState =
-        match box_::open(&ciphertext, &nonce, &exit_pubkey, &our_secretkey) {
-            Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
-                Ok(json_string) => match serde_json::from_str(&json_string) {
-                    Ok(exit_state) => exit_state,
-                    Err(e) => {
-                        return Err(e.into());
-                    }
-                },
-                Err(e) => {
-                    error!("Could not deserialize exit state with {:?}", e);
-                    return Err(e.into());
-                }
-            },
-            Err(_) => {
-                error!("Could not decrypt exit state");
-                return Err(RitaClientError::MiscStringError(
-                    "Could not decrypt exit state".to_string(),
-                ));
-            }
-        };
-    Ok(decrypted_exit_state)
 }
 
 /// When we retrieve an exit list from an exit, add the compatible exits to the exit server list.
@@ -519,41 +459,6 @@ async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> {
         Err(e) => Err(e),
         Ok(a) => Ok(a),
     }
-}
-
-fn decrypt_exit_list(
-    exit_list: EncryptedExitList,
-    exit_pubkey: PublicKey,
-) -> Result<ExitListV2, RitaClientError> {
-    let rita_client = settings::get_rita_client();
-    let network_settings = rita_client.network;
-    let our_secretkey = network_settings
-        .wg_private_key
-        .expect("No private key?")
-        .into();
-    let ciphertext = exit_list.exit_list;
-    let nonce = Nonce(exit_list.nonce);
-    let ret: ExitListV2 = match box_::open(&ciphertext, &nonce, &exit_pubkey, &our_secretkey) {
-        Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
-            Ok(json_string) => match serde_json::from_str(&json_string) {
-                Ok(ip_list) => ip_list,
-                Err(e) => {
-                    return Err(e.into());
-                }
-            },
-            Err(e) => {
-                error!("Could not deserialize exit state with {:?}", e);
-                return Err(e.into());
-            }
-        },
-        Err(_) => {
-            error!("Could not decrypt exit state");
-            return Err(RitaClientError::MiscStringError(
-                "Could not decrypt exit state".to_string(),
-            ));
-        }
-    };
-    Ok(ret)
 }
 
 fn correct_default_route(input: Option<DefaultRoute>) -> bool {
