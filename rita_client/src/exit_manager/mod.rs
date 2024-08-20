@@ -519,16 +519,10 @@ pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
 /// Verfies if exit has changed to reestablish wg tunnels
 /// 1.) When exit instance ip has changed
 /// 2.) Exit reg details have chaged
-pub fn has_exit_changed(
-    state: LastExitStates,
-    selected_exit: Option<IpAddr>,
-    cluster: ExitServer,
-) -> bool {
+pub fn has_exit_changed(state: LastExitStates, selected_exit: IpAddr, cluster: ExitServer) -> bool {
     let last_exit = state.last_exit;
 
-    let instance_has_changed = !(last_exit.is_some()
-        && selected_exit.is_some()
-        && last_exit.unwrap() == selected_exit.unwrap());
+    let instance_has_changed = !(last_exit.is_some() && last_exit.unwrap() == selected_exit);
 
     let last_exit_details = state.last_exit_details;
     let exit_reg_has_changed =
@@ -574,7 +568,7 @@ mod tests {
         let mut last_states = LastExitStates::default();
 
         // An ip is selected and setup in last_states
-        let selected_exit = Some("fd00::2602".parse().unwrap());
+        let selected_exit = "fd00::2602".parse().unwrap();
 
         assert!(has_exit_changed(
             last_states.clone(),
