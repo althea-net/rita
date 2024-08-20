@@ -11,7 +11,7 @@
 //! 4.) Switch only if another exit has been considered better than our current exit for an extended period of time.
 //!
 //! See doc comment for 'set_best_exit' for a more detailed description of workflow
-use crate::exit_manager::{get_full_selected_exit, reset_exit_blacklist, set_selected_exit};
+use crate::exit_manager::{get_full_selected_exit, set_selected_exit};
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use althea_types::Identity;
@@ -23,8 +23,6 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::RwLock;
-
-use super::get_exit_blacklist;
 
 /// This is the number of metric entries we collect for exit data. Since every tick is 5 sec, and the minimum time we
 /// use an exit without swtiching is 15 mins, this values is 15 * 60/5
@@ -423,13 +421,6 @@ fn get_exit_metrics(
     let mut current_exit_metric = u16::MAX;
     let mut tracking_metric = u16::MAX;
 
-    // When all exits are blacklisted, reset the blacklist. Normally all exits in the subnet should not be blacklisted, however a false
-    // positive is possible when a working exit is unresponsive for a period of time and we blacklist it. When it comes back up, we are unable to
-    // connect to it thereby breaking the exit switching mechanism. When we detect this to be the case, we simply clear the entire black list and allow
-    // the rogue ip addrs to be added back into the blacklist
-    let mut all_exits_blacklisted = true;
-    let blacklisted = get_exit_blacklist();
-
     for ip in exit_list.clone() {
         // All babel routes are advertised as /128, so we check if each 'single' ip is part of exit subnet
         trace!(
@@ -446,59 +437,46 @@ fn get_exit_metrics(
         };
         let ip = route.prefix.ip();
 
-        if !blacklisted.contains(&ip) {
-            // Not all exits in subnet are blacklisted, so set bool
-            all_exits_blacklisted = false;
-
-            //Check to see if our current exit is down
-            //current route is down if:
-            // 1.) There is not selected_id in rita_exit server(we have not chosen an exit yet)
-            // 2.) Our exit ip doesnt exist in babel's routes
-            // 3.) Exit's route metric has gone to inf
-            if let Some(exit_ip) = current_exit_ip {
-                if exit_ip == ip && route.metric != u16::MAX {
-                    // Current exit metric is not inf and we have a path to exit, so current exit is up. The time intial_best_metric is
-                    // u16::MAX is on rita startup, meaning we have not setup the initial exit yet
-                    if initial_best_metric != u16::MAX {
-                        current_exit_down = false;
-                        current_exit_metric = if current_exit_metric > route.metric {
-                            route.metric
-                        } else {
-                            current_exit_metric
-                        };
-                    }
-                }
-            }
-            if let Some(tracking_ip) = tracking_exit {
-                if tracking_ip == ip && route.metric != u16::MAX {
-                    // We are currently tracking an exit, we set its metric. Since babel advertises several routes to an exit, we choose best one
-                    tracking_metric = if tracking_metric > route.metric {
+        //Check to see if our current exit is down
+        //current route is down if:
+        // 1.) There is not selected_id in rita_exit server(we have not chosen an exit yet)
+        // 2.) Our exit ip doesnt exist in babel's routes
+        // 3.) Exit's route metric has gone to inf
+        if let Some(exit_ip) = current_exit_ip {
+            if exit_ip == ip && route.metric != u16::MAX {
+                // Current exit metric is not inf and we have a path to exit, so current exit is up. The time intial_best_metric is
+                // u16::MAX is on rita startup, meaning we have not setup the initial exit yet
+                if initial_best_metric != u16::MAX {
+                    current_exit_down = false;
+                    current_exit_metric = if current_exit_metric > route.metric {
                         route.metric
                     } else {
-                        tracking_metric
+                        current_exit_metric
                     };
                 }
             }
-
-            info!("Metric for the IP: {} is {}", ip, route.metric);
-            // Set details for additional exits in the server
-            observe_cluster_metrics(exit_map, ip, route.metric);
-
-            // Every loop iteration, update the best exit
-            if route.metric < best_metric {
-                best_metric = route.metric;
-                best_exit = Some(ip);
+        }
+        if let Some(tracking_ip) = tracking_exit {
+            if tracking_ip == ip && route.metric != u16::MAX {
+                // We are currently tracking an exit, we set its metric. Since babel advertises several routes to an exit, we choose best one
+                tracking_metric = if tracking_metric > route.metric {
+                    route.metric
+                } else {
+                    tracking_metric
+                };
             }
         }
-    }
 
-    //If all exits blacklist, reset blacklist
-    if all_exits_blacklisted {
-        error!("All exits in subnet have been blacklisted, clearing blacklist");
-        drop(blacklisted);
-        reset_exit_blacklist();
-    }
+        info!("Metric for the IP: {} is {}", ip, route.metric);
+        // Set details for additional exits in the server
+        observe_cluster_metrics(exit_map, ip, route.metric);
 
+        // Every loop iteration, update the best exit
+        if route.metric < best_metric {
+            best_metric = route.metric;
+            best_exit = Some(ip);
+        }
+    }
     //If current exit is still up, we reset best exit with current exit, using our advertised metric values given that our current exit better
     if !current_exit_down && initial_best_metric < best_metric {
         best_metric = initial_best_metric;
@@ -741,9 +719,6 @@ mod tests {
     use ipnetwork::IpNetwork;
 
     use super::*;
-    use crate::exit_manager::{
-        reset_blacklist_warnings, ExitBlacklist, MAX_BLACKLIST_STRIKES, SELECTED_EXIT_DETAILS,
-    };
     use std::net::{IpAddr, Ipv4Addr};
 
     #[test]
@@ -1124,94 +1099,6 @@ mod tests {
             "\n\n\n\nNew Settings: {:#?}",
             settings.exit_client.bootstrapping_exits
         );
-    }
-
-    #[test]
-    fn test_blacklist_ip() {
-        use crate::exit_manager::blacklist_strike_ip;
-        use crate::exit_manager::WarningType;
-
-        let dummy = IpAddr::V4(Ipv4Addr::new(10, 1, 1, 1));
-        let list = get_exit_blacklist_test();
-        assert!(list.blacklisted_exits.is_empty());
-
-        blacklist_strike_ip(dummy, WarningType::HardWarning);
-        let list = get_exit_blacklist_test();
-        assert_eq!(list.blacklisted_exits.len(), 1);
-        assert!(list.potential_blacklists.is_empty());
-
-        let dummy = IpAddr::V4(Ipv4Addr::new(10, 2, 1, 1));
-        blacklist_strike_ip(dummy, WarningType::HardWarning);
-        let list = get_exit_blacklist_test();
-        assert_eq!(list.blacklisted_exits.len(), 2);
-        assert!(list.potential_blacklists.is_empty());
-
-        let dummy = IpAddr::V4(Ipv4Addr::new(10, 2, 4, 1));
-        blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        let list = get_exit_blacklist_test();
-        assert_eq!(list.blacklisted_exits.len(), 2);
-        assert_eq!(list.potential_blacklists.len(), 1);
-        assert_eq!(list.potential_blacklists.get(&dummy).cloned().unwrap(), 1);
-
-        for _ in 1..MAX_BLACKLIST_STRIKES {
-            blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        }
-
-        let list = get_exit_blacklist_test();
-        assert_eq!(list.blacklisted_exits.len(), 2);
-        assert_eq!(list.potential_blacklists.len(), 1);
-        assert_eq!(
-            list.potential_blacklists.get(&dummy).cloned().unwrap(),
-            MAX_BLACKLIST_STRIKES
-        );
-
-        blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        let list = get_exit_blacklist_test();
-        assert_eq!(list.blacklisted_exits.len(), 3);
-        assert!(list.potential_blacklists.is_empty());
-
-        // Test reset blacklist warning
-        let dummy = IpAddr::V4(Ipv4Addr::new(10, 2, 2, 10));
-        blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        let list = get_exit_blacklist_test();
-        assert_eq!(list.blacklisted_exits.len(), 3);
-        assert_eq!(list.potential_blacklists.len(), 1);
-        assert_eq!(list.potential_blacklists.get(&dummy).cloned().unwrap(), 2);
-
-        reset_blacklist_warnings(dummy);
-        let list = get_exit_blacklist_test();
-        assert_eq!(list.blacklisted_exits.len(), 3);
-        assert!(list.potential_blacklists.is_empty());
-
-        blacklist_strike_ip(dummy, WarningType::HardWarning);
-        let list = get_exit_blacklist_test();
-        assert_eq!(list.blacklisted_exits.len(), 4);
-
-        reset_blacklist_warnings(dummy);
-        let list = get_exit_blacklist_test();
-        assert_eq!(list.blacklisted_exits.len(), 3);
-        assert!(list.potential_blacklists.is_empty());
-
-        // Test reset complete blacklist
-        blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        let list = get_exit_blacklist_test();
-        assert_eq!(list.blacklisted_exits.len(), 3);
-        assert_eq!(list.potential_blacklists.len(), 1);
-
-        reset_exit_blacklist();
-        let list = get_exit_blacklist_test();
-        assert!(list.blacklisted_exits.is_empty());
-        assert!(list.potential_blacklists.is_empty());
-    }
-
-    /// This is set as separate function to avoid deadlocks
-    fn get_exit_blacklist_test() -> ExitBlacklist {
-        let reader = (SELECTED_EXIT_DETAILS.read().unwrap())
-            .exit_blacklist
-            .clone();
-        reader
     }
 
     /// Test that IpNetwork ip() function doesnt mask out non prefix bits
