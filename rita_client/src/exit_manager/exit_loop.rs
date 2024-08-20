@@ -225,7 +225,7 @@ pub fn start_exit_manager_loop() {
                                 }
                             }
                         }
-                    }
+                    
                         // code that manages requesting details to exits, run in parallel becuse they respond slowly
                         let mut general_requests = Vec::new();
                         let mut status_requests = Vec::new();
@@ -291,7 +291,7 @@ pub fn start_exit_manager_loop() {
                         }
                         info!("Exit Manager sleeping Done!");
                     }
-                });
+            }});
             })
             .join()
         } {
