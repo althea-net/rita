@@ -79,10 +79,11 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                     .route("/debts", web::get().to(get_debts))
                     .route("/debts/reset", web::post().to(reset_debt))
                     .route("/exits", web::get().to(get_exit_info))
-                    .route("/exits", web::post().to(add_exits))
-                    .route("/exits/{name}/register", web::post().to(register_to_exit))
-                    .route("/exits/{name}/reset", web::post().to(reset_exit))
-                    .route("/exits/{name}/select", web::post().to(select_exit))
+                    .route("/exit/register", web::post().to(register_to_exit))
+                    .route(
+                        "/exit/verify/{code}",
+                        web::post().to(verify_on_exit_with_code),
+                    )
                     .route(
                         "/extender_checkin",
                         web::post().to(extender_checkin_handler),
@@ -92,10 +93,6 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                     .route("/metric_factor", web::get().to(get_metric_factor))
                     .route("/metric_factor/{factor}", web::post().to(set_metric_factor))
                     .route("/lan_devices", web::get().to(get_devices_lan_endpoint))
-                    .route(
-                        "/exits/{name}/verify/{code}",
-                        web::post().to(verify_on_exit_with_code),
-                    )
                     .route("/info", web::get().to(get_own_info))
                     .route("/interfaces", web::get().to(get_interfaces_endpoint))
                     .route("/interfaces", web::post().to(set_interfaces_endpoint))

@@ -413,7 +413,6 @@ pub fn get_default_settings(
                     exit_id: exit_id.exit_id,
                     registration_port: exit.exit_network.exit_hello_port,
                     wg_exit_listen_port: exit.exit_network.wg_v2_tunnel_port,
-                    info: althea_types::ExitState::New,
                 },
             );
         }
@@ -471,12 +470,9 @@ pub fn althea_system_chain_exit(settings: RitaExitSettingsStruct) -> RitaExitSet
 }
 
 // Calls the register to exit rpc function within the provided namespace
-pub async fn register_to_exit(namespace_name: String, exit_name: String) -> StatusCode {
+pub async fn register_to_exit(namespace_name: String) -> StatusCode {
     // thread safe lock that allows us to pass data between the router thread and this thread
     // one copy of the reference is sent into the closure and the other is kept in this scope.
-    let exit_network = TEST_EXIT_DETAILS
-        .get(&exit_name)
-        .expect("Please provide a valid exit");
     let response: Arc<RwLock<Option<StatusCode>>> = Arc::new(RwLock::new(None));
     let response_local = response.clone();
     let namespace_local = namespace_name.clone();
@@ -489,23 +485,17 @@ pub async fn register_to_exit(namespace_name: String, exit_name: String) -> Stat
         runner.block_on(async move {
             let client = awc::Client::default();
             let req = client
-                .post(format!(
-                    "http://localhost:4877/exits/{}/select",
-                    exit_network.exit_id.mesh_ip
-                ))
+                .post("http://localhost:4877/exit/register")
                 .send()
                 .await
                 .expect("Failed to make request to rita RPC");
 
             if !req.status().is_success() {
-                panic!("Unable to select an appropriate exit to register to");
+                panic!("Exit registration failed with status: {:?}", req.status());
             }
 
             let req = client
-                .post(format!(
-                    "http://localhost:4877/exits/{}/verify/1111",
-                    exit_network.exit_id.mesh_ip
-                ))
+                .post(format!("http://localhost:4877/exit/verify/1111",))
                 .send()
                 .await
                 .expect("Failed to make request to rita RPC");
@@ -1120,7 +1110,7 @@ pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
         if let NodeType::Client { exit_name } = r.node_type.clone() {
             let start: Instant = Instant::now();
             loop {
-                let res = register_to_exit(r.get_name(), exit_name.clone()).await;
+                let res = register_to_exit(r.get_name()).await;
                 if res.is_success() {
                     break;
                 }

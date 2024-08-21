@@ -16,6 +16,7 @@
 use althea_kernel_interface::KI;
 use althea_types::ExitDetails;
 
+use althea_types::ExitState;
 use babel_monitor::parsing::get_installed_route;
 use babel_monitor::parsing::get_neigh_given_route;
 use babel_monitor::structs::BabelMonitorError;
@@ -152,11 +153,11 @@ fn send_udp_heartbeat() {
     let mut selected_exit_details: ExitDetails = dummy_selected_exit_details();
 
     if !cfg!(feature = "operator_debug") {
-        if let (Some(id), Some(exit)) = (
+        if let (Some(id), Some(_exit)) = (
             settings::get_rita_client().get_identity(),
             get_selected_exit_server(),
         ) {
-            let exit_info = exit.info;
+            let exit_info = get_exit_registration_state();
             match exit_info.general_details() {
                 Some(details) => {
                     our_id = id;
@@ -266,21 +267,24 @@ fn send_udp_heartbeat() {
 }
 
 fn get_selected_exit_route(route_dump: &[Route]) -> Result<Route, BabelMonitorError> {
-    let exit_mesh_ip = match get_current_exit() {
-        Some(a) => a,
-        None => return Err(BabelMonitorError::MiscStringError("No Exit".to_string())),
-    };
-
+    let exit_mesh_ip = get_current_exit();
     get_installed_route(&exit_mesh_ip, route_dump)
+}
+
+/// Each router selects an exit registration smart contract to register with, this function returns
+/// the current registration state of the router on that smart contract. Or more accurately the last known
+/// state since it has to be queried.
+pub fn get_exit_registration_state() -> ExitState {
+    settings::get_rita_client()
+        .exit_client
+        .registration_state
+        .clone()
 }
 
 pub fn get_selected_exit_server() -> Option<ExitServer> {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
-    let exit = match get_current_exit() {
-        Some(ip) => exit_client.bootstrapping_exits.get(&ip),
-        None => None,
-    };
+    let exit = exit_client.bootstrapping_exits.get(&get_current_exit());
 
     exit.cloned()
 }

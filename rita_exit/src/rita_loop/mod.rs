@@ -337,7 +337,6 @@ pub fn start_rita_exit_endpoints(workers: usize) {
                 App::new()
                     .route("/secure_setup", web::post().to(secure_setup_request))
                     .route("/secure_status", web::post().to(secure_status_request))
-                    .route("/exit_info", web::get().to(get_exit_info_http))
                     .route("/client_debt", web::post().to(get_client_debt))
                     .route("/time", web::get().to(get_exit_timestamp_http))
                     .route("/exit_list", web::post().to(get_exit_list))

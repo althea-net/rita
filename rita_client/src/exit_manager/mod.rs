@@ -21,6 +21,7 @@ pub mod exit_loop;
 pub mod exit_switcher;
 pub mod time_sync;
 
+use crate::heartbeat::get_exit_registration_state;
 use crate::heartbeat::get_selected_exit_server;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
@@ -32,7 +33,6 @@ use althea_types::exit_identity_to_id;
 use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
 use althea_types::ExitListV2;
-use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState};
 use babel_monitor::structs::Route;
@@ -42,7 +42,6 @@ use encryption::encrypt_exit_client_id;
 use ipnetwork::IpNetwork;
 use rita_common::KI;
 use settings::client::{ExitServer, SelectedExit};
-use settings::get_rita_client;
 use settings::set_rita_client;
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
@@ -95,12 +94,30 @@ pub fn set_exit_list(list: ExitListV2, em_state: &mut ExitManager) -> bool {
     false
 }
 
-pub fn get_current_exit() -> Option<IpAddr> {
-    SELECTED_EXIT_DETAILS
-        .read()
-        .unwrap()
-        .selected_exit
-        .selected_id
+/// Gets the currently selected exit, if none is selected returns the first exit from the bootstrapping list
+pub fn get_current_exit() -> IpAddr {
+    let selected_exit = SELECTED_EXIT_DETAILS.read().unwrap();
+    let ip = selected_exit.selected_exit.selected_id.clone();
+    drop(selected_exit);
+    if let Some(ip) = ip {
+        ip
+    } else {
+        let client_settings = settings::get_rita_client();
+        let exit = client_settings
+            .exit_client
+            .bootstrapping_exits
+            .iter()
+            .next()
+            .expect("No exits in bootstrapping list")
+            .1;
+        set_selected_exit(SelectedExit {
+            selected_id: Some(exit.exit_id.mesh_ip),
+            selected_id_metric: None,
+            selected_id_degradation: None,
+            tracking_exit: None,
+        });
+        exit.exit_id.mesh_ip
+    }
 }
 
 pub fn get_full_selected_exit() -> SelectedExit {
@@ -179,7 +196,6 @@ pub fn add_exits_to_exit_server_list(list: ExitListV2) {
             exit_id: exit_identity_to_id(e.clone()),
             registration_port: e.registration_port,
             wg_exit_listen_port: e.wg_exit_listen_port,
-            info: ExitState::New,
         });
     }
 
@@ -259,77 +275,74 @@ async fn send_exit_status_request(
 /// with our information.
 pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientError> {
     let client_settings = settings::get_rita_client();
+    let exit =
+        match get_selected_exit_server() {
+            Some(exit) => exit,
+            None => return Err(RitaClientError::MiscStringError(
+                "Not yet connected to any exit to setup, please check connectivity and try again"
+                    .to_string(),
+            )),
+        };
 
-    for (_, exit) in client_settings.exit_client.bootstrapping_exits {
-        match &exit.info {
-            ExitState::New { .. } | ExitState::Pending { .. } => {
-                let exit_pubkey = exit.exit_id.wg_public_key;
+    match client_settings.exit_client.registration_state {
+        ExitState::New { .. } | ExitState::Pending { .. } => {
+            let exit_pubkey = exit.exit_id.wg_public_key;
 
-                let mut reg_details: ExitRegistrationDetails =
-                    match client_settings.payment.contact_info {
-                        Some(val) => val.into(),
-                        None => {
-                            return Err(RitaClientError::MiscStringError(
-                                "No registration info set!".to_string(),
-                            ))
-                        }
-                    };
-
-                // Send a verification code if we have one
-                reg_details.phone_code = code;
-
-                let ident = ExitClientIdentity {
-                    global: match settings::get_rita_client().get_identity() {
-                        Some(id) => id,
-                        None => {
-                            return Err(RitaClientError::MiscStringError(
-                                "Identity has no mesh IP ready yet".to_string(),
-                            ));
-                        }
-                    },
-                    wg_port: DEFAULT_WG_LISTEN_PORT,
-                    reg_details,
+            let mut reg_details: ExitRegistrationDetails =
+                match client_settings.payment.contact_info {
+                    Some(val) => val.into(),
+                    None => {
+                        return Err(RitaClientError::MiscStringError(
+                            "No registration info set!".to_string(),
+                        ))
+                    }
                 };
 
-                let endpoint = SocketAddr::new(exit.exit_id.mesh_ip, exit.registration_port);
+            // Send a verification code if we have one
+            reg_details.phone_code = code;
 
-                info!(
-                    "sending exit setup request {:?} to {:?}, using {:?}",
-                    ident, exit, endpoint
-                );
+            let ident = ExitClientIdentity {
+                global: match settings::get_rita_client().get_identity() {
+                    Some(id) => id,
+                    None => {
+                        return Err(RitaClientError::MiscStringError(
+                            "Identity has no mesh IP ready yet".to_string(),
+                        ));
+                    }
+                },
+                wg_port: DEFAULT_WG_LISTEN_PORT,
+                reg_details,
+            };
 
-                let exit_response = send_exit_setup_request(exit_pubkey, endpoint, ident).await?;
+            let endpoint = SocketAddr::new(exit.exit_id.mesh_ip, exit.registration_port);
 
-                info!("Setting an exit setup response");
-                let mut rita_client = get_rita_client();
-                if let Some(exit_to_update) = rita_client
-                    .exit_client
-                    .bootstrapping_exits
-                    .get_mut(&exit.exit_id.mesh_ip)
-                {
-                    exit_to_update.info = exit_response;
-                } else {
-                    warn!("Could not find an exit we just queried?");
-                }
+            info!(
+                "sending exit setup request {:?} to {:?}, using {:?}",
+                ident, exit, endpoint
+            );
 
-                set_rita_client(rita_client);
-                return Ok(());
-            }
-            ExitState::Denied { message } => {
-                warn!(
-                    "Exit {} is in ExitState DENIED with {}, not able to be setup",
-                    exit.exit_id.mesh_ip, message
-                );
-            }
-            ExitState::Registered { .. } => {
-                warn!(
-                    "Exit {} already reports us as registered",
-                    exit.exit_id.mesh_ip
-                )
-            }
-            ExitState::GotInfo { .. } => {
-                warn!("This state should be removed for new clients and is kept around for backward compatibilty, how did we reach it?");
-            }
+            let exit_response = send_exit_setup_request(exit_pubkey, endpoint, ident).await?;
+
+            info!("Setting an exit setup response");
+            // we already have a loaded rita client settings above, but it could have been several seconds
+            // since we loaded above, better to load a new copy just in case
+            let mut client_settings = settings::get_rita_client();
+            client_settings.exit_client.registration_state = exit_response;
+            set_rita_client(client_settings);
+
+            return Ok(());
+        }
+        ExitState::Denied { message } => {
+            warn!(
+                "Exit {} is in ExitState DENIED with {}, not able to be setup",
+                exit.exit_id.mesh_ip, message
+            );
+        }
+        ExitState::Registered { .. } => {
+            warn!(
+                "Exit {} already reports us as registered",
+                exit.exit_id.mesh_ip
+            )
         }
     }
 
@@ -382,11 +395,7 @@ async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
 
     let exit_response = send_exit_status_request(exit_pubkey, &endpoint, ident).await?;
     let mut rita_client = settings::get_rita_client();
-    let current_exit = match rita_client.exit_client.bootstrapping_exits.get_mut(&exit) {
-        Some(exit_struct) => exit_struct,
-        None => return Err(RitaClientError::ExitNotFound(exit.to_string())),
-    };
-    current_exit.info = exit_response.clone();
+    rita_client.exit_client.registration_state = exit_response.clone();
     settings::set_rita_client(rita_client);
 
     trace!("Got exit status response {:?}", exit_response);
@@ -480,38 +489,10 @@ fn get_routes_hashmap(routes: Vec<Route>) -> HashMap<IpAddr, Route> {
     ret
 }
 
-/// Exits are ready to switch to when they are in the Registered State, we return list of exits that are
-pub fn get_ready_to_switch_exits(exit_list: ExitListV2) -> Vec<Identity> {
-    let exits = get_rita_client().exit_client.bootstrapping_exits;
-
-    let mut ret = vec![];
-    for exit in exit_list.exit_list {
-        match exits.get(&exit.mesh_ip) {
-            Some(server) => {
-                if let ExitState::Registered { .. } = server.info {
-                    ret.push(exit_identity_to_id(exit));
-                }
-            }
-            None => {
-                error!("Exit List logic error! All entries of exit list should be setup in config!")
-            }
-        }
-    }
-    ret
-}
-
 pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
-    let rita_settings = settings::get_rita_client();
-    let current_exit = get_current_exit();
-    if let Some(exit) = current_exit {
-        let exit_ser = rita_settings.exit_client.bootstrapping_exits.get(&exit);
-        if let Some(exit_ser) = exit_ser {
-            let exit_info = exit_ser.info.clone();
-
-            if let ExitState::Registered { our_details, .. } = exit_info {
-                return our_details.internet_ipv6_subnet;
-            }
-        }
+    let exit_info = get_exit_registration_state();
+    if let ExitState::Registered { our_details, .. } = exit_info {
+        return our_details.internet_ipv6_subnet;
     }
     None
 }
@@ -519,27 +500,30 @@ pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
 /// Verfies if exit has changed to reestablish wg tunnels
 /// 1.) When exit instance ip has changed
 /// 2.) Exit reg details have chaged
-pub fn has_exit_changed(state: LastExitStates, selected_exit: IpAddr, cluster: ExitServer) -> bool {
-    let last_exit = state.last_exit;
+pub fn has_exit_changed(
+    last_states: LastExitStates,
+    selected_exit: IpAddr,
+    current_reg_state: ExitState,
+) -> bool {
+    let last_exit = last_states.last_exit;
 
     let instance_has_changed = !(last_exit.is_some() && last_exit.unwrap() == selected_exit);
 
-    let last_exit_details = state.last_exit_details;
+    let last_exit_details = last_states.last_exit_details;
     let exit_reg_has_changed =
-        !(last_exit_details.is_some() && last_exit_details.unwrap() == cluster.info);
+        !(last_exit_details.is_some() && last_exit_details.unwrap() == current_reg_state);
 
     instance_has_changed | exit_reg_has_changed
 }
 
 #[cfg(test)]
 mod tests {
-    use althea_types::{ExitVerifMode, SystemChain};
-
     use super::*;
+    use althea_types::{ExitVerifMode, Identity, SystemChain};
 
     #[test]
     fn test_exit_has_changed() {
-        let mut exit_server = ExitServer {
+        let _exit_server = ExitServer {
             exit_id: Identity {
                 mesh_ip: "fd00::1337".parse().unwrap(),
                 eth_address: "0xd2C5b6dd6ca641BE4c90565b5d3DA34C14949A53"
@@ -553,9 +537,8 @@ mod tests {
 
             registration_port: 3452,
             wg_exit_listen_port: 59998,
-
-            info: ExitState::New,
         };
+        let mut exit_state = ExitState::New;
         let dummy_exit_details = ExitDetails {
             server_internal_ip: "172.0.0.1".parse().unwrap(),
             netmask: 0,
@@ -573,20 +556,20 @@ mod tests {
         assert!(has_exit_changed(
             last_states.clone(),
             selected_exit,
-            exit_server.clone()
+            exit_state.clone()
         ));
 
         // Last states get updated next tick
         last_states.last_exit = Some("fd00::2602".parse().unwrap());
-        last_states.last_exit_details = Some(exit_server.info.clone());
+        last_states.last_exit_details = Some(exit_state.clone());
         assert!(!has_exit_changed(
             last_states.clone(),
             selected_exit,
-            exit_server.clone()
+            exit_state.clone()
         ));
 
         // Registration Details change
-        exit_server.info = ExitState::Registered {
+        exit_state = ExitState::Registered {
             general_details: dummy_exit_details.clone(),
             our_details: ExitClientDetails {
                 client_internal_ip: "172.1.1.1".parse().unwrap(),
@@ -597,14 +580,14 @@ mod tests {
         assert!(has_exit_changed(
             last_states.clone(),
             selected_exit,
-            exit_server.clone()
+            exit_state.clone()
         ));
 
         // next tick last stats get updated accordingly
-        last_states.last_exit_details = Some(exit_server.info.clone());
+        last_states.last_exit_details = Some(exit_state.clone());
 
         // Registration detail for client change
-        exit_server.info = ExitState::Registered {
+        exit_state = ExitState::Registered {
             general_details: dummy_exit_details,
             our_details: ExitClientDetails {
                 client_internal_ip: "172.1.1.14".parse().unwrap(),
@@ -615,11 +598,11 @@ mod tests {
         assert!(has_exit_changed(
             last_states.clone(),
             selected_exit,
-            exit_server.clone()
+            exit_state.clone()
         ));
 
         // next tick its updated accordingly
-        last_states.last_exit_details = Some(exit_server.info.clone());
-        assert!(!has_exit_changed(last_states, selected_exit, exit_server));
+        last_states.last_exit_details = Some(exit_state.clone());
+        assert!(!has_exit_changed(last_states, selected_exit, exit_state));
     }
 }

@@ -108,10 +108,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<
             }),
 
             ExitSignupReturn::PendingRegistration => Ok(ExitState::Pending {
-                general_details: get_exit_info(),
-                message: "awaiting email verification".to_string(),
-                email_code: None,
-                phone_code: None,
+                message: "awaiting verification".to_string(),
             }),
             ExitSignupReturn::BadPhoneNumber => Ok(ExitState::Denied {
                 message: format!(

@@ -38,10 +38,6 @@ pub struct ExitServer {
     /// also used for all other exit lifecycle management api calls
     #[serde(default = "default_wg_listen_port")]
     pub wg_exit_listen_port: u16,
-
-    /// The registration state and other data about the exit
-    #[serde(default, flatten)]
-    pub info: ExitState,
 }
 
 fn default_registration_port() -> u16 {

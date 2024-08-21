@@ -131,7 +131,7 @@ pub async fn operator_update(
         cluster_name: None,
         // Hopefully ops fills this in
         instance_name: None,
-        instance_ip: get_current_exit(),
+        instance_ip: Some(get_current_exit()),
     });
 
     let exit_con = Some(ExitConnection {

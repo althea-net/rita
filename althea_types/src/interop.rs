@@ -135,13 +135,19 @@ impl Hash for ExitIdentity {
     }
 }
 
-pub fn exit_identity_to_id(exit_id: ExitIdentity) -> Identity {
-    Identity {
-        mesh_ip: exit_id.mesh_ip,
-        eth_address: exit_id.eth_addr,
-        wg_public_key: exit_id.wg_key,
-        nickname: None,
+impl From<ExitIdentity> for Identity {
+    fn from(exit_id: ExitIdentity) -> Identity {
+        Identity {
+            mesh_ip: exit_id.mesh_ip,
+            eth_address: exit_id.eth_addr,
+            wg_public_key: exit_id.wg_key,
+            nickname: None,
+        }
     }
+}
+
+pub fn exit_identity_to_id(exit_id: ExitIdentity) -> Identity {
+    exit_id.into()
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -275,20 +281,8 @@ pub enum ExitState {
     /// the default state of the struct in the config
     #[default]
     New,
-    /// we have successfully contacted the exit and gotten basic info. This is
-    /// kept around for backwards compatitbility, it should be removed once all clients are
-    /// updated
-    GotInfo {
-        general_details: ExitDetails,
-        message: String,
-    },
-    /// We are awaiting user action to enter the phone or email code
     Pending {
-        general_details: ExitDetails,
         message: String,
-        #[serde(default)]
-        email_code: Option<String>,
-        phone_code: Option<String>,
     },
     /// we are currently registered and operating, update this state
     /// incase the exit for example wants to assign us a new ip
@@ -298,20 +292,14 @@ pub enum ExitState {
         message: String,
     },
     /// we have been denied
-    Denied { message: String },
+    Denied {
+        message: String,
+    },
 }
 
 impl ExitState {
     pub fn general_details(&self) -> Option<&ExitDetails> {
         match *self {
-            ExitState::GotInfo {
-                ref general_details,
-                ..
-            } => Some(general_details),
-            ExitState::Pending {
-                ref general_details,
-                ..
-            } => Some(general_details),
             ExitState::Registered {
                 ref general_details,
                 ..
@@ -332,8 +320,7 @@ impl ExitState {
     pub fn message(&self) -> String {
         match *self {
             ExitState::New => "New exit".to_string(),
-            ExitState::GotInfo { ref message, .. } => message.clone(),
-            ExitState::Pending { ref message, .. } => message.clone(),
+            ExitState::Pending { ref message } => message.clone(),
             ExitState::Registered { ref message, .. } => message.clone(),
             ExitState::Denied { ref message, .. } => message.clone(),
         }
@@ -382,6 +369,12 @@ pub struct ExitList {
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitListV2 {
     pub exit_list: Vec<ExitIdentity>,
+}
+
+impl ExitListV2 {
+    pub fn into_identities(self) -> Vec<Identity> {
+        self.exit_list.into_iter().map(|exit| exit.into()).collect()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]

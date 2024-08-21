@@ -3,17 +3,16 @@ use super::{ExitManager, LastExitStates};
 use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
 use crate::exit_manager::{
     add_exits_to_exit_server_list, correct_default_route, exit_status_request, get_client_pub_ipv6,
-    get_current_exit, get_exit_list, get_full_selected_exit, get_ready_to_switch_exits,
-    get_routes_hashmap, has_exit_changed, linux_setup_exit_tunnel, remove_nat, restore_nat,
-    set_exit_list,
+    get_current_exit, get_exit_list, get_full_selected_exit, get_routes_hashmap, has_exit_changed,
+    linux_setup_exit_tunnel, remove_nat, restore_nat, set_exit_list,
 };
+use crate::heartbeat::get_exit_registration_state;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
 use althea_types::ExitState;
 use althea_types::{ExitDetails, ExitListV2};
 use babel_monitor::structs::Route;
-use futures::future::join_all;
-use futures::join;
+
 use rita_common::blockchain_oracle::low_balance;
 use rita_common::KI;
 use settings::client::ExitServer;
@@ -81,49 +80,48 @@ async fn exit_manager_loop(em_state: &mut ExitManager) {
     info!("Exit_Switcher: exit manager tick");
     let client_can_use_free_tier = { settings::get_rita_client().payment.client_can_use_free_tier };
     let rita_client = settings::get_rita_client();
-    let current_exit = get_current_exit();
+    let current_exit_ip = get_current_exit();
 
     let mut exits = rita_client.exit_client.bootstrapping_exits;
 
-    trace!("Current exit is {:?}", current_exit);
+    trace!("Current exit is {:?}", current_exit_ip);
 
-    if let Some(current_exit_id) = current_exit {
-        let exit_ser_ref = exits.get_mut(&current_exit_id);
+    let exit_ser_ref = exits.get_mut(&current_exit_ip);
 
-        // code that connects to the current exit server
-        info!("About to setup exit tunnel!");
-        if let Some(exit) = exit_ser_ref {
-            info!("We have selected an exit!, {:?}", exit.clone());
-            if let Some(general_details) = exit.clone().info.general_details() {
-                info!("We have details for the selected exit!");
-                let selected_exit = handle_exit_switching(em_state, current_exit_id).await;
+    // code that connects to the current exit server
+    info!("About to setup exit tunnel!");
+    if let Some(exit) = exit_ser_ref {
+        info!("We have selected an exit!, {:?}", exit.clone());
+        let registration_state = get_exit_registration_state();
+        if let Some(general_details) = registration_state.clone().general_details() {
+            info!("We have details for the selected exit!");
+            let selected_exit = handle_exit_switching(em_state, current_exit_ip).await;
 
-                info!("Exit_Switcher: After selecting best exit this tick, we have selected_exit_details: {:?}", get_full_selected_exit());
-                setup_exit_tunnel(
-                    exit,
-                    selected_exit,
-                    general_details,
-                    em_state.last_exit_state.clone(),
-                );
+            info!("Exit_Switcher: After selecting best exit this tick, we have selected_exit_details: {:?}", get_full_selected_exit());
+            setup_exit_tunnel(
+                exit,
+                selected_exit,
+                general_details,
+                em_state.last_exit_state.clone(),
+            );
 
-                // Set last state vairables
-                em_state.last_exit_state.last_exit = Some(selected_exit);
-                em_state.last_exit_state.last_exit_details = Some(exit.info.clone());
+            // Set last state vairables
+            em_state.last_exit_state.last_exit = Some(selected_exit);
+            em_state.last_exit_state.last_exit_details = Some(registration_state);
 
-                // check the exit's time and update locally if it's very different
-                maybe_set_local_to_exit_time(exit.clone()).await;
+            // check the exit's time and update locally if it's very different
+            maybe_set_local_to_exit_time(exit.clone()).await;
 
-                em_state.nat_setup = setup_nat(em_state.nat_setup, client_can_use_free_tier);
+            em_state.nat_setup = setup_nat(em_state.nat_setup, client_can_use_free_tier);
 
-                // run billing at all times when an exit is setup
-                run_exit_billing(general_details, exit).await;
-            }
+            // run billing at all times when an exit is setup
+            run_exit_billing(general_details, exit).await;
         }
-
-        handle_exit_status_request(em_state).await;
-
-        setup_ipv6_slaac();
     }
+
+    handle_exit_status_request(em_state).await;
+
+    setup_ipv6_slaac();
 }
 
 /// This function handles deciding if we need to switch exits, the new selected exit is returned. If no exit is selected, the current exit is returned.
@@ -158,10 +156,7 @@ async fn handle_exit_switching(em_state: &mut ExitManager, current_exit_id: IpAd
     let exit_list = em_state.exit_list.clone();
     info!("Exit_Switcher: Calling set best exit");
     trace!("Using exit list: {:?}", exit_list);
-    match set_best_exit(
-        get_ready_to_switch_exits(exit_list.clone()),
-        prep_babel_routes(),
-    ) {
+    match set_best_exit(exit_list.into_identities(), prep_babel_routes()) {
         Ok(a) => a,
         Err(e) => {
             error!("Exit_Switcher: Unable to select best exit: {:?}", e);
@@ -182,14 +177,16 @@ fn prep_babel_routes() -> HashMap<IpAddr, Route> {
 }
 
 fn setup_exit_tunnel(
-    exit: &ExitServer,
+    _exit: &ExitServer,
     selected_exit: IpAddr,
     general_details: &ExitDetails,
     last_exit_states: LastExitStates,
 ) -> bool {
     // Determine states to setup tunnels
-    let signed_up_for_exit = exit.info.our_details().is_some();
-    let exit_has_changed = has_exit_changed(last_exit_states, selected_exit, exit.clone());
+    let registration_state = get_exit_registration_state();
+    let exit_has_changed =
+        has_exit_changed(last_exit_states, selected_exit, registration_state.clone());
+    let signed_up_for_exit = registration_state.our_details();
 
     let default_route = match KI.get_default_route() {
         Ok(a) => a,
@@ -202,29 +199,29 @@ fn setup_exit_tunnel(
 
     info!("Reaches this part of the code: signed_up: {:?}, exit_has_changed: {:?}, correct_default_route {:?}", signed_up_for_exit, exit_has_changed, correct_default_route);
     match (signed_up_for_exit, exit_has_changed, correct_default_route) {
-        (true, true, _) => {
+        (Some(details), true, _) => {
             trace!("Exit change, setting up exit tunnel");
-            linux_setup_exit_tunnel(&general_details.clone(), exit.info.our_details().unwrap())
+            linux_setup_exit_tunnel(&general_details.clone(), details)
                 .expect("failure setting up exit tunnel");
             true
         }
-        (true, false, false) => {
+        (Some(details), false, false) => {
             trace!("DHCP overwrite setup exit tunnel again");
-            linux_setup_exit_tunnel(&general_details.clone(), exit.info.our_details().unwrap())
+            linux_setup_exit_tunnel(&general_details.clone(), details)
                 .expect("failure setting up exit tunnel");
             true
         }
-        (false, _, _) => {
+        (None, _, _) => {
             trace!("Not signed up for exit, not setting up exit tunnel");
             false
         }
         // no op case, nothing to do here
-        (true, false, true) => true,
+        (Some(_), false, true) => true,
     }
 }
 
 async fn run_exit_billing(general_details: &ExitDetails, exit: &ExitServer) {
-    if exit.info.our_details().is_none() {
+    if get_exit_registration_state().our_details().is_none() {
         return;
     }
 
@@ -289,47 +286,48 @@ fn setup_nat(nat_setup: bool, client_can_use_free_tier: bool) -> bool {
 }
 
 async fn handle_exit_status_request(em_state: &mut ExitManager) {
-    // code that manages requesting details to exits, run in parallel becuse they respond slowly
-    let mut general_requests = Vec::new();
-    let mut status_requests = Vec::new();
+    // code that manages requesting details, we make this query to a single exit in a cluster.
+    // as they will all have the same registration state, but different individual ip or other info
     let mut exit_status_requested = false;
-    let servers = { settings::get_rita_client().exit_client.bootstrapping_exits };
-    for (k, s) in servers {
-        match s.info {
-            // Once one exit is registered, this moves all exits from New -> Registered
-            // Giving us an internal ipv4 and ipv6 address for each exit in our config
-            ExitState::New { .. } => {
-                trace!("Exit {} is in state NEW, calling general details", k);
-                general_requests.push(exit_status_request(k))
-            }
-            // For routers that register normally, (not through ops), New -> Pending. In this state, we
-            // continue to query until we reach Registered
-            ExitState::Pending { .. } => {
-                trace!("Exit {} is in state Pending, calling status request", k);
-                status_requests.push(exit_status_request(k));
-            }
-            ExitState::Registered { .. } => {
-                trace!("Exit {} is in state Registered, calling status request", k);
-                // Make a status request every STATUS_REQUEST_QUERY seconds
-                if let Some(last_query) = em_state.last_status_request {
-                    if Instant::now() - last_query > STATUS_REQUEST_QUERY {
-                        exit_status_requested = true;
-                        status_requests.push(exit_status_request(k));
-                    }
-                } else {
+    let k = get_current_exit();
+    let registration_state = get_exit_registration_state();
+    match registration_state {
+        // Once one exit is registered, this moves all exits from New -> Registered
+        // Giving us an internal ipv4 and ipv6 address for each exit in our config
+        ExitState::New { .. } => {
+            trace!("Exit {} is in state NEW, calling general details", k);
+            let _ = exit_status_request(k).await;
+        }
+        // For routers that register normally, (not through ops), New -> Pending. In this state, we
+        // continue to query until we reach Registered
+        ExitState::Pending { .. } => {
+            trace!("Exit {} is in state Pending, calling status request", k);
+            let _ = exit_status_request(k).await;
+        }
+        ExitState::Registered { .. } => {
+            trace!("Exit {} is in state Registered, calling status request", k);
+            // Make a status request every STATUS_REQUEST_QUERY seconds
+            if let Some(last_query) = em_state.last_status_request {
+                if Instant::now() - last_query > STATUS_REQUEST_QUERY {
                     exit_status_requested = true;
-                    status_requests.push(exit_status_request(k));
+                    let _ = exit_status_request(k).await;
                 }
+            } else {
+                exit_status_requested = true;
+                let _ = exit_status_request(k).await;
             }
-            _ => {
-                trace!("Exit {} is in state {:?} calling status request", k, s.info);
-            }
+        }
+        _ => {
+            trace!(
+                "Exit {} is in state {:?} calling status request",
+                k,
+                registration_state
+            );
         }
     }
     if exit_status_requested {
         em_state.last_status_request = Some(Instant::now());
     }
-    join!(join_all(general_requests), join_all(status_requests));
 }
 
 fn setup_ipv6_slaac() {

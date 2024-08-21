@@ -1,21 +1,17 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
-use crate::exit_manager::{exit_setup_request, set_selected_exit};
+use crate::exit_manager::exit_setup_request;
 use crate::heartbeat::get_selected_exit_server;
 use crate::RitaClientError;
 use actix_web_async::http::StatusCode;
-use actix_web_async::{web::Json, web::Path, HttpRequest, HttpResponse};
+use actix_web_async::{web::Path, HttpRequest, HttpResponse};
 use althea_types::ExitState;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::parsing::do_we_have_route;
-
-use rita_common::RitaCommonError;
 use rita_common::KI;
-use settings::client::{ExitServer, SelectedExit};
-use settings::write_config;
+use settings::client::ExitServer;
 use std::collections::HashMap;
-use std::net::IpAddr;
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -42,9 +38,13 @@ fn is_selected(exit: &ExitServer, current_exit: Option<ExitServer>) -> bool {
 
 /// Determines if the provided exit is currently selected, if it's setup, and then if it can be reached over
 /// the exit tunnel via a ping
-fn is_tunnel_working(exit: &ExitServer, current_exit: Option<ExitServer>) -> bool {
+fn is_tunnel_working(
+    exit: &ExitServer,
+    current_exit: Option<ExitServer>,
+    exit_status: ExitState,
+) -> bool {
     match (current_exit.clone(), is_selected(exit, current_exit)) {
-        (Some(exit), true) => match exit.info.general_details() {
+        (Some(_exit), true) => match exit_status.general_details() {
             Some(details) => KI
                 .ping_check(
                     &details.server_internal_ip,
@@ -68,6 +68,7 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                     let mut output = Vec::new();
                     let rita_client = settings::get_rita_client();
                     let exit_client = rita_client.exit_client;
+                    let reg_state = exit_client.registration_state;
                     let current_exit = get_selected_exit_server();
 
                     for exit in exit_client.bootstrapping_exits.clone().into_iter() {
@@ -84,7 +85,9 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                             false
                         };
                         let tunnel_working = match (have_route, selected) {
-                            (true, true) => is_tunnel_working(&exit.1, current_exit.clone()),
+                            (true, true) => {
+                                is_tunnel_working(&exit.1, current_exit.clone(), reg_state.clone())
+                            }
                             _ => false,
                         };
 
@@ -108,24 +111,6 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
     }
 }
 
-pub async fn add_exits(new_exits: Json<HashMap<IpAddr, ExitServer>>) -> HttpResponse {
-    debug!("/exits POST hit with {:?}", new_exits);
-    let mut rita_client = settings::get_rita_client();
-    let mut exits = rita_client.exit_client.bootstrapping_exits;
-    exits.extend(new_exits.into_inner());
-
-    let copy = exits.clone();
-
-    rita_client.exit_client.bootstrapping_exits = exits;
-    trace!("Rita settings looks like : {:?}", rita_client);
-    settings::set_rita_client(rita_client);
-    if let Err(e) = write_config() {
-        error!("Failed to save new exits! {:?}", e);
-    }
-
-    HttpResponse::Ok().json(copy)
-}
-
 pub async fn get_exit_info(_req: HttpRequest) -> HttpResponse {
     debug!("Exit endpoint hit!");
     match dashboard_get_exit_info() {
@@ -134,83 +119,8 @@ pub async fn get_exit_info(_req: HttpRequest) -> HttpResponse {
     }
 }
 
-pub async fn reset_exit(path: Path<IpAddr>) -> HttpResponse {
-    let exit_name = path.into_inner();
-    debug!("/exits/{}/reset hit", exit_name);
-    let mut rita_client = settings::get_rita_client();
-
-    let mut exits = rita_client.exit_client.bootstrapping_exits;
-    let mut ret = HashMap::new();
-
-    if let Some(exit) = exits.get_mut(&exit_name) {
-        info!(
-            "Changing exit {:?} state to New, and deleting wg_exit tunnel",
-            exit_name
-        );
-        exit.info = ExitState::New;
-
-        if let Err(e) = KI.del_interface("wg_exit") {
-            error!("Failed to delete wg_exit {:?}", e)
-        };
-        rita_client.exit_client.bootstrapping_exits = exits;
-        settings::set_rita_client(rita_client);
-        let res = write_config();
-        if let Err(e) = res {
-            error!("Failed to save exit reset! {:?}", e);
-        }
-        HttpResponse::Ok().json(ret)
-    } else {
-        error!("Requested a reset on unknown exit {:?}", exit_name);
-        ret.insert(
-            "error".to_owned(),
-            format!("Requested reset on unknown exit {exit_name:?}"),
-        );
-
-        HttpResponse::build(StatusCode::BAD_REQUEST).json(ret)
-    }
-}
-
-pub async fn select_exit(path: Path<IpAddr>) -> HttpResponse {
-    let exit_name = path.into_inner();
-    debug!("/exits/{}/select hit", exit_name);
-
-    let mut rita_client = settings::get_rita_client();
-    let exit_client = rita_client.exit_client;
-    let mut ret = HashMap::new();
-
-    if exit_client.bootstrapping_exits.contains_key(&exit_name) {
-        info!("Selecting exit {:?}", exit_name);
-        set_selected_exit(SelectedExit {
-            selected_id: Some(exit_name),
-            selected_id_metric: None,
-            selected_id_degradation: None,
-            tracking_exit: None,
-        });
-        rita_client.exit_client = exit_client;
-        settings::set_rita_client(rita_client);
-
-        // try and save the config and fail if we can't
-        if let Err(e) = settings::write_config() {
-            HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                .json(format!("{:?}", RitaCommonError::SettingsError(e)));
-        }
-
-        HttpResponse::Ok().json(ret)
-    } else {
-        error!("Requested selection of an unknown exit {:?}", exit_name);
-        ret.insert(
-            "error".to_owned(),
-            format!("Requested selection of an unknown exit {exit_name:?}"),
-        );
-        HttpResponse::build(StatusCode::BAD_REQUEST).json(ret)
-    }
-}
-
-pub async fn register_to_exit(path: Path<String>) -> HttpResponse {
-    let exit_name = path.into_inner();
-    info!("/exits/{}/register hit", exit_name);
-
-    info!("Attempting to register on exit {:?}", exit_name);
+pub async fn register_to_exit() -> HttpResponse {
+    info!("/exit/register hit");
 
     let mut ret = HashMap::new();
     if let Err(e) = exit_setup_request(None).await {
@@ -222,9 +132,9 @@ pub async fn register_to_exit(path: Path<String>) -> HttpResponse {
     HttpResponse::Ok().json(ret)
 }
 
-pub async fn verify_on_exit_with_code(path: Path<(String, String)>) -> HttpResponse {
-    let (exit_name, code) = path.into_inner();
-    debug!("/exits/{}/verify/{} hit", exit_name, code);
+pub async fn verify_on_exit_with_code(path: Path<String>) -> HttpResponse {
+    let code = path.into_inner();
+    debug!("/exit/verify/{} hit", code);
 
     let mut ret = HashMap::new();
     if let Err(e) = exit_setup_request(Some(code)).await {

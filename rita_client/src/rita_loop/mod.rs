@@ -5,6 +5,7 @@
 //! tunnel if the signup was successful on the selected exit.
 
 use crate::exit_manager::get_current_exit;
+use crate::heartbeat::get_exit_registration_state;
 use crate::heartbeat::get_selected_exit_server;
 use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
@@ -179,13 +180,12 @@ fn check_for_gateway_client_billing_corner_case() {
 
     let neighbors = res;
     if let Some(exit) = exit_server {
-        if let ExitState::Registered { .. } = exit.info {
+        if let ExitState::Registered { .. } = get_exit_registration_state() {
             for neigh in neighbors {
                 info!("Neighbor is {:?}", neigh);
                 // we have a neighbor who is also our selected exit!
                 // wg_key excluded due to multihomed exits having a different one
-                let current_ip =
-                    get_current_exit().expect("If registered, there should be an exit ip here");
+                let current_ip = get_current_exit();
                 if neigh.identity.global.mesh_ip == current_ip
                     && neigh.identity.global.eth_address == exit.exit_id.eth_address
                 {

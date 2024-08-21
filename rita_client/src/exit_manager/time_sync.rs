@@ -15,7 +15,7 @@ const MAX_EXIT_TUNNEL_HANDSHAKE: Duration = Duration::from_secs(60 * 3);
 /// Retrieve a unix timestamp from the exit's mesh IPv6
 pub async fn get_exit_time(exit: ExitServer) -> Option<SystemTime> {
     info!("Getting the exit time");
-    let exit_ip = get_current_exit().expect("There should be an exit ip here");
+    let exit_ip = get_current_exit();
     let exit_port = exit.registration_port;
     let url = format!("http://[{exit_ip}]:{exit_port}/time");
 

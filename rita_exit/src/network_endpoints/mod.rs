@@ -1,7 +1,7 @@
 //! Network endpoints for rita-exit that are not dashboard or local infromational endpoints
 //! these are called by rita instances to operate the mesh
 
-use crate::database::{client_status, get_exit_info, signup_client};
+use crate::database::{client_status, signup_client};
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::DbClient;
 #[cfg(feature = "development")]
@@ -284,13 +284,6 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
         &valid_secret_key,
         their_nacl_pubkey,
     ))
-}
-
-pub async fn get_exit_info_http(_req: HttpRequest) -> HttpResponse {
-    HttpResponse::Ok().json(ExitState::GotInfo {
-        general_details: get_exit_info(),
-        message: "Got info successfully".to_string(),
-    })
 }
 
 pub async fn get_exit_timestamp_http(_req: HttpRequest) -> HttpResponse {

@@ -108,9 +108,7 @@ fn generate_neighbors_list(
         let neigh_route = maybe_route.unwrap();
 
         let exit_ip = get_current_exit();
-        let tup = (exit_ip, stats.get(&neigh_route.iface));
-        if let (Some(c_ip), Some(stats_entry)) = tup {
-            let exit_ip = c_ip;
+        if let Some(stats_entry) = stats.get(&neigh_route.iface) {
             let maybe_exit_route =
                 get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
 
