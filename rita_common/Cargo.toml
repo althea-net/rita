@@ -28,7 +28,7 @@ num256 = "0.5"
 num-traits = "0.2"
 bincode = "1.3"
 serde_cbor = "0.11"
-lazy_static = "1.4"
+lazy_static = "1.5"
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.8.0"}
 actix-web-async = { package="actix-web", version = "4.3", default-features = false, features= ["openssl"]}

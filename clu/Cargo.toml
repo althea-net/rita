@@ -8,7 +8,7 @@ edition = "2021"
 settings = { path = "../settings" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }
-lazy_static = "1.4"
+lazy_static = "1.5"
 log = "0.4"
 ipgen = "1.0.1"
 rand = "0.8"
