@@ -17,7 +17,7 @@ ipnetwork = "0.20"
 mac_address = "1.1.4"
 
 [dependencies.regex]
-version = "1.6"
+version = "1.10"
 default-features = false
 features = ["std"]
 

@@ -47,7 +47,7 @@ sha3 = "0.10"
 hex-literal = "0.4"
 
 [dependencies.regex]
-version = "1.6"
+version = "1.10"
 default-features = false
 features = ["std"]
 

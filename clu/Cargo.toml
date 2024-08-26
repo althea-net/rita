@@ -18,6 +18,6 @@ sodiumoxide = "0.2"
 deep_space = { workspace = true }
 
 [dependencies.regex]
-version = "1.5"
+version = "1.10"
 default-features = false
 features = ["std"]
