@@ -33,7 +33,6 @@ use rita_common::dashboard::babel::*;
 use rita_common::dashboard::backup_created::*;
 use rita_common::dashboard::contact_info::*;
 use rita_common::dashboard::debts::*;
-use rita_common::dashboard::development::*;
 use rita_common::dashboard::eth_private_key::*;
 use rita_common::dashboard::interfaces::*;
 use rita_common::dashboard::localization::*;
@@ -164,7 +163,6 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                         "/remote_access/{status}",
                         web::post().to(set_remote_access_status),
                     )
-                    .route("/wipe", web::post().to(wipe))
                     .route("/localization", web::get().to(get_localization))
                     .route(
                         "/installation_details",

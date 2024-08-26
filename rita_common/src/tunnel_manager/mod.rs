@@ -336,7 +336,10 @@ impl TunnelManager {
             for t in tl {
                 if !ports.insert(t.listen_port) {
                     // we panic here in tests so we can identify the issue
-                    if cfg!(test) || cfg!(feature = "integration_test") || cfg!(feature = "legacy_integration_test") {
+                    if cfg!(test)
+                        || cfg!(feature = "integration_test")
+                        || cfg!(feature = "legacy_integration_test")
+                    {
                         panic!("Found duplicate port in use by tunnel manager!?");
                     }
                 }

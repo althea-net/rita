@@ -10,7 +10,6 @@ use rita_common::dashboard::babel::*;
 use rita_common::dashboard::backup_created::*;
 use rita_common::dashboard::contact_info::*;
 use rita_common::dashboard::debts::*;
-use rita_common::dashboard::development::*;
 use rita_common::dashboard::eth_private_key::get_eth_private_key;
 use rita_common::dashboard::interfaces::*;
 use rita_common::dashboard::localization::*;
@@ -57,7 +56,6 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     .route("/settings", web::post().to(set_settings))
                     .route("/version", web::get().to(version))
                     .route("/wg_public_key", web::get().to(get_wg_public_key))
-                    .route("/wipe", web::post().to(wipe))
                     .route("/debts", web::get().to(get_debts))
                     .route("/debts/reset", web::post().to(reset_debt))
                     .route("/withdraw/{address}/{amount}", web::post().to(withdraw))

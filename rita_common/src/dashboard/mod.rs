@@ -7,7 +7,6 @@ pub mod babel;
 pub mod backup_created;
 pub mod contact_info;
 pub mod debts;
-pub mod development;
 pub mod eth_private_key;
 pub mod interfaces;
 pub mod localization;
