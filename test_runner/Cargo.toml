@@ -11,7 +11,7 @@ path = "src/main.rs"
 env_logger = "0.11"
 log = "0.4"
 docopt = "1.1"
-ctrlc = {version = "3.2.1", features = ["termination"]}
+ctrlc = {version = "3.4.5", features = ["termination"]}
 awc = {workspace = true}
 actix-rt = "2.8"
 integration_tests = { path = "../integration_tests" }
