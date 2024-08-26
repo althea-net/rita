@@ -173,9 +173,9 @@ impl Display for IpRoute {
                 ..
             }) => {
                 let mut out = if subnet == 32 {
-                    format!("{dst}")
+                    format!("{dst} ")
                 } else {
-                    format!("{dst}/{subnet}")
+                    format!("{dst}/{subnet} ")
                 };
                 if let Some(via) = via {
                     write!(out, "via {via} ").unwrap();

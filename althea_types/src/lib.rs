@@ -4,8 +4,10 @@ extern crate serde_derive;
 pub mod contact_info;
 pub mod error;
 pub mod interop;
+pub mod legacy;
 pub mod monitoring;
 pub mod user_info;
+pub mod websockets;
 pub mod wg_key;
 pub mod wifi_info;
 

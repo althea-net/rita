@@ -778,7 +778,7 @@ pub async fn vote_yes_with_retry(
     let res = res.unwrap();
     info!(
         "Voting yes on governance proposal costing {} gas",
-        res.gas_used
+        res.gas_used()
     );
 }
 
@@ -854,7 +854,7 @@ pub async fn execute_register_coin_proposal(
         )
         .await
         .unwrap();
-    info!("Gov proposal executed with {:?}", res.raw_log);
+    info!("Gov proposal executed with {:?}", res.raw_log());
 
     vote_yes_on_proposals(contact, keys, None).await;
     if wait {

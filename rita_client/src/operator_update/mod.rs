@@ -11,16 +11,24 @@ use crate::{
     RitaClientError,
 };
 use althea_kernel_interface::hardware_info::get_hardware_info;
-use althea_types::{get_sequence_num, UsageTrackerTransfer};
+use althea_types::websockets::{
+    OperatorAction, OperatorWebsocketMessage, PaymentAndNetworkSettings,
+};
+use althea_types::{
+    get_sequence_num, InstallationDetails, NeighborStatus, ShaperSettings, SystemChain,
+    UsageTrackerTransfer,
+};
 use althea_types::{
     AuthorizedKeys, BillingDetails, ContactStorage, ContactType, CurExitInfo, ExitConnection,
-    HardwareInfo, OperatorAction, OperatorCheckinMessage, OperatorUpdateMessage,
+    HardwareInfo,
 };
+use babel_monitor::structs::BabeldConfig;
+use clarity::Address;
 use num256::Uint256;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
-use rita_common::usage_tracker::structs::UsageType::{self, Client, Relay};
+use rita_common::usage_tracker::structs::UsageType::{Client, Relay};
 use rita_common::usage_tracker::{get_current_hour, get_current_throughput, get_usage_data_map};
 use rita_common::utils::option_convert;
 use rita_common::DROPBEAR_AUTHORIZED_KEYS;
@@ -30,11 +38,12 @@ use serde_json::Value;
 use settings::client::RitaClientSettings;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
+use settings::set_rita_client;
 use std::collections::{HashMap, HashSet};
 use std::fs::{remove_file, rename, File};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use updater::update_system;
 /// Things that you are not allowed to put into the merge json field of the OperatorUpdate,
 /// this mostly includes dangerous local things like eth private keys (erase money)
@@ -52,38 +61,61 @@ lazy_static! {
     static ref RITA_UPTIME: Instant = Instant::now();
 }
 
-/// Get the data to send to the operator server via websocket
-pub fn get_operator_checkin_data(
-    ops_last_seen_usage_hour: Option<u64>,
-) -> Result<OperatorCheckinMessage, RitaClientError> {
+pub fn get_operator_address() -> Option<Address> {
     let rita_client = settings::get_rita_client();
-    let id = rita_client.get_identity().unwrap();
-    let logging_enabled = rita_client.log.enabled;
     let operator_settings = rita_client.operator.clone();
-    let system_chain = rita_client.payment.system_chain;
-    let operator_address = operator_settings.operator_address;
-    let contact_info = option_convert(rita_client.exit_client.contact_info.clone());
-    let install_details = operator_settings.installation_details.clone();
-    let billing_details = operator_settings.billing_details;
-    let user_bandwidth_limit = rita_client.network.user_bandwidth_limit;
-
-    // if the user has disabled logging and has no operator configured we don't check in
-    // if the user configures an operator but has disabled logging then we assume they still
-    // want the operator to work properly and we will continue to checkin
-    if operator_address.is_none() && !logging_enabled {
-        info!("No Operator configured and logging disabled, not checking in!");
-        // return ok as this is not an error case
-        return Err(RitaClientError::MiscStringError(
-            "No Operator configured and logging disabled, not checking in!".to_string(),
-        ));
-    }
-
+    operator_settings.operator_address
+}
+pub fn get_system_chain() -> SystemChain {
+    let rita_client = settings::get_rita_client();
+    let payment = rita_client.payment;
+    payment.system_chain
+}
+pub fn get_exit_con() -> Option<ExitConnection> {
+    let rita_client = settings::get_rita_client();
+    let exit_client = rita_client.exit_client.clone();
+    // Get current exit info
+    let cur_cluster = exit_client.current_exit.clone();
+    let cur_exit = Some(CurExitInfo {
+        cluster_name: cur_cluster.clone(),
+        // Hopefully ops fills this in
+        instance_name: None,
+        instance_ip: match cur_cluster {
+            Some(a) => get_selected_exit_ip(a),
+            None => None,
+        },
+    });
+    Some(ExitConnection {
+        cur_exit,
+        client_pub_ipv6: get_client_pub_ipv6(),
+    })
+}
+pub fn get_neighbor_info() -> Vec<NeighborStatus> {
     let status = get_neighbor_status();
     let mut neighbor_info = Vec::new();
     for (_, status) in status {
         neighbor_info.push(status);
     }
-
+    neighbor_info
+}
+pub fn get_contact_info() -> Option<ContactType> {
+    let rita_client = settings::get_rita_client();
+    let exit_client = rita_client.exit_client;
+    option_convert(exit_client.contact_info)
+}
+pub fn get_install_details() -> Option<InstallationDetails> {
+    let rita_client = settings::get_rita_client();
+    let operator_settings = rita_client.operator;
+    operator_settings.installation_details
+}
+pub fn get_billing_details() -> Option<BillingDetails> {
+    let rita_client = settings::get_rita_client();
+    let operator_settings = rita_client.operator;
+    operator_settings.billing_details
+}
+pub fn get_hardware_info_update() -> Option<HardwareInfo> {
+    let rita_client = settings::get_rita_client();
+    let logging_enabled = rita_client.log.enabled;
     // disable hardware info sending if logging is disabled
     let hardware_info = match logging_enabled {
         true => match get_hardware_info(rita_client.network.device.clone()) {
@@ -97,104 +129,109 @@ pub fn get_operator_checkin_data(
     };
 
     hardware_info_logs(&hardware_info);
-
-    // Get current exit info
-    let cur_cluster = rita_client.exit_client.current_exit.clone();
-    let cur_exit = Some(CurExitInfo {
-        cluster_name: cur_cluster.clone(),
-        // Hopefully ops fills this in
-        instance_name: None,
-        instance_ip: match cur_cluster {
-            Some(a) => get_selected_exit_ip(a),
-            None => None,
-        },
-    });
-
-    let exit_con = Some(ExitConnection {
-        cur_exit,
-        client_pub_ipv6: get_client_pub_ipv6(),
-    });
-
-    let message = OperatorCheckinMessage {
-        id,
-        operator_address,
-        system_chain,
-        exit_con,
-        neighbor_info,
-        contact_info,
-        install_details,
-        billing_details,
-        hardware_info,
-        user_bandwidth_limit,
-        rita_uptime: RITA_UPTIME.elapsed(),
-        user_bandwidth_usage: None,
-        user_bandwidth_usage_v2: prepare_usage_data_for_upload(ops_last_seen_usage_hour)?,
-        client_mbps: get_current_throughput(UsageType::Client),
-        relay_mbps: get_current_throughput(UsageType::Relay),
-    };
-    Ok(message)
+    hardware_info
+}
+pub fn get_user_bandwidth_limit() -> Option<usize> {
+    let rita_client = settings::get_rita_client();
+    rita_client.network.user_bandwidth_limit
+}
+pub fn get_user_bandwidth_usage(
+    ops_last_seen_usage_hour: Option<u64>,
+) -> Option<UsageTrackerTransfer> {
+    prepare_usage_data_for_upload(ops_last_seen_usage_hour).unwrap_or(None)
+}
+pub fn get_client_mbps() -> Option<u64> {
+    get_current_throughput(Client)
+}
+pub fn get_relay_mbps() -> Option<u64> {
+    get_current_throughput(Relay)
+}
+pub fn get_rita_uptime() -> Duration {
+    RITA_UPTIME.elapsed()
 }
 
-/// Handle updates to settings received from operator server in OperatorUpdateMessage
-pub fn handle_operator_update(new_settings: OperatorUpdateMessage) -> Result<u64, RitaClientError> {
-    let rita_client = settings::get_rita_client();
-    let mut rita_client = rita_client;
-    let operator_settings = rita_client.operator.clone();
-    // a node is logically a gateway from a users perspective if it is directly connected to the
-    // exit as a mesh client, even if the is_gateway var mostly governs things related to WAN use.
-    // So we accept either of these conditions being true.
-    let is_gateway = is_gateway() || is_gateway_client();
+/// Handle updates to settings received from operator server in OperatorUpdateMessage, returns a None except when
+/// the ops_last_seen_usage_hour is updated, in which case it returns the new value.
+pub fn handle_operator_update(
+    new_settings: OperatorWebsocketMessage,
+) -> Result<Option<u64>, RitaClientError> {
+    // now we have to save settings after each action though
+    match new_settings {
+        OperatorWebsocketMessage::PaymentAndNetworkSettings(settings) => {
+            let mut rita_client = settings::get_rita_client();
+            let use_operator_price = rita_client.operator.use_operator_price
+                || rita_client.operator.force_use_operator_price;
+            // a node is logically a gateway from a users perspective if it is directly connected to the
+            // exit as a mesh client, even if the is_gateway var mostly governs things related to WAN use.
+            // So we accept either of these conditions being true.
+            let is_gateway = is_gateway() || is_gateway_client();
+            update_payment_and_network_settings(
+                &mut rita_client.payment,
+                &mut rita_client.network,
+                use_operator_price,
+                is_gateway,
+                settings,
+            );
+            set_rita_client(rita_client);
+        }
 
-    let update = check_contacts_update(
-        rita_client.exit_client.contact_info.clone(),
-        new_settings.contact_info.clone(),
-    );
-    if update {
-        rita_client.exit_client.contact_info = option_convert(new_settings.contact_info.clone());
-    }
-
-    let mut operator = rita_client.operator.clone();
-    if check_billing_update(
-        rita_client.operator.billing_details.clone(),
-        new_settings.billing_details.clone(),
-    ) {
-        operator.billing_details.clone_from(&new_settings.billing_details);
-    }
-
-    let use_operator_price = operator.use_operator_price || operator.force_use_operator_price;
-    let current_operator_fee = operator_settings.operator_fee;
-    let new_operator_fee = Uint256::from(new_settings.operator_fee);
-    if use_operator_price || new_operator_fee > current_operator_fee {
-        operator.operator_fee = new_operator_fee;
-    }
-    operator.installation_details = None;
-    rita_client.operator = operator;
-
-    trace!("Updating from operator settings");
-    update_payment_and_network_settings(
-        &mut rita_client.payment,
-        &mut rita_client.network,
-        use_operator_price,
-        is_gateway,
-        new_settings.clone(),
-    );
-    trace!("Done with payment");
-
-    // merge the new settings into the local settings
-    merge_settings_safely(&mut rita_client, new_settings.merge_json.clone());
-
-    // Every tick, update the local router update instructions
-    let update_instructions = match (
-        new_settings.local_update_instruction.clone(),
-        new_settings.local_update_instruction_v2.clone(),
-    ) {
-        (None, None) => None,
-        (Some(legacy), None) => Some(legacy.into()),
-        (_, Some(new)) => Some(new),
+        OperatorWebsocketMessage::OperatorFee(fee) => {
+            let mut rita_client = settings::get_rita_client();
+            let use_operator_price = rita_client.operator.use_operator_price
+                || rita_client.operator.force_use_operator_price;
+            let current_operator_fee = rita_client.operator.operator_fee;
+            let new_operator_fee = Uint256::from(fee);
+            if use_operator_price || new_operator_fee > current_operator_fee {
+                rita_client.operator.operator_fee = new_operator_fee;
+                set_rita_client(rita_client);
+            }
+        }
+        OperatorWebsocketMessage::MergeJson(json) => {
+            let mut rita_client = settings::get_rita_client();
+            // merge the new settings into the local settings
+            merge_settings_safely(&mut rita_client, json);
+            set_rita_client(rita_client);
+        }
+        OperatorWebsocketMessage::OperatorAction(action) => perform_operator_action(action),
+        OperatorWebsocketMessage::LocalUpdateInstruction(update_instructions) => {
+            set_router_update_instruction(update_instructions);
+        }
+        OperatorWebsocketMessage::ShaperSettings(settings) => {
+            apply_shaper_settings_update(settings)
+        }
+        OperatorWebsocketMessage::BabeldSettings(settings) => {
+            apply_babeld_settings_update(settings)
+        }
+        OperatorWebsocketMessage::ContactInfo(info) => {
+            let mut rita_client = settings::get_rita_client();
+            let update = check_contacts_update(
+                rita_client.exit_client.contact_info.clone(),
+                Some(info.clone()),
+            );
+            if update {
+                rita_client.exit_client.contact_info = option_convert(Some(info));
+            }
+            set_rita_client(rita_client);
+        }
+        OperatorWebsocketMessage::BillingDetails(details) => {
+            let mut rita_client = settings::get_rita_client();
+            rita_client.operator.installation_details = None;
+            if check_billing_update(
+                rita_client.operator.billing_details.clone(),
+                Some(details.clone()),
+            ) {
+                rita_client
+                    .operator
+                    .billing_details
+                    .clone_from(&Some(details));
+                set_rita_client(rita_client);
+            }
+        }
+        OperatorWebsocketMessage::OpsLastSeenUsageHour(hour) => {
+            return Ok(Some(hour));
+        }
     };
-    set_router_update_instruction(update_instructions);
-    perform_operator_action(new_settings.clone(), rita_client);
-    Ok(new_settings.ops_last_seen_usage_hour)
+    Ok(None)
 }
 
 /// logs some hardware info that may help debug this router
@@ -226,28 +263,26 @@ fn hardware_info_logs(info: &Option<HardwareInfo>) {
 }
 
 /// checks the operatoraction and performs it, if any.
-fn perform_operator_action(
-    new_settings: OperatorUpdateMessage,
-    mut rita_client: RitaClientSettings,
-) {
-    match new_settings.operator_action {
-        Some(OperatorAction::ResetShaper) => flag_reset_shaper(),
-        Some(OperatorAction::Reboot) => {
+fn perform_operator_action(action: OperatorAction) {
+    let mut rita_client = settings::get_rita_client();
+    match action {
+        OperatorAction::ResetShaper => flag_reset_shaper(),
+        OperatorAction::Reboot => {
             let _res = KI.run_command("reboot", &[]);
         }
-        Some(OperatorAction::SoftReboot) => {
+        OperatorAction::SoftReboot => {
             let args = vec!["restart"];
             if let Err(e) = KI.run_command("/etc/init.d/rita", &args) {
                 error!("Unable to restart rita after opkg update: {}", e)
             }
         }
-        Some(OperatorAction::ResetRouterPassword) => {
+        OperatorAction::ResetRouterPassword => {
             rita_client.network.rita_dashboard_password = None;
         }
-        Some(OperatorAction::ResetWiFiPassword) => {
+        OperatorAction::ResetWiFiPassword => {
             let _res = reset_wifi_pass();
         }
-        Some(OperatorAction::SetWifi { token }) => {
+        OperatorAction::SetWifi { token } => {
             info!("Received an action to set wifi info! {:?}", token);
             let res = set_wifi_multi_internal(token);
             info!(
@@ -256,18 +291,10 @@ fn perform_operator_action(
                 res.body()
             );
         }
-        Some(OperatorAction::ChangeOperatorAddress { new_address }) => {
+        OperatorAction::ChangeOperatorAddress { new_address } => {
             rita_client.operator.operator_address = new_address;
         }
-        Some(OperatorAction::UpdateV2 { instruction }) => {
-            info!(
-                "Received an update command from op tools! The instruction is {:?}",
-                instruction
-            );
-            let res = update_system(instruction);
-            info!("Update command result is {:?}", res);
-        }
-        Some(OperatorAction::Update { instruction }) => {
+        OperatorAction::Update { instruction } => {
             info!(
                 "Received a legacy update command from op tools! The instruction is {:?}",
                 instruction
@@ -275,42 +302,56 @@ fn perform_operator_action(
             let res = update_system(instruction.into());
             info!("Update command result is {:?}", res);
         }
-        Some(OperatorAction::SetMinGas { new_min_gas }) => {
+        OperatorAction::UpdateV2 { instruction } => {
+            info!(
+                "Received an update command from op tools! The instruction is {:?}",
+                instruction
+            );
+            let res = update_system(instruction);
+            info!("Update command result is {:?}", res);
+        }
+        OperatorAction::SetMinGas { new_min_gas } => {
             info!(
                 "Updated min gas from {} to {}",
                 rita_client.payment.min_gas, new_min_gas
             );
             rita_client.payment.min_gas = new_min_gas;
         }
-        Some(OperatorAction::UpdateAuthorizedKeys {
+        OperatorAction::UpdateAuthorizedKeys {
             add_list,
             drop_list,
-        }) => {
+        } => {
             let key_file = DROPBEAR_AUTHORIZED_KEYS;
             info!("Updating auth_keys {:?}", key_file);
             let res = update_authorized_keys(add_list, drop_list, key_file);
             info!("Update auth_keys result is  {:?}", res);
         }
-        None => {}
-    }
-    if let Some(shaper_settings) = new_settings.shaper_settings {
-        rita_client.network.shaper_settings = shaper_settings;
-    }
-    if let Some(babeld_settings) = new_settings.babeld_settings {
-        // copy off the price and metric factor, which are stored in this object logically in local
-        // settings but we do not wish to update from the ops side, we have specific fields (and user opt outs)
-        // for these values elsewhere in the operator update flow
-        let price = rita_client.network.babeld_settings.local_fee;
-        let metric_factor = rita_client.network.babeld_settings.metric_factor;
-
-        rita_client.network.babeld_settings = babeld_settings;
-
-        // set the price and metric factor back to their original values
-        rita_client.network.babeld_settings.local_fee = price;
-        rita_client.network.babeld_settings.metric_factor = metric_factor;
     }
     settings::set_rita_client(rita_client);
     info!("Successfully completed OperatorUpdate");
+}
+
+/// applies new shaper settings, called from an operator websocket message
+pub fn apply_shaper_settings_update(shaper_settings: ShaperSettings) {
+    let mut rita_client = settings::get_rita_client();
+    rita_client.network.shaper_settings = shaper_settings;
+    settings::set_rita_client(rita_client);
+}
+
+pub fn apply_babeld_settings_update(babeld_settings: BabeldConfig) {
+    let mut rita_client = settings::get_rita_client();
+    // copy off the price and metric factor, which are stored in this object logically in local
+    // settings but we do not wish to update from the ops side, we have specific fields (and user opt outs)
+    // for these values elsewhere in the operator update flow
+    let price = rita_client.network.babeld_settings.local_fee;
+    let metric_factor = rita_client.network.babeld_settings.metric_factor;
+
+    rita_client.network.babeld_settings = babeld_settings;
+
+    // set the price and metric factor back to their original values
+    rita_client.network.babeld_settings.local_fee = price;
+    rita_client.network.babeld_settings.metric_factor = metric_factor;
+    settings::set_rita_client(rita_client);
 }
 
 // cycles in/out ssh pubkeys for recovery access
@@ -437,7 +478,7 @@ fn update_payment_and_network_settings(
     network: &mut NetworkSettings,
     use_operator_price: bool,
     is_gateway: bool,
-    new_settings: OperatorUpdateMessage,
+    new_settings: PaymentAndNetworkSettings,
 ) {
     if use_operator_price {
         // This will be true on devices that have integrated switches
