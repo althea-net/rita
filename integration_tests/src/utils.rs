@@ -495,7 +495,7 @@ pub async fn register_to_exit(namespace_name: String) -> StatusCode {
             }
 
             let req = client
-                .post(format!("http://localhost:4877/exit/verify/1111",))
+                .post("http://localhost:4877/exit/verify/1111".to_string())
                 .send()
                 .await
                 .expect("Failed to make request to rita RPC");

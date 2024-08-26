@@ -97,7 +97,7 @@ pub fn set_exit_list(list: ExitListV2, em_state: &mut ExitManager) -> bool {
 /// Gets the currently selected exit, if none is selected returns the first exit from the bootstrapping list
 pub fn get_current_exit() -> IpAddr {
     let selected_exit = SELECTED_EXIT_DETAILS.read().unwrap();
-    let ip = selected_exit.selected_exit.selected_id.clone();
+    let ip = selected_exit.selected_exit.selected_id;
     drop(selected_exit);
     if let Some(ip) = ip {
         ip
