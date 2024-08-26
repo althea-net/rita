@@ -38,7 +38,7 @@ web30 = {workspace = true}
 althea_types = { path = "../althea_types" }
 deep_space = {workspace = true}
 prost-types ="0.12"
-cosmos-sdk-proto-althea = {package = "cosmos-sdk-proto-althea", version = "0.16", features = ["ethermint"]} 
+cosmos-sdk-proto-althea = {package = "cosmos-sdk-proto-althea", version = "0.17", features = ["ethermint"]} 
 althea_proto = {workspace = true}
 crossbeam = "0.8"
 phonenumber = "0.3.5"

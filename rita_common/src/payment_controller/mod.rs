@@ -316,9 +316,9 @@ async fn make_althea_payment(
     // setup tx hash
     info!(
         "Making payment with txid {} that will be converted to hex",
-        transaction.txhash
+        transaction.txhash()
     );
-    let pmt = pmt.publish(Uint256::from_str_radix(&transaction.txhash, 16).unwrap());
+    let pmt = pmt.publish(Uint256::from_str_radix(&transaction.txhash(), 16).unwrap());
 
     let retry = send_make_payment_endpoints(
         pmt,

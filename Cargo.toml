@@ -42,4 +42,4 @@ deep_space = {version = "2.24", features = ["althea"], default-features=false}
 web30 = "1.2"
 clarity = "1.3"
 awc = {version = "3.2", default-features = false, features=["openssl", "compress-gzip", "compress-zstd"]}
-althea_proto = "0.7"
+althea_proto = "0.8"
