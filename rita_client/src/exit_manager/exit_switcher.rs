@@ -11,43 +11,28 @@
 //! 4.) Switch only if another exit has been considered better than our current exit for an extended period of time.
 //!
 //! See doc comment for 'set_best_exit' for a more detailed description of workflow
+use super::ExitManager;
 use crate::exit_manager::{get_full_selected_exit, set_selected_exit};
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use althea_types::Identity;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
-use rita_common::FAST_LOOP_SPEED;
 use settings::client::ExitSwitchingCode;
 use settings::client::SelectedExit;
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::Arc;
-use std::sync::RwLock;
-
-/// This is the number of metric entries we collect for exit data. Since every tick is 5 sec, and the minimum time we
-/// use an exit without swtiching is 15 mins, this values is 15 * 60/5
-const METRIC_ENTRIES: usize = (15 * 60) / (FAST_LOOP_SPEED.as_secs() as usize);
 
 /// This is the threshold we use to ensure that a tracking exit is worth switching to. The average
 /// metric of a tracking exit of a period of 15 mins needs be atleast 50% better than our current exit
 /// to be considered as an exit to switch to
 const FLAPPING_THRESH: f64 = 0.5;
 
-lazy_static! {
-    /// This lazy static tracks metric values of the exit that we potentially consider switching to during every tick.
-    /// To switch, this vector needs to be full of values from a single exit.
-    pub static ref METRIC_VALUES: Arc<RwLock<Vec<u16>>> =
-        Arc::new(RwLock::new(Vec::with_capacity(METRIC_ENTRIES)));
-
-    pub static ref EXIT_TRACKER: Arc<RwLock<HashMap<IpAddr, ExitTracker>>> = Arc::new(RwLock::new(HashMap::new()));
-}
-
 /// This struct contains information about each exit in the cluster. It stores a running total of metric values. This is used to
 /// calculate the average metric, and this value wont overflow since we track metric values for no more than 15 mins.
 /// Since babel advertises several routes to a given exit, we need to find the route with the best metric and add it to this total. Last_added_metric
 /// helps with this by keeping track of what we previosly added to running_total, so that if we come across a better metric to the exit, we
 /// subtract this from the total and add the new better value.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone, Copy, Hash)]
 pub struct ExitTracker {
     last_added_metric: u16,
     running_total: u64,
@@ -194,6 +179,7 @@ impl From<ExitMetrics>
 ///
 /// Look at the enum 'ExitSwitchingCode' to see all state and function 'update_metric_value' to see when these are triggered.
 pub fn set_best_exit(
+    em_state: &mut ExitManager,
     exit_list: Vec<Identity>,
     route_hashmap: HashMap<IpAddr, Route>,
 ) -> Result<IpAddr, RitaClientError> {
@@ -212,7 +198,7 @@ pub fn set_best_exit(
     // Retrieve current exit ip, if connected
     let current_exit_ip: Option<IpAddr> = full_selected_exit.selected_id;
 
-    let exit_map = &mut *EXIT_TRACKER.write().unwrap();
+    let exit_map = &mut em_state.exit_tracker;
 
     // Parse all babel routes and find useful metrics
     let exit_metrics = get_exit_metrics(
@@ -239,7 +225,7 @@ pub fn set_best_exit(
     );
 
     // update lazy static metric and retrieve exit code
-    let metric_vec = &mut *METRIC_VALUES.write().unwrap();
+    let metric_vec = &mut em_state.metric_values;
     let exit_code = update_metric_value(exit_metrics, metric_vec, exit_map);
 
     info!(

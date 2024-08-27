@@ -39,6 +39,7 @@ use babel_monitor::structs::Route;
 use encryption::decrypt_exit_list;
 use encryption::decrypt_exit_state;
 use encryption::encrypt_exit_client_id;
+use exit_switcher::ExitTracker;
 use ipnetwork::IpNetwork;
 use rita_common::KI;
 use settings::client::{ExitServer, SelectedExit};
@@ -81,6 +82,10 @@ pub struct ExitManager {
     /// Store last exit here, when we see an exit change, we reset wg tunnels
     pub last_exit_state: LastExitStates,
     pub last_status_request: Option<Instant>,
+    /// This tracks metric values of the exit that we potentially consider switching to during every tick.
+    /// To switch, this vector needs to be full of values from a single exit.
+    pub metric_values: Vec<u16>,
+    pub exit_tracker: HashMap<IpAddr, ExitTracker>,
 }
 
 /// This functions sets the exit list ONLY IF the list arguments provived is not empty. This is need for the following edge case:

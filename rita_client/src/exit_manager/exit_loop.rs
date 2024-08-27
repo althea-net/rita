@@ -155,7 +155,7 @@ async fn handle_exit_switching(em_state: &mut ExitManager, current_exit_id: IpAd
     let exit_list = em_state.exit_list.clone();
     info!("Exit_Switcher: Calling set best exit");
     trace!("Using exit list: {:?}", exit_list);
-    match set_best_exit(exit_list.into_identities(), prep_babel_routes()) {
+    match set_best_exit(em_state, exit_list.into_identities(), prep_babel_routes()) {
         Ok(a) => a,
         Err(e) => {
             error!("Exit_Switcher: Unable to select best exit: {:?}", e);
