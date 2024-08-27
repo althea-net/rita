@@ -1087,20 +1087,6 @@ mod tests {
         assert_eq!(b_e_m, 200);
     }
 
-    #[ignore]
-    #[test]
-    fn test_config_update() {
-        use settings::client::RitaClientSettings;
-
-        let path = "./src/exit_manager/config_in_use.toml".to_string();
-        let settings = RitaClientSettings::new(&path).unwrap();
-
-        println!(
-            "\n\n\n\nNew Settings: {:#?}",
-            settings.exit_client.bootstrapping_exits
-        );
-    }
-
     /// Test that IpNetwork ip() function doesnt mask out non prefix bits
     #[test]
     fn test_ipnetwork_ip() {
