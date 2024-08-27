@@ -143,6 +143,11 @@ pub async fn run_debts_test() {
         // For each neighbor pair in path, validate their debts and make sure they are opposite
         // and close to each other
         let mut weight_left = path_weight;
+        info!(
+            "Testing between nodes {:?} and {:?}",
+            from_node.get_name(),
+            to_node.clone()
+        );
         for (from_neigh, to_neigh) in neigh_pairs {
             validate_debt_increase(
                 from_neigh.clone(),
@@ -155,6 +160,7 @@ pub async fn run_debts_test() {
 
             weight_left -= to_neigh.cost
         }
+        info!("Testing exit node debts for node {}", from_node.get_name());
 
         // special case for exit, validate from_node and exits debts are incremented accordingly
         if to_node.is_none() {
@@ -273,15 +279,15 @@ pub fn validate_debt_increase(
     let actual_debt_to = debt_entry.payment_details.debt - existing_debt_entry.payment_details.debt;
     let expected_debt_to = bytes_per_gb * data_sent.into() * weight.into() * Int256::from(-1i32);
     info!(
-        "debt now is {:?}, expected is {:?}",
+        "Debut after traffic {:?}, Debt before traffic {:?}",
         debt_entry.payment_details.debt, existing_debt_entry.payment_details.debt
     );
-    // Expected and actual debt should be within 75% accurate
+    // Expected and actual debt should be within DEBT_ACCURACY_THRES accurate
     info!(
         "Actual: {} and expected: {}",
         actual_debt_to, expected_debt_to
     );
-    // Expected and actual debt should be within 75% accurate
+    // Expected and actual debt should be within DEBT_ACCURACY_THRES accurate
     let margin = ((actual_debt_to - expected_debt_to) * 100u8.into()) / expected_debt_to;
     assert!(margin.abs() < DEBT_ACCURACY_THRES.into());
 
