@@ -308,7 +308,7 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
     let ret: ExitList = ExitList {
         exit_list: match get_exits_list(&contact, our_addr, contract_addr).await {
             Ok(a) => {
-                let exit_regions = rita_exit.network.allowed_countries;
+                let exit_regions = rita_exit.exit_network.allowed_countries;
 
                 // only one payment type can be accepted for now, but this structure allows for
                 // multiple payment types in the future

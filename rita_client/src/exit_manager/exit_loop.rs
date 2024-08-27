@@ -1,6 +1,6 @@
-use super::exit_switcher::{get_babel_routes, set_best_exit};
-use super::utils::get_routes_hashmap;
-use super::{ExitManager, LastExitStates};
+use super::utils::get_babel_routes;
+use super::{get_current_exit, ExitManager, LastExitStates};
+use crate::exit_manager::exit_selector::select_best_exit;
 use crate::exit_manager::requests::exit_status_request;
 use crate::exit_manager::requests::get_exit_list;
 use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
@@ -8,24 +8,19 @@ use crate::exit_manager::utils::{
     add_exits_to_exit_server_list, correct_default_route, get_client_pub_ipv6, has_exit_changed,
     linux_setup_exit_tunnel, remove_nat, restore_nat,
 };
-use crate::exit_manager::{get_current_exit, get_full_selected_exit, set_exit_list};
+use crate::exit_manager::{get_current_exit_ip, set_exit_list};
 use crate::heartbeat::get_exit_registration_state;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
-use althea_types::ExitState;
 use althea_types::{ExitDetails, ExitListV2};
-use babel_monitor::structs::Route;
-
+use althea_types::{ExitIdentity, ExitState};
 use rita_common::blockchain_oracle::low_balance;
 use rita_common::KI;
-use settings::client::ExitServer;
-
-use std::collections::HashMap;
 use std::net::IpAddr;
 use std::thread;
 use std::time::{Duration, Instant};
 
-const EXIT_LOOP_SPEED: Duration = Duration::from_secs(5);
+pub const EXIT_LOOP_SPEED: Duration = Duration::from_secs(5);
 /// How often we make a exit status request for registered exits. Prevents us from bogging up exit processing
 /// power
 const STATUS_REQUEST_QUERY: Duration = Duration::from_secs(600);
@@ -40,14 +35,15 @@ pub fn start_exit_manager_loop() {
         while let Err(e) = {
             thread::spawn(move || {
                 // Our Exit state variable
-                let em_state = &mut ExitManager::default();
+                let em_state = &mut ExitManager::new(get_current_exit());
+                let babel_port = settings::get_rita_client().network.babel_port;
                 let runner = AsyncSystem::new();
 
                 runner.block_on(async move {
                     loop {
                         let start = Instant::now();
 
-                        exit_manager_loop(em_state).await;
+                        exit_manager_loop(em_state, babel_port).await;
 
                         // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
                         // if it has been more than FAST_LOOP_SPEED seconds from start, go right ahead
@@ -79,11 +75,11 @@ pub fn start_exit_manager_loop() {
 }
 
 /// This function manages the lifecycle of exits, including updating our registration states, querying exit debts, and setting up exit tunnels.
-async fn exit_manager_loop(em_state: &mut ExitManager) {
+async fn exit_manager_loop(em_state: &mut ExitManager, babel_port: u16) {
     info!("Exit_Switcher: exit manager tick");
     let client_can_use_free_tier = { settings::get_rita_client().payment.client_can_use_free_tier };
     let rita_client = settings::get_rita_client();
-    let current_exit_ip = get_current_exit();
+    let current_exit_ip = get_current_exit_ip();
 
     let mut exits = rita_client.exit_client.bootstrapping_exits;
 
@@ -98,18 +94,21 @@ async fn exit_manager_loop(em_state: &mut ExitManager) {
         let registration_state = get_exit_registration_state();
         if let Some(general_details) = registration_state.clone().general_details() {
             info!("We have details for the selected exit!");
-            let selected_exit = handle_exit_switching(em_state, current_exit_ip).await;
+            // TODO setup exit using old selected exit the first run, of the loop, right now we force a wait
+            // for this request to complete before we get things setup, we can store the ExitIdentity somewhere
+            handle_exit_switching(em_state, current_exit_ip, babel_port).await;
 
-            info!("Exit_Switcher: After selecting best exit this tick, we have selected_exit_details: {:?}", get_full_selected_exit());
             setup_exit_tunnel(
-                selected_exit,
+                em_state.exit_switcher_state.currently_selected.clone(),
                 general_details,
                 em_state.last_exit_state.clone(),
             );
 
             // Set last state vairables
-            em_state.last_exit_state.last_exit = Some(selected_exit);
-            em_state.last_exit_state.last_exit_details = Some(registration_state);
+            em_state.last_exit_state = Some(LastExitStates {
+                last_exit: em_state.exit_switcher_state.currently_selected.clone(),
+                last_exit_details: registration_state.clone(),
+            });
 
             // check the exit's time and update locally if it's very different
             maybe_set_local_to_exit_time(exit.clone()).await;
@@ -127,7 +126,11 @@ async fn exit_manager_loop(em_state: &mut ExitManager) {
 }
 
 /// This function handles deciding if we need to switch exits, the new selected exit is returned. If no exit is selected, the current exit is returned.
-async fn handle_exit_switching(em_state: &mut ExitManager, current_exit_id: IpAddr) -> IpAddr {
+async fn handle_exit_switching(
+    em_state: &mut ExitManager,
+    current_exit_id: IpAddr,
+    babel_port: u16,
+) {
     // Get cluster exit list. This is saved locally and updated every tick depending on what exit we connect to.
     // When it is empty, it means an exit we connected to went down, and we use the list from memory to connect to a new instance
     let exit_list = match get_exit_list(current_exit_id).await {
@@ -156,37 +159,22 @@ async fn handle_exit_switching(em_state: &mut ExitManager, current_exit_id: IpAd
     }
     // Calling set best exit function, this looks though a list of exit in a cluster, does some math, and determines what exit we should connect to
     let exit_list = em_state.exit_list.clone();
-    info!("Exit_Switcher: Calling set best exit");
     trace!("Using exit list: {:?}", exit_list);
-    match set_best_exit(em_state, exit_list.into_identities(), prep_babel_routes()) {
-        Ok(a) => a,
-        Err(e) => {
-            error!("Exit_Switcher: Unable to select best exit: {:?}", e);
-            current_exit_id
-        }
-    }
-}
-
-fn prep_babel_routes() -> HashMap<IpAddr, Route> {
-    let babel_port = settings::get_rita_client().network.babel_port;
-    match get_babel_routes(babel_port) {
-        Ok(a) => get_routes_hashmap(a),
-        Err(_) => {
-            warn!("No babel routes present to setup an exit");
-            get_routes_hashmap(Vec::new())
-        }
-    }
+    select_best_exit(&mut em_state.exit_switcher_state, exit_list, babel_port)
 }
 
 fn setup_exit_tunnel(
-    selected_exit: IpAddr,
+    selected_exit: ExitIdentity,
     general_details: &ExitDetails,
-    last_exit_states: LastExitStates,
+    last_exit_states: Option<LastExitStates>,
 ) -> bool {
     // Determine states to setup tunnels
     let registration_state = get_exit_registration_state();
-    let exit_has_changed =
-        has_exit_changed(last_exit_states, selected_exit, registration_state.clone());
+    let exit_has_changed = has_exit_changed(
+        last_exit_states,
+        selected_exit.clone(),
+        registration_state.clone(),
+    );
     let signed_up_for_exit = registration_state.our_details();
 
     let default_route = match KI.get_default_route() {
@@ -202,13 +190,13 @@ fn setup_exit_tunnel(
     match (signed_up_for_exit, exit_has_changed, correct_default_route) {
         (Some(details), true, _) => {
             trace!("Exit change, setting up exit tunnel");
-            linux_setup_exit_tunnel(&general_details.clone(), details)
+            linux_setup_exit_tunnel(selected_exit, &general_details.clone(), details)
                 .expect("failure setting up exit tunnel");
             true
         }
         (Some(details), false, false) => {
             trace!("DHCP overwrite setup exit tunnel again");
-            linux_setup_exit_tunnel(&general_details.clone(), details)
+            linux_setup_exit_tunnel(selected_exit, &general_details.clone(), details)
                 .expect("failure setting up exit tunnel");
             true
         }
@@ -221,7 +209,7 @@ fn setup_exit_tunnel(
     }
 }
 
-async fn run_exit_billing(general_details: &ExitDetails, exit: &ExitServer) {
+async fn run_exit_billing(general_details: &ExitDetails, exit: &ExitIdentity) {
     if get_exit_registration_state().our_details().is_none() {
         return;
     }
@@ -229,7 +217,7 @@ async fn run_exit_billing(general_details: &ExitDetails, exit: &ExitServer) {
     let exit_price = general_details.clone().exit_price;
     let exit_internal_addr = general_details.clone().server_internal_ip;
     let exit_port = exit.registration_port;
-    let exit_id = exit.exit_id;
+    let exit_id = exit.into();
     let babel_port = settings::get_rita_client().network.babel_port;
     info!("We are signed up for the selected exit!");
     let routes = match get_babel_routes(babel_port) {
@@ -290,7 +278,7 @@ async fn handle_exit_status_request(em_state: &mut ExitManager) {
     // code that manages requesting details, we make this query to a single exit in a cluster.
     // as they will all have the same registration state, but different individual ip or other info
     let mut exit_status_requested = false;
-    let k = get_current_exit();
+    let k = get_current_exit_ip();
     let registration_state = get_exit_registration_state();
     match registration_state {
         // Once one exit is registered, this moves all exits from New -> Registered

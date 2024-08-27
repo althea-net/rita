@@ -15,30 +15,29 @@
 
 use althea_kernel_interface::KI;
 use althea_types::ExitDetails;
-
 use althea_types::ExitState;
+use althea_types::HeartbeatMessage;
+use althea_types::Identity;
+use althea_types::WgKey;
 use babel_monitor::parsing::get_installed_route;
 use babel_monitor::parsing::get_neigh_given_route;
 use babel_monitor::structs::BabelMonitorError;
-
+use babel_monitor::structs::Neighbor;
+use babel_monitor::structs::Route;
 use dummy::dummy_selected_exit_details;
-
 use rita_common::blockchain_oracle::get_oracle_balance;
 use rita_common::network_monitor::get_network_info;
 use rita_common::network_monitor::GetNetworkInfo;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
-
-use althea_types::HeartbeatMessage;
-use althea_types::Identity;
-use althea_types::WgKey;
-use babel_monitor::structs::Neighbor;
-use babel_monitor::structs::Route;
-use settings::client::ExitServer;
 use sodiumoxide::crypto::box_;
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 use std::net::ToSocketAddrs;
+use std::net::{SocketAddr, UdpSocket};
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::thread;
+use std::time::Duration;
 use std::time::Instant;
 
 #[allow(unused_imports)]
@@ -49,12 +48,7 @@ use dummy::dummy_neigh_tunnel;
 #[allow(unused_imports)]
 use dummy::dummy_route;
 
-use std::net::{SocketAddr, UdpSocket};
-use std::sync::Arc;
-use std::sync::RwLock;
-use std::time::Duration;
-
-use crate::exit_manager::get_current_exit;
+use crate::exit_manager::get_current_exit_ip;
 
 pub const HEARTBEAT_LOOP_SPEED: u64 = 5;
 
@@ -153,10 +147,7 @@ fn send_udp_heartbeat() {
     let mut selected_exit_details: ExitDetails = dummy_selected_exit_details();
 
     if !cfg!(feature = "operator_debug") {
-        if let (Some(id), Some(_exit)) = (
-            settings::get_rita_client().get_identity(),
-            get_selected_exit_server(),
-        ) {
+        if let Some(id) = settings::get_rita_client().get_identity() {
             let exit_info = get_exit_registration_state();
             match exit_info.general_details() {
                 Some(details) => {
@@ -267,7 +258,7 @@ fn send_udp_heartbeat() {
 }
 
 fn get_selected_exit_route(route_dump: &[Route]) -> Result<Route, BabelMonitorError> {
-    let exit_mesh_ip = get_current_exit();
+    let exit_mesh_ip = get_current_exit_ip();
     get_installed_route(&exit_mesh_ip, route_dump)
 }
 
@@ -279,14 +270,6 @@ pub fn get_exit_registration_state() -> ExitState {
         .exit_client
         .registration_state
         .clone()
-}
-
-pub fn get_selected_exit_server() -> Option<ExitServer> {
-    let rita_client = settings::get_rita_client();
-    let exit_client = rita_client.exit_client;
-    let exit = exit_client.bootstrapping_exits.get(&get_current_exit());
-
-    exit.cloned()
 }
 
 fn get_rita_neigh_option(

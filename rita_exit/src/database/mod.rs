@@ -105,6 +105,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<
                 },
                 general_details: get_exit_info(),
                 message: "Registration OK".to_string(),
+                identity: Box::new(exit_settings.get_exit_identity()),
             }),
 
             ExitSignupReturn::PendingRegistration => Ok(ExitState::Pending {
@@ -184,6 +185,8 @@ pub async fn client_status(
     contact: &Web3,
 ) -> Result<ExitState, Box<RitaExitError>> {
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
+    let exit = get_rita_exit();
+    let exit_network = exit.exit_network.clone();
 
     match get_registered_client_using_wgkey(
         client.global.wg_public_key,
@@ -198,14 +201,13 @@ pub async fn client_status(
 
             let current_ip: IpAddr = get_client_internal_ip(
                 their_record,
-                get_rita_exit().exit_network.netmask,
-                get_rita_exit().exit_network.own_internal_ip,
+                exit_network.netmask,
+                exit_network.own_internal_ip,
             )?;
             let current_internet_ipv6 = get_client_ipv6(
                 their_record,
-                settings::get_rita_exit().exit_network.subnet,
-                settings::get_rita_exit()
-                    .get_client_subnet_size()
+                exit_network.subnet,
+                exit.get_client_subnet_size()
                     .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
             )?;
 
@@ -216,6 +218,7 @@ pub async fn client_status(
                 },
                 general_details: get_exit_info(),
                 message: "Registration OK".to_string(),
+                identity: Box::new(exit.get_exit_identity()),
             })
         }
         Err(e) => {

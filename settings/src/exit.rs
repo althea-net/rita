@@ -49,6 +49,14 @@ pub struct ExitNetworkSettings {
     pub enable_enforcement: bool,
     /// Address of the Althea contract to store registered users data
     pub registered_users_contract_addr: Address,
+    /// List of countries this exit will accept connections from, empty value means no restriction
+    /// values will be ignored if geoip_api_user and geoip_api_key are not set
+    #[serde(default = "default_allowed_countries")]
+    pub allowed_countries: HashSet<Regions>,
+}
+
+fn default_allowed_countries() -> HashSet<Regions> {
+    HashSet::new()
 }
 
 fn enable_enforcement_default() -> bool {
@@ -78,6 +86,7 @@ impl ExitNetworkSettings {
             registered_users_contract_addr: "0x9BAbFde52Fe18A5CD00a542b87b4D124a4879582"
                 .parse()
                 .unwrap(),
+            allowed_countries: HashSet::new(),
         }
     }
 }

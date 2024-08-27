@@ -3,7 +3,8 @@ use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_client, SettingsError};
-use althea_types::{ExitState, Identity};
+use althea_types::regions::Regions;
+use althea_types::{ExitIdentity, ExitState, Identity};
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -20,81 +21,11 @@ pub fn default_config_path() -> PathBuf {
     format!("/etc/{APP_NAME}.toml").into()
 }
 
-/// This struct represents a single exit server. It contains all the details
-/// needed to contact and register to the exit.
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
-pub struct ExitServer {
-    /// This is the unique identity of the exit. Previously exit
-    /// had a shared wg key and mesh ip, this struct needs to have unique
-    /// meship, wgkey and ethaddress for each entry
-    pub exit_id: Identity,
-
-    /// The power we reach out to to hit the register endpoint
-    /// also used for all other exit lifecycle management api calls
-    #[serde(default = "default_registration_port")]
-    pub registration_port: u16,
-
-    /// The power we reach out to to hit the register endpoint
-    /// also used for all other exit lifecycle management api calls
-    #[serde(default = "default_wg_listen_port")]
-    pub wg_exit_listen_port: u16,
-}
-
-fn default_registration_port() -> u16 {
-    4875
-}
-
-fn default_wg_listen_port() -> u16 {
-    59998
-}
-
-/// Simple struct that keeps track of details related to the exit we are currently connected to, as well as the next potential exit to switch to
-#[derive(Default, Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct SelectedExit {
-    // Exit we currently forward to
-    pub selected_id: Option<IpAddr>,
-
-    // Advertised Metric of selected_id. This is different from that advertised by babel due to bias of metric being degraded by current traffic
-    pub selected_id_metric: Option<u16>,
-
-    // Since our advertised metric doesnt change through babel, we measure how much the average metric degrades over time and add this to sel_id_metric
-    pub selected_id_degradation: Option<u16>,
-
-    // This could be different from selected_id, we dont switch immediately to avoid route flapping
-    // This is what we keep track of in lazy static metric vector
-    pub tracking_exit: Option<IpAddr>,
-}
-
-/// This is the state machine for exit switching logic. Given there are three exits we track: current, best, and tracking, there are several situations we can be in
-/// Given that there are several scenarios to be in, We use this enum to tracking our state during every tick
-///
-/// InitialExitSetup: We have just connected to the first exit and tracking vector is empty
-///
-/// ContinueCurrentReset: Best exit, current exit and tracking exit are all the same. We continue with the same exit. However our tracking vector is full,
-/// so we reset it, with no change to exits
-///
-/// ContinueCurrent: Same as above, but vector is not full. We continue adding metrics to tracking vector.
-///
-/// SwitchExit: Current exit is different but tracking and best are same. Vec is full, we switch to best/tracking exit
-///
-/// ContinueTracking: Current exit is different but tracking == best. Vec is not full, so we dont switch yet, just continue updating the tracking vector
-///
-/// ResetTracking: tracking and best are diffrent. We reset timer/vector and start tracking new best
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub enum ExitSwitchingCode {
-    InitialExitSetup,
-    ContinueCurrentReset,
-    ContinueCurrent,
-    SwitchExit,
-    ContinueTracking,
-    ResetTracking,
-}
-
 fn exit_db_smart_contract_on_xdai() -> String {
     "0x29a3800C28dc133f864C22533B649704c6CD7e15".to_string()
 }
 
-fn default_boostrapping_exits() -> HashMap<IpAddr, ExitServer> {
+fn default_boostrapping_exits() -> HashMap<IpAddr, ExitIdentity> {
     HashMap::new()
 }
 
@@ -111,7 +42,7 @@ pub struct ExitClientSettings {
     /// one or more of these exits to understand it's current status and to register with the exit database smart contract.
     /// Once regsitered and online this list may be populated with new exits through the chain of trust established by the
     /// bootstrapping process
-    pub bootstrapping_exits: HashMap<IpAddr, ExitServer>,
+    pub bootstrapping_exits: HashMap<IpAddr, ExitIdentity>,
     /// The registration state of this router with the exit database smart contract
     /// note this value may be affected by what contract is currently selected and what
     /// chain we are on. Since different chains may reference different registration smart contracts
@@ -126,6 +57,10 @@ pub struct ExitClientSettings {
     pub exit_db_smart_contract_on_xdai: String,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
+    /// This is the region we are in, this is used to determine if we are in a region that is allowed to connect to the exit
+    /// For example if we have a None value, we will connect to other exits with no specified region, but not ones that specify a region lock.
+    /// If we have some value we will connect to exits that have that region specified as well as exits with no region specified.
+    pub our_region: Option<Regions>,
 }
 
 impl Default for ExitClientSettings {
@@ -135,6 +70,7 @@ impl Default for ExitClientSettings {
             bootstrapping_exits: default_boostrapping_exits(),
             exit_db_smart_contract_on_xdai: exit_db_smart_contract_on_xdai(),
             lan_nics: HashSet::new(),
+            our_region: None,
         }
     }
 }

@@ -1,8 +1,8 @@
 use super::encryption::decrypt_exit_list;
 use super::encryption::decrypt_exit_state;
 use super::encryption::encrypt_exit_client_id;
+use super::get_current_exit;
 use super::DEFAULT_WG_LISTEN_PORT;
-use crate::heartbeat::get_selected_exit_server;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use actix_web_async::Result;
@@ -83,18 +83,11 @@ async fn send_exit_status_request(
 /// with our information.
 pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientError> {
     let client_settings = settings::get_rita_client();
-    let exit =
-        match get_selected_exit_server() {
-            Some(exit) => exit,
-            None => return Err(RitaClientError::MiscStringError(
-                "Not yet connected to any exit to setup, please check connectivity and try again"
-                    .to_string(),
-            )),
-        };
+    let exit = get_current_exit();
 
     match client_settings.exit_client.registration_state {
         ExitState::New { .. } | ExitState::Pending { .. } => {
-            let exit_pubkey = exit.exit_id.wg_public_key;
+            let exit_pubkey = exit.wg_key;
 
             let mut reg_details: ExitRegistrationDetails =
                 match client_settings.payment.contact_info {
@@ -122,7 +115,7 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
                 reg_details,
             };
 
-            let endpoint = SocketAddr::new(exit.exit_id.mesh_ip, exit.registration_port);
+            let endpoint = SocketAddr::new(exit.mesh_ip, exit.registration_port);
 
             info!(
                 "sending exit setup request {:?} to {:?}, using {:?}",
@@ -143,14 +136,11 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
         ExitState::Denied { message } => {
             warn!(
                 "Exit {} is in ExitState DENIED with {}, not able to be setup",
-                exit.exit_id.mesh_ip, message
+                exit.mesh_ip, message
             );
         }
         ExitState::Registered { .. } => {
-            warn!(
-                "Exit {} already reports us as registered",
-                exit.exit_id.mesh_ip
-            )
+            warn!("Exit {} already reports us as registered", exit.mesh_ip)
         }
     }
 
@@ -179,7 +169,7 @@ pub async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
         }
     };
 
-    let exit_pubkey = current_exit.exit_id.wg_public_key;
+    let exit_pubkey = current_exit.wg_key;
     let ident = ExitClientIdentity {
         global: match settings::get_rita_client().get_identity() {
             Some(id) => id,
@@ -193,7 +183,7 @@ pub async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
         reg_details,
     };
 
-    let endpoint = SocketAddr::new(current_exit.exit_id.mesh_ip, current_exit.registration_port);
+    let endpoint = SocketAddr::new(current_exit.mesh_ip, current_exit.registration_port);
 
     trace!(
         "sending exit status request to {} using {:?}",
@@ -223,7 +213,7 @@ pub async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> 
         }
     };
 
-    let exit_pubkey = current_exit.exit_id.wg_public_key;
+    let exit_pubkey = current_exit.wg_key;
     let reg_details = match settings::get_rita_client().payment.contact_info {
         Some(val) => val.into(),
         None => {
@@ -245,7 +235,7 @@ pub async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> 
         reg_details,
     };
 
-    let exit_server = current_exit.exit_id.mesh_ip;
+    let exit_server = current_exit.wg_key;
 
     let endpoint = format!(
         "http://[{}]:{}/exit_list_v2",

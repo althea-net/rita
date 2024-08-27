@@ -1,23 +1,22 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
+use crate::exit_manager::get_current_exit;
 use crate::exit_manager::requests::exit_setup_request;
-use crate::heartbeat::get_selected_exit_server;
 use crate::RitaClientError;
 use actix_web_async::http::StatusCode;
 use actix_web_async::{web::Path, HttpRequest, HttpResponse};
-use althea_types::ExitState;
+use althea_types::{ExitIdentity, ExitState};
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::parsing::do_we_have_route;
 use rita_common::KI;
-use settings::client::ExitServer;
 use std::collections::HashMap;
 use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct ExitInfo {
     nickname: String,
-    exit_settings: ExitServer,
+    exit_settings: ExitIdentity,
     is_selected: bool,
     have_route: bool,
     is_reachable: bool,
@@ -29,7 +28,7 @@ pub struct GetExitInfo;
 const EXIT_PING_TIMEOUT: Duration = Duration::from_millis(200);
 
 /// Checks if the provided exit is selected
-fn is_selected(exit: &ExitServer, current_exit: Option<ExitServer>) -> bool {
+fn is_selected(exit: &ExitIdentity, current_exit: Option<ExitIdentity>) -> bool {
     match current_exit {
         None => false,
         Some(i) => i == *exit,
@@ -39,8 +38,8 @@ fn is_selected(exit: &ExitServer, current_exit: Option<ExitServer>) -> bool {
 /// Determines if the provided exit is currently selected, if it's setup, and then if it can be reached over
 /// the exit tunnel via a ping
 fn is_tunnel_working(
-    exit: &ExitServer,
-    current_exit: Option<ExitServer>,
+    exit: &ExitIdentity,
+    current_exit: Option<ExitIdentity>,
     exit_status: ExitState,
 ) -> bool {
     match (current_exit.clone(), is_selected(exit, current_exit)) {
@@ -69,10 +68,10 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                     let rita_client = settings::get_rita_client();
                     let exit_client = rita_client.exit_client;
                     let reg_state = exit_client.registration_state;
-                    let current_exit = get_selected_exit_server();
+                    let current_exit = get_current_exit();
 
                     for exit in exit_client.bootstrapping_exits.clone().into_iter() {
-                        let selected = is_selected(&exit.1, current_exit.clone());
+                        let selected = is_selected(&exit.1, Some(current_exit.clone()));
                         info!("Trying to get exit: {}", exit.0.clone());
                         let route_ip = exit.0;
                         let have_route = do_we_have_route(&route_ip, &route_table_sample)?;
@@ -85,9 +84,11 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                             false
                         };
                         let tunnel_working = match (have_route, selected) {
-                            (true, true) => {
-                                is_tunnel_working(&exit.1, current_exit.clone(), reg_state.clone())
-                            }
+                            (true, true) => is_tunnel_working(
+                                &exit.1,
+                                Some(current_exit.clone()),
+                                reg_state.clone(),
+                            ),
                             _ => false,
                         };
 

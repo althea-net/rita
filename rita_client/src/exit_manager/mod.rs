@@ -18,57 +18,57 @@
 
 pub mod encryption;
 pub mod exit_loop;
-pub mod exit_switcher;
+pub mod exit_selector;
 pub mod requests;
 pub mod time_sync;
 pub mod utils;
 
+use althea_types::ExitIdentity;
 use althea_types::ExitListV2;
 use althea_types::ExitState;
-use exit_switcher::ExitTracker;
-use settings::client::SelectedExit;
+use exit_selector::ExitSwitcherState;
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::time::Duration;
 use std::time::Instant;
 
 /// TODO replace with a component in the exit config struct
 const DEFAULT_WG_LISTEN_PORT: u16 = 59998;
 
-lazy_static! {
-    pub static ref SELECTED_EXIT_DETAILS: Arc<RwLock<SelectedExitDetails>> =
-        Arc::new(RwLock::new(SelectedExitDetails::default()));
-}
-
-#[derive(Default)]
-pub struct SelectedExitDetails {
-    /// information of current exit we are connected to and tracking exit, if connected to one
-    /// It also holds information about metrics and degradation values. Look at doc comment on 'set_best_exit' for more
-    /// information on what these mean
-    pub selected_exit: SelectedExit,
-}
-
 /// Data to use identity whether a clients wg exit tunnel needs to be setup up again across ticks
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct LastExitStates {
-    last_exit: Option<IpAddr>,
-    last_exit_details: Option<ExitState>,
+    last_exit: ExitIdentity,
+    last_exit_details: ExitState,
 }
 
 /// An actor which pays the exit
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct ExitManager {
     pub nat_setup: bool,
     /// Every tick we query an exit endpoint to get a list of exits in that cluster. We use this list for exit switching
     pub exit_list: ExitListV2,
     /// Store last exit here, when we see an exit change, we reset wg tunnels
-    pub last_exit_state: LastExitStates,
+    pub last_exit_state: Option<LastExitStates>,
     pub last_status_request: Option<Instant>,
-    /// This tracks metric values of the exit that we potentially consider switching to during every tick.
-    /// To switch, this vector needs to be full of values from a single exit.
-    pub metric_values: Vec<u16>,
-    pub exit_tracker: HashMap<IpAddr, ExitTracker>,
+    pub exit_switcher_state: ExitSwitcherState,
+}
+
+impl ExitManager {
+    pub fn new(currently_selected: ExitIdentity) -> ExitManager {
+        ExitManager {
+            nat_setup: false,
+            exit_list: ExitListV2::default(),
+            last_exit_state: None,
+            last_status_request: None,
+            exit_switcher_state: ExitSwitcherState {
+                last_switch: None,
+                backoff: Duration::from_secs(1),
+                currently_selected,
+                quality_history: HashMap::new(),
+            },
+        }
+    }
 }
 
 /// This functions sets the exit list ONLY IF the list arguments provived is not empty. This is need for the following edge case:
@@ -83,63 +83,64 @@ pub fn set_exit_list(list: ExitListV2, em_state: &mut ExitManager) -> bool {
 }
 
 /// Gets the currently selected exit, if none is selected returns the first exit from the bootstrapping list
-pub fn get_current_exit() -> IpAddr {
-    let selected_exit = SELECTED_EXIT_DETAILS.read().unwrap();
-    let ip = selected_exit.selected_exit.selected_id;
-    drop(selected_exit);
-    if let Some(ip) = ip {
-        ip
-    } else {
-        let client_settings = settings::get_rita_client();
-        let exit = client_settings
-            .exit_client
-            .bootstrapping_exits
-            .iter()
-            .next()
-            .expect("No exits in bootstrapping list")
-            .1;
-        set_selected_exit(SelectedExit {
-            selected_id: Some(exit.exit_id.mesh_ip),
-            selected_id_metric: None,
-            selected_id_degradation: None,
-            tracking_exit: None,
-        });
-        exit.exit_id.mesh_ip
+pub fn get_current_exit_ip() -> IpAddr {
+    get_current_exit().mesh_ip
+}
+
+/// Gets the currently selected exit, if none is selected returns the first exit from the bootstrapping list
+pub fn get_current_exit() -> ExitIdentity {
+    let settings = settings::get_rita_client();
+    match settings.exit_client.registration_state {
+        ExitState::Registered { identity, .. } => *identity,
+        _ => {
+            let exit = settings
+                .exit_client
+                .bootstrapping_exits
+                .iter()
+                .next()
+                .expect("No exits in bootstrapping list");
+            exit.1.clone()
+        }
     }
-}
-
-pub fn get_full_selected_exit() -> SelectedExit {
-    SELECTED_EXIT_DETAILS.read().unwrap().selected_exit.clone()
-}
-
-pub fn set_selected_exit(exit_info: SelectedExit) {
-    SELECTED_EXIT_DETAILS.write().unwrap().selected_exit = exit_info;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use althea_types::{ExitClientDetails, ExitDetails, ExitVerifMode, Identity, SystemChain};
-    use settings::client::ExitServer;
+    use althea_types::ExitIdentity;
+    use althea_types::{ExitClientDetails, ExitDetails, ExitVerifMode, SystemChain};
+    use std::collections::HashSet;
     use utils::has_exit_changed;
+
+    /// generates a random identity, never use in production, your money will be stolen
+    pub fn random_exit_identity() -> ExitIdentity {
+        use clarity::PrivateKey;
+
+        let secret: [u8; 32] = rand::random();
+        let mut ip: [u8; 16] = [0; 16];
+        ip.copy_from_slice(&secret[0..16]);
+
+        // the starting location of the funds
+        let eth_key = PrivateKey::from_bytes(secret).unwrap();
+        let eth_address = eth_key.to_address();
+
+        let payment_types = HashSet::new();
+        let allowed_regions = HashSet::new();
+
+        ExitIdentity {
+            mesh_ip: ip.into(),
+            eth_addr: eth_address,
+            wg_key: secret.into(),
+            registration_port: 0,
+            wg_exit_listen_port: 0,
+            allowed_regions,
+            payment_types,
+        }
+    }
 
     #[test]
     fn test_exit_has_changed() {
-        let _exit_server = ExitServer {
-            exit_id: Identity {
-                mesh_ip: "fd00::1337".parse().unwrap(),
-                eth_address: "0xd2C5b6dd6ca641BE4c90565b5d3DA34C14949A53"
-                    .parse()
-                    .unwrap(),
-                wg_public_key: "V9I9yrxAqFqLV+9GeT5pnXPwk4Cxgfvl30Fv8khVGsM="
-                    .parse()
-                    .unwrap(),
-                nickname: None,
-            },
-
-            registration_port: 3452,
-            wg_exit_listen_port: 59998,
-        };
+        let id = random_exit_identity();
         let mut exit_state = ExitState::New;
         let dummy_exit_details = ExitDetails {
             server_internal_ip: "172.0.0.1".parse().unwrap(),
@@ -150,23 +151,25 @@ mod tests {
             description: "".to_string(),
             verif_mode: ExitVerifMode::Off,
         };
-        let mut last_states = LastExitStates::default();
+        let mut last_states = None;
 
         // An ip is selected and setup in last_states
-        let selected_exit = "fd00::2602".parse().unwrap();
+        let selected_exit = random_exit_identity();
 
         assert!(has_exit_changed(
             last_states.clone(),
-            selected_exit,
+            selected_exit.clone(),
             exit_state.clone()
         ));
 
         // Last states get updated next tick
-        last_states.last_exit = Some("fd00::2602".parse().unwrap());
-        last_states.last_exit_details = Some(exit_state.clone());
+        last_states = Some(LastExitStates {
+            last_exit: selected_exit.clone(),
+            last_exit_details: exit_state.clone(),
+        });
         assert!(!has_exit_changed(
             last_states.clone(),
-            selected_exit,
+            selected_exit.clone(),
             exit_state.clone()
         ));
 
@@ -178,15 +181,19 @@ mod tests {
                 internet_ipv6_subnet: None,
             },
             message: "".to_string(),
+            identity: Box::new(id.clone()),
         };
         assert!(has_exit_changed(
             last_states.clone(),
-            selected_exit,
+            selected_exit.clone(),
             exit_state.clone()
         ));
 
         // next tick last stats get updated accordingly
-        last_states.last_exit_details = Some(exit_state.clone());
+        last_states = Some(LastExitStates {
+            last_exit: selected_exit.clone(),
+            last_exit_details: exit_state.clone(),
+        });
 
         // Registration detail for client change
         exit_state = ExitState::Registered {
@@ -196,15 +203,19 @@ mod tests {
                 internet_ipv6_subnet: None,
             },
             message: "".to_string(),
+            identity: Box::new(id),
         };
         assert!(has_exit_changed(
             last_states.clone(),
-            selected_exit,
+            selected_exit.clone(),
             exit_state.clone()
         ));
 
         // next tick its updated accordingly
-        last_states.last_exit_details = Some(exit_state.clone());
+        last_states = Some(LastExitStates {
+            last_exit: selected_exit.clone(),
+            last_exit_details: exit_state.clone(),
+        });
         assert!(!has_exit_changed(last_states, selected_exit, exit_state));
     }
 }

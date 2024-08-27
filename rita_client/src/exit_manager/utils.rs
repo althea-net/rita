@@ -1,27 +1,27 @@
+use super::LastExitStates;
 use crate::exit_manager::DEFAULT_WG_LISTEN_PORT;
 use crate::heartbeat::get_exit_registration_state;
-use crate::heartbeat::get_selected_exit_server;
+use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use actix_web_async::Result;
 use althea_kernel_interface::{
     exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
 };
-use althea_types::exit_identity_to_id;
 use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
+use althea_types::ExitIdentity;
 use althea_types::ExitListV2;
 use althea_types::ExitState;
+use babel_monitor::open_babel_stream;
+use babel_monitor::parse_routes;
 use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;
 use rita_common::KI;
-use settings::client::ExitServer;
 use settings::set_rita_client;
-use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
-
-use super::LastExitStates;
+use std::net::SocketAddr;
 
 pub fn linux_setup_exit_tunnel(
+    selected_exit: ExitIdentity,
     general_details: &ExitDetails,
     our_details: &ExitClientDetails,
 ) -> Result<(), RitaClientError> {
@@ -37,13 +37,9 @@ pub fn linux_setup_exit_tunnel(
         return Err(RitaClientError::MiscStringError(v));
     }
 
-    let selected_exit = get_selected_exit_server().expect("There should be a selected exit here");
     let args = ClientExitTunnelConfig {
-        endpoint: SocketAddr::new(
-            selected_exit.exit_id.mesh_ip,
-            selected_exit.wg_exit_listen_port,
-        ),
-        pubkey: selected_exit.exit_id.wg_public_key,
+        endpoint: SocketAddr::new(selected_exit.mesh_ip, selected_exit.wg_exit_listen_port),
+        pubkey: selected_exit.wg_key,
         private_key_path: network.wg_private_key_path.clone(),
         listen_port: DEFAULT_WG_LISTEN_PORT,
         local_ip: our_details.client_internal_ip,
@@ -80,16 +76,13 @@ pub fn remove_nat() {
 
 /// When we retrieve an exit list from an exit, add the compatible exits to the exit server list.
 /// This allows these exits to move to GotInfo state, allowing us to switch or connect quickly
+/// TODO this should modify the exit manager state directly
 pub fn add_exits_to_exit_server_list(list: ExitListV2) {
     let mut rita_client = settings::get_rita_client();
     let mut exits = rita_client.exit_client.bootstrapping_exits;
 
     for e in list.exit_list {
-        exits.entry(e.mesh_ip).or_insert(ExitServer {
-            exit_id: exit_identity_to_id(e.clone()),
-            registration_port: e.registration_port,
-            wg_exit_listen_port: e.wg_exit_listen_port,
-        });
+        exits.entry(e.mesh_ip).or_insert(e);
     }
 
     // Update settings with new exits
@@ -104,18 +97,6 @@ pub fn correct_default_route(input: Option<DefaultRoute>) -> bool {
     }
 }
 
-/// This function takes a list of babel routes and uses this to insert ip -> route
-/// instances in the hashmap. This is an optimization that allows us to reduce route lookups from O(n * m ) to O(m + n)
-/// when trying to find exit ips in our cluster
-pub fn get_routes_hashmap(routes: Vec<Route>) -> HashMap<IpAddr, Route> {
-    let mut ret = HashMap::new();
-    for r in routes {
-        ret.insert(r.prefix.ip(), r);
-    }
-
-    ret
-}
-
 pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
     let exit_info = get_exit_registration_state();
     if let ExitState::Registered { our_details, .. } = exit_info {
@@ -128,17 +109,43 @@ pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
 /// 1.) When exit instance ip has changed
 /// 2.) Exit reg details have chaged
 pub fn has_exit_changed(
-    last_states: LastExitStates,
-    selected_exit: IpAddr,
+    last_states: Option<LastExitStates>,
+    selected_exit: ExitIdentity,
     current_reg_state: ExitState,
 ) -> bool {
-    let last_exit = last_states.last_exit;
+    let last_states = match last_states {
+        Some(a) => a,
+        None => return true,
+    };
 
-    let instance_has_changed = !(last_exit.is_some() && last_exit.unwrap() == selected_exit);
+    let last_exit = last_states.last_exit;
+    let instance_has_changed = !(last_exit == selected_exit);
 
     let last_exit_details = last_states.last_exit_details;
-    let exit_reg_has_changed =
-        !(last_exit_details.is_some() && last_exit_details.unwrap() == current_reg_state);
+    let exit_reg_has_changed = !(last_exit_details == current_reg_state);
 
     instance_has_changed | exit_reg_has_changed
+}
+
+/// Simple helper function that opens a babel stream to get all routes related to us. We can use these routes to
+/// check which ips are exits and thereby register or setup exits
+pub fn get_babel_routes(babel_port: u16) -> Result<Vec<Route>, RitaClientError> {
+    let mut stream = match open_babel_stream(babel_port, CLIENT_LOOP_TIMEOUT) {
+        Ok(a) => a,
+        Err(_) => {
+            return Err(RitaClientError::MiscStringError(
+                "open babel stream error in exit manager tick".to_string(),
+            ))
+        }
+    };
+    let routes = match parse_routes(&mut stream) {
+        Ok(a) => a,
+        Err(_) => {
+            return Err(RitaClientError::MiscStringError(
+                "Parse routes error in exit manager tick".to_string(),
+            ))
+        }
+    };
+
+    Ok(routes)
 }

@@ -112,8 +112,13 @@ impl Hash for Identity {
     }
 }
 
+/// This struct represents a single exit server. It contains all the details
+/// needed to contact and register to the exit.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExitIdentity {
+    /// This is the unique identity of the exit. Previously exit
+    /// had a shared wg key and mesh ip, this struct needs to have unique
+    /// meship, wgkey and ethaddress for each entry
     pub mesh_ip: IpAddr,
     pub wg_key: WgKey,
     pub eth_addr: Address,
@@ -137,6 +142,17 @@ impl Hash for ExitIdentity {
 
 impl From<ExitIdentity> for Identity {
     fn from(exit_id: ExitIdentity) -> Identity {
+        Identity {
+            mesh_ip: exit_id.mesh_ip,
+            eth_address: exit_id.eth_addr,
+            wg_public_key: exit_id.wg_key,
+            nickname: None,
+        }
+    }
+}
+
+impl From<&ExitIdentity> for Identity {
+    fn from(exit_id: &ExitIdentity) -> Identity {
         Identity {
             mesh_ip: exit_id.mesh_ip,
             eth_address: exit_id.eth_addr,
@@ -287,6 +303,7 @@ pub enum ExitState {
     /// we are currently registered and operating, update this state
     /// incase the exit for example wants to assign us a new ip
     Registered {
+        identity: Box<ExitIdentity>,
         general_details: ExitDetails,
         our_details: ExitClientDetails,
         message: String,

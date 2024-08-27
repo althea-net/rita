@@ -407,12 +407,17 @@ pub fn get_default_settings(
         if let NodeType::Exit { instance_name } = ns.node_type.clone() {
             exit_mesh_ips.insert(get_ip_from_namespace(ns));
             let exit_id = TEST_EXIT_DETAILS.get(&instance_name).unwrap();
+
             exit_servers.insert(
                 exit_id.exit_id.mesh_ip,
-                settings::client::ExitServer {
-                    exit_id: exit_id.exit_id,
+                ExitIdentity {
+                    mesh_ip: exit_id.exit_id.mesh_ip,
+                    wg_key: exit_id.exit_id.wg_public_key,
+                    eth_addr: exit_id.exit_id.eth_address,
                     registration_port: exit.exit_network.exit_hello_port,
                     wg_exit_listen_port: exit.exit_network.wg_v2_tunnel_port,
+                    allowed_regions: HashSet::new(),
+                    payment_types: HashSet::new(),
                 },
             );
         }
