@@ -1,6 +1,6 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
-use crate::exit_manager::exit_setup_request;
+use crate::exit_manager::requests::exit_setup_request;
 use crate::heartbeat::get_selected_exit_server;
 use crate::RitaClientError;
 use actix_web_async::http::StatusCode;

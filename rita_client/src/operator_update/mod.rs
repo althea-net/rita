@@ -5,7 +5,7 @@ pub mod updater;
 extern crate openssh_keys;
 use crate::dashboard::extender_checkin::extend_hardware_info;
 use crate::dashboard::router::set_router_update_instruction;
-use crate::exit_manager::{get_client_pub_ipv6, get_current_exit};
+use crate::exit_manager::{get_current_exit, utils::get_client_pub_ipv6};
 use crate::rita_loop::is_gateway_client;
 use crate::RitaClientError;
 use althea_kernel_interface::hardware_info::get_hardware_info;

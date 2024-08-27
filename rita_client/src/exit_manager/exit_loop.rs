@@ -1,11 +1,14 @@
 use super::exit_switcher::{get_babel_routes, set_best_exit};
+use super::utils::get_routes_hashmap;
 use super::{ExitManager, LastExitStates};
+use crate::exit_manager::requests::exit_status_request;
+use crate::exit_manager::requests::get_exit_list;
 use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
-use crate::exit_manager::{
-    add_exits_to_exit_server_list, correct_default_route, exit_status_request, get_client_pub_ipv6,
-    get_current_exit, get_exit_list, get_full_selected_exit, get_routes_hashmap, has_exit_changed,
-    linux_setup_exit_tunnel, remove_nat, restore_nat, set_exit_list,
+use crate::exit_manager::utils::{
+    add_exits_to_exit_server_list, correct_default_route, get_client_pub_ipv6, has_exit_changed,
+    linux_setup_exit_tunnel, remove_nat, restore_nat,
 };
+use crate::exit_manager::{get_current_exit, get_full_selected_exit, set_exit_list};
 use crate::heartbeat::get_exit_registration_state;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
