@@ -99,7 +99,6 @@ async fn exit_manager_loop(em_state: &mut ExitManager) {
 
             info!("Exit_Switcher: After selecting best exit this tick, we have selected_exit_details: {:?}", get_full_selected_exit());
             setup_exit_tunnel(
-                exit,
                 selected_exit,
                 general_details,
                 em_state.last_exit_state.clone(),
@@ -177,7 +176,6 @@ fn prep_babel_routes() -> HashMap<IpAddr, Route> {
 }
 
 fn setup_exit_tunnel(
-    _exit: &ExitServer,
     selected_exit: IpAddr,
     general_details: &ExitDetails,
     last_exit_states: LastExitStates,
