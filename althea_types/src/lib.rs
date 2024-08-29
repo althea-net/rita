@@ -3,6 +3,7 @@ extern crate serde_derive;
 
 pub mod contact_info;
 pub mod error;
+pub mod exit_encryption;
 pub mod interop;
 pub mod monitoring;
 pub mod regions;

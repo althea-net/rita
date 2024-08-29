@@ -1,4 +1,5 @@
 use althea_kernel_interface::KernelInterfaceError;
+use althea_types::exit_encryption::ExitEncryptionError;
 use awc::error::{JsonPayloadError, SendRequestError};
 use babel_monitor::structs::BabelMonitorError;
 use compressed_log::builder::LoggerError;
@@ -25,8 +26,14 @@ pub enum RitaClientError {
     NoExitIPError(String),
     RitaCommonError(RitaCommonError),
     ParseIntError(ParseIntError),
+    ExitEncryptionError(ExitEncryptionError),
 }
 
+impl From<ExitEncryptionError> for RitaClientError {
+    fn from(error: ExitEncryptionError) -> Self {
+        RitaClientError::ExitEncryptionError(error)
+    }
+}
 impl From<LoggerError> for RitaClientError {
     fn from(error: LoggerError) -> Self {
         RitaClientError::RitaCommonError(RitaCommonError::LoggerError(error))
@@ -109,6 +116,7 @@ impl Display for RitaClientError {
             }
             RitaClientError::RitaCommonError(e) => write!(f, "{e}"),
             RitaClientError::ParseIntError(e) => write!(f, "{e}"),
+            RitaClientError::ExitEncryptionError(e) => write!(f, "{e}"),
         }
     }
 }

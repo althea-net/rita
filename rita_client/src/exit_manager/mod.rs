@@ -16,7 +16,6 @@
 //!
 //! Signup is complete and the user may use the connection
 
-pub mod encryption;
 pub mod exit_loop;
 pub mod exit_selector;
 pub mod requests;

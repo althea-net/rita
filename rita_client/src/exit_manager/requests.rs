@@ -1,11 +1,11 @@
-use super::encryption::decrypt_exit_list;
-use super::encryption::decrypt_exit_state;
-use super::encryption::encrypt_exit_client_id;
 use super::get_current_exit;
 use super::DEFAULT_WG_LISTEN_PORT;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use actix_web_async::Result;
+use althea_types::exit_encryption::decrypt_exit_list;
+use althea_types::exit_encryption::decrypt_exit_state;
+use althea_types::exit_encryption::encrypt_exit_client_id;
 use althea_types::ExitListV2;
 use althea_types::WgKey;
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState};
@@ -18,8 +18,11 @@ async fn send_exit_setup_request(
     ident: ExitClientIdentity,
 ) -> Result<ExitState, RitaClientError> {
     let endpoint = format!("http://[{}]:{}/secure_setup", to.ip(), to.port());
+    let settings = settings::get_rita_client();
+    let our_pubkey = settings.network.wg_public_key.unwrap();
+    let our_privkey = settings.network.wg_private_key.unwrap();
 
-    let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
+    let ident = encrypt_exit_client_id(our_pubkey, &our_privkey.into(), &exit_pubkey.into(), ident);
 
     let client = awc::Client::default();
 
@@ -40,9 +43,9 @@ async fn send_exit_setup_request(
 
     let value = response.json().await?;
 
-    match decrypt_exit_state(value, exit_pubkey.into()) {
-        Err(e) => Err(e),
-        a => a,
+    match decrypt_exit_state(&our_privkey.into(), value, &exit_pubkey.into()) {
+        Err(e) => Err(e.into()),
+        Ok(a) => Ok(a),
     }
 }
 
@@ -51,8 +54,12 @@ async fn send_exit_status_request(
     to: &SocketAddr,
     ident: ExitClientIdentity,
 ) -> Result<ExitState, RitaClientError> {
+    let settings = settings::get_rita_client();
+    let our_pubkey = settings.network.wg_public_key.unwrap();
+    let our_privkey = settings.network.wg_private_key.unwrap();
+
     let endpoint = format!("http://[{}]:{}/secure_status", to.ip(), to.port());
-    let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
+    let ident = encrypt_exit_client_id(our_pubkey, &our_privkey.into(), &exit_pubkey.into(), ident);
 
     let client = awc::Client::default();
     let response = client
@@ -73,8 +80,8 @@ async fn send_exit_status_request(
     };
     let value = response.json().await?;
 
-    match decrypt_exit_state(value, exit_pubkey.into()) {
-        Err(e) => Err(e),
+    match decrypt_exit_state(&our_privkey.into(), value, &exit_pubkey.into()) {
+        Err(e) => Err(e.into()),
         Ok(a) => Ok(a),
     }
 }
@@ -241,7 +248,11 @@ pub async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> 
         "http://[{}]:{}/exit_list_v2",
         exit_server, current_exit.registration_port
     );
-    let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
+    let settings = settings::get_rita_client();
+    let our_pubkey = settings.network.wg_public_key.unwrap();
+    let our_privkey = settings.network.wg_private_key.unwrap();
+
+    let ident = encrypt_exit_client_id(our_pubkey, &our_privkey.into(), &exit_pubkey.into(), ident);
 
     let client = awc::Client::default();
     let response = client
@@ -262,8 +273,8 @@ pub async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> 
 
     let value = response.json().await?;
 
-    match decrypt_exit_list(value, exit_pubkey.into()) {
-        Err(e) => Err(e),
+    match decrypt_exit_list(&our_privkey.into(), value, &exit_pubkey.into()) {
+        Err(e) => Err(e.into()),
         Ok(a) => Ok(a),
     }
 }

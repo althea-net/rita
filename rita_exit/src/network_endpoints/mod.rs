@@ -4,13 +4,16 @@
 use crate::database::{client_status, signup_client};
 use crate::RitaExitError;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
+use althea_types::exit_encryption::{
+    decrypt_exit_client_id, encrypt_exit_list, encrypt_exit_list_v2, encrypt_setup_return,
+};
 use althea_types::exit_identity_to_id;
 use althea_types::regions::Regions;
 use althea_types::ExitListV2;
+use althea_types::Identity;
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };
-use althea_types::{EncryptedExitList, Identity};
 use althea_types::{ExitList, WgKey};
 use num256::Int256;
 use rita_client_registration::client_db::get_exits_list;
@@ -18,9 +21,6 @@ use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::rita_loop::get_web3_server;
 use settings::get_rita_exit;
-use sodiumoxide::crypto::box_;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::collections::HashSet;
 use std::net::SocketAddr;
@@ -32,92 +32,35 @@ use web30::client::Web3;
 pub const CLIENT_STATUS_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// helper function for returning from secure_setup_request()
-fn secure_setup_return(
-    ret: ExitState,
-    our_secretkey: &SecretKey,
-    their_pubkey: PublicKey,
-) -> Json<EncryptedExitState> {
-    let plaintext = serde_json::to_string(&ret)
-        .expect("Failed to serialize ExitState!")
-        .into_bytes();
-    let nonce = box_::gen_nonce();
-    let ciphertext = box_::seal(&plaintext, &nonce, &their_pubkey, our_secretkey);
-    Json(EncryptedExitState {
-        nonce: nonce.0,
-        encrypted_exit_state: ciphertext,
-    })
-}
 
 enum DecryptResult {
     Success(Box<ExitClientIdentity>),
-    Failure(Result<Json<EncryptedExitState>, RitaExitError>),
+    Failure(Result<EncryptedExitState, RitaExitError>),
 }
 
-fn decrypt_exit_client_id(
+fn decrypt_exit_client_id_helper(
     val: EncryptedExitClientIdentity,
     our_secretkey: &SecretKey,
 ) -> DecryptResult {
-    let their_wg_pubkey = val.pubkey;
-    let their_nacl_pubkey = val.pubkey.into();
-    let their_nonce = Nonce(val.nonce);
-    let ciphertext = val.encrypted_exit_client_id;
-
-    let decrypted_bytes =
-        match box_::open(&ciphertext, &their_nonce, &their_nacl_pubkey, our_secretkey) {
-            Ok(value) => value,
-            Err(e) => {
-                warn!(
-                    "Error decrypting exit setup request for {} with {:?}",
-                    their_wg_pubkey, e
-                );
-                let state = ExitState::Denied {
-                    message: "could not decrypt your message!".to_string(),
-                };
-                return DecryptResult::Failure(Ok(secure_setup_return(
-                    state,
-                    our_secretkey,
-                    their_nacl_pubkey,
-                )));
-            }
-        };
-
-    let decrypted_string = match String::from_utf8(decrypted_bytes) {
-        Ok(value) => value,
+    match decrypt_exit_client_id(val.clone(), our_secretkey) {
+        Ok(decrypted_id) => DecryptResult::Success(Box::new(decrypted_id)),
         Err(e) => {
-            error!(
+            let their_nacl_pubkey = val.pubkey.into();
+            let their_wg_pubkey = val.pubkey;
+            warn!(
                 "Error decrypting exit setup request for {} with {:?}",
                 their_wg_pubkey, e
             );
             let state = ExitState::Denied {
                 message: "could not decrypt your message!".to_string(),
             };
-            return DecryptResult::Failure(Ok(secure_setup_return(
+            DecryptResult::Failure(Ok(encrypt_setup_return(
                 state,
                 our_secretkey,
                 their_nacl_pubkey,
-            )));
+            )))
         }
-    };
-
-    let decrypted_id = match serde_json::from_str(&decrypted_string) {
-        Ok(value) => value,
-        Err(e) => {
-            error!(
-                "Error deserializing exit setup request for {} with {:?}",
-                their_wg_pubkey, e
-            );
-            let state = ExitState::Denied {
-                message: "could not deserialize your message!".to_string(),
-            };
-            return DecryptResult::Failure(Ok(secure_setup_return(
-                state,
-                our_secretkey,
-                their_nacl_pubkey,
-            )));
-        }
-    };
-
-    DecryptResult::Success(Box::new(decrypted_id))
+    }
 }
 
 pub async fn secure_setup_request(
@@ -139,8 +82,8 @@ pub async fn secure_setup_request(
     let exit_client_id = request.0.into_inner();
 
     let decrypted_id = match (
-        decrypt_exit_client_id(exit_client_id.clone(), &our_new_secretkey),
-        decrypt_exit_client_id(exit_client_id, &our_old_secretkey),
+        decrypt_exit_client_id_helper(exit_client_id.clone(), &our_new_secretkey),
+        decrypt_exit_client_id_helper(exit_client_id, &our_old_secretkey),
     ) {
         (DecryptResult::Success(val_new), DecryptResult::Success(_)) => {
             valid_secret_key = our_new_secretkey;
@@ -182,7 +125,7 @@ pub async fn secure_setup_request(
     if remote_mesh_ip == client_mesh_ip {
         let result = signup_client(*client).await;
         match result {
-            Ok(exit_state) => HttpResponse::Ok().json(secure_setup_return(
+            Ok(exit_state) => HttpResponse::Ok().json(encrypt_setup_return(
                 exit_state,
                 &valid_secret_key,
                 their_nacl_pubkey,
@@ -197,7 +140,7 @@ pub async fn secure_setup_request(
         let state = ExitState::Denied {
             message: "The request ip does not match the signup ip".to_string(),
         };
-        HttpResponse::Ok().json(secure_setup_return(
+        HttpResponse::Ok().json(encrypt_setup_return(
             state,
             &valid_secret_key,
             their_nacl_pubkey,
@@ -228,8 +171,8 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
     let valid_secret_key;
 
     let decrypted_id = match (
-        decrypt_exit_client_id(exit_client_id.clone(), &our_new_secretkey),
-        decrypt_exit_client_id(exit_client_id, &our_old_secretkey),
+        decrypt_exit_client_id_helper(exit_client_id.clone(), &our_new_secretkey),
+        decrypt_exit_client_id_helper(exit_client_id, &our_old_secretkey),
     ) {
         (DecryptResult::Success(val_new), DecryptResult::Success(_)) => {
             valid_secret_key = our_new_secretkey;
@@ -270,7 +213,7 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
             }
         },
     };
-    HttpResponse::Ok().json(secure_setup_return(
+    HttpResponse::Ok().json(encrypt_setup_return(
         state,
         &valid_secret_key,
         their_nacl_pubkey,
@@ -354,15 +297,8 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
         wg_exit_listen_port: settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
     };
 
-    let plaintext = serde_json::to_string(&ret)
-        .expect("Failed to serialize Vec of ips!")
-        .into_bytes();
-    let nonce = box_::gen_nonce();
-    let ciphertext = box_::seal(&plaintext, &nonce, &their_nacl_pubkey, &our_secretkey);
-    HttpResponse::Ok().json(Json(EncryptedExitList {
-        nonce: nonce.0,
-        exit_list: ciphertext,
-    }))
+    let exit_list = encrypt_exit_list(&ret, &their_nacl_pubkey, &our_secretkey);
+    HttpResponse::Ok().json(exit_list)
 }
 
 /// Exit list v2, for newer router that do the fitering (region and payment type) themselves, this endpoint
@@ -403,15 +339,8 @@ pub async fn get_exit_list_v2(request: Json<EncryptedExitClientIdentity>) -> Htt
     };
     ret.exit_list.push(exit_settings.get_exit_identity()); // add ourselves to the list
 
-    let plaintext = serde_json::to_string(&ret)
-        .expect("Failed to serialize Vec of ips!")
-        .into_bytes();
-    let nonce = box_::gen_nonce();
-    let ciphertext = box_::seal(&plaintext, &nonce, &their_nacl_pubkey, &our_secretkey);
-    HttpResponse::Ok().json(Json(EncryptedExitList {
-        nonce: nonce.0,
-        exit_list: ciphertext,
-    }))
+    let exit_list = encrypt_exit_list_v2(&ret, &their_nacl_pubkey, &our_secretkey);
+    HttpResponse::Ok().json(exit_list)
 }
 
 /// Used by clients to get their debt from the exits. While it is in theory possible for the
