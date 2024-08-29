@@ -259,12 +259,9 @@ fn linux_exit_init(
     let mut settings = settings;
 
     let mut network_settings = settings.network;
-    let mut exit_network_settings = settings.exit_network;
     let mesh_ip_option = network_settings.mesh_ip;
     let wg_pubkey_option = network_settings.wg_public_key;
     let wg_privkey_option = network_settings.wg_private_key;
-    let wg_exit_pubkey_option = exit_network_settings.wg_public_key;
-    let wg_exit_privkey_option = exit_network_settings.wg_private_key;
 
     match mesh_ip_option {
         Some(existing_mesh_ip) => {
@@ -293,24 +290,11 @@ fn linux_exit_init(
         network_settings.wg_public_key = Some(keypair.public);
         network_settings.wg_private_key = Some(keypair.private);
     }
-    if wg_exit_privkey_option.is_none() || wg_exit_pubkey_option.is_none() {
-        info!("Existing wireguard keypair is invalid, generating from scratch");
-        let keypair = KI.create_wg_keypair().expect("failed to generate wg keys");
-        exit_network_settings.wg_public_key = Some(keypair.public);
-        exit_network_settings.wg_private_key = Some(keypair.private);
-    }
 
     // Creates file on disk containing key
     KI.create_wg_key(
         Path::new(&network_settings.wg_private_key_path),
         &network_settings
-            .wg_private_key
-            .expect("How did we get here without generating a key above?"),
-    )?;
-    // same thing but with the exit key
-    KI.create_wg_key(
-        Path::new(&exit_network_settings.wg_private_key_path),
-        &exit_network_settings
             .wg_private_key
             .expect("How did we get here without generating a key above?"),
     )?;
@@ -339,7 +323,6 @@ fn linux_exit_init(
 
     settings.payment = payment_settings;
     settings.network = network_settings;
-    settings.exit_network = exit_network_settings;
 
     trace!("Starting with settings (after clu) : {:?}", settings);
     assert!(settings.get_identity().is_some());

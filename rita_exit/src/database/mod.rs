@@ -369,7 +369,7 @@ pub fn setup_clients(
         let exit_status = KI.set_exit_wg_config(
             &wg_clients,
             settings::get_rita_exit().exit_network.wg_tunnel_port,
-            &settings::get_rita_exit().exit_network.wg_private_key_path,
+            &settings::get_rita_exit().network.wg_private_key_path,
             LEGACY_INTERFACE,
         );
 
