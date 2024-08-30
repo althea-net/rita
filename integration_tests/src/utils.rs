@@ -408,6 +408,10 @@ pub fn get_default_settings(
             exit_mesh_ips.insert(get_ip_from_namespace(ns));
             let exit_id = TEST_EXIT_DETAILS.get(&instance_name).unwrap();
 
+            let mut payment_types = HashSet::new();
+            payment_types.insert(SystemChain::AltheaL1);
+            payment_types.insert(SystemChain::Xdai);
+
             exit_servers.insert(
                 exit_id.exit_id.mesh_ip,
                 ExitIdentity {
@@ -417,7 +421,7 @@ pub fn get_default_settings(
                     registration_port: exit.exit_network.exit_hello_port,
                     wg_exit_listen_port: exit.exit_network.wg_v2_tunnel_port,
                     allowed_regions: HashSet::new(),
-                    payment_types: HashSet::new(),
+                    payment_types,
                 },
             );
         }

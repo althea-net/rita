@@ -70,17 +70,6 @@ impl ExitManager {
     }
 }
 
-/// This functions sets the exit list ONLY IF the list arguments provived is not empty. This is need for the following edge case:
-/// When an exit goes down, the endpoint wont repsond, so we have no exits to switch to. By setting only when we have a length > 1
-/// we assure that we switch when an exit goes down
-pub fn set_exit_list(list: ExitListV2, em_state: &mut ExitManager) -> bool {
-    if !list.exit_list.is_empty() {
-        em_state.exit_list = list;
-        return true;
-    }
-    false
-}
-
 /// Gets the currently selected exit, if none is selected returns the first exit from the bootstrapping list
 pub fn get_current_exit_ip() -> IpAddr {
     get_current_exit().mesh_ip

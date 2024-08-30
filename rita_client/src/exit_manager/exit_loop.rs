@@ -1,14 +1,14 @@
 use super::utils::get_babel_routes;
 use super::{get_current_exit, ExitManager, LastExitStates};
 use crate::exit_manager::exit_selector::select_best_exit;
+use crate::exit_manager::get_current_exit_ip;
 use crate::exit_manager::requests::exit_status_request;
 use crate::exit_manager::requests::get_exit_list;
 use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
 use crate::exit_manager::utils::{
-    add_exits_to_exit_server_list, correct_default_route, get_client_pub_ipv6, has_exit_changed,
-    linux_setup_exit_tunnel, remove_nat, restore_nat,
+    correct_default_route, get_client_pub_ipv6, has_exit_changed, linux_setup_exit_tunnel,
+    merge_exit_lists, remove_nat, restore_nat,
 };
-use crate::exit_manager::{get_current_exit_ip, set_exit_list};
 use crate::heartbeat::get_exit_registration_state;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
@@ -150,15 +150,9 @@ async fn handle_exit_switching(
     // The Exit list we receive from the exit may be different from what we have
     // in the config. Update the config with any missing exits so we can request
     // status from them in the future when we connect
-    add_exits_to_exit_server_list(exit_list.clone());
+    let exit_list = merge_exit_lists(exit_list);
 
-    // When the list is empty, the exit services us
-    // an invalid struct or we made a bad request
-    if !set_exit_list(exit_list, em_state) {
-        error!("Received an invalid exit list!")
-    }
     // Calling set best exit function, this looks though a list of exit in a cluster, does some math, and determines what exit we should connect to
-    let exit_list = em_state.exit_list.clone();
     trace!("Using exit list: {:?}", exit_list);
     select_best_exit(&mut em_state.exit_switcher_state, exit_list, babel_port)
 }

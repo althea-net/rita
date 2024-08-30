@@ -74,20 +74,29 @@ pub fn remove_nat() {
     }
 }
 
-/// When we retrieve an exit list from an exit, add the compatible exits to the exit server list.
-/// This allows these exits to move to GotInfo state, allowing us to switch or connect quickly
-/// TODO this should modify the exit manager state directly
-pub fn add_exits_to_exit_server_list(list: ExitListV2) {
+/// This merges the exit list we get from the exit with our local bootstrapping list
+/// TODO this is a temporary solution, instead we need to move to the new universal endpoint
+/// design where each exit hosts a multihomed ip endpoint returning a signed list of bootstrapping
+/// exits rather than each exit hosting a list of exits
+pub fn merge_exit_lists(mut list: ExitListV2) -> ExitListV2 {
     let mut rita_client = settings::get_rita_client();
     let mut exits = rita_client.exit_client.bootstrapping_exits;
 
-    for e in list.exit_list {
-        exits.entry(e.mesh_ip).or_insert(e);
+    info!("We have bootstrap exits: {:?}", exits);
+
+    for e in list.exit_list.iter() {
+        exits.entry(e.mesh_ip).or_insert(e.clone());
     }
 
     // Update settings with new exits
-    rita_client.exit_client.bootstrapping_exits = exits;
+    rita_client.exit_client.bootstrapping_exits = exits.clone();
     set_rita_client(rita_client);
+
+    for e in exits.iter() {
+        list.exit_list.push(e.1.clone());
+    }
+
+    list
 }
 
 pub fn correct_default_route(input: Option<DefaultRoute>) -> bool {
