@@ -90,7 +90,16 @@ pub async fn run_multi_exit_test() {
         current_exit.get_name()
     );
 
-    thread::sleep(Duration::from_secs(10));
+    const MIGRATION_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(10);
+    let start = std::time::Instant::now();
+
+    while start.elapsed() < MIGRATION_ATTEMPT_TIMEOUT {
+        let new_exit = get_current_exit(namespaces.names[0].clone(), namespaces.clone());
+        if new_exit != current_exit {
+            break;
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
 
     // Check that we migrated
     let new_exit = get_current_exit(namespaces.names[0].clone(), namespaces.clone());
