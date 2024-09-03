@@ -283,7 +283,7 @@ impl PaymentValidator {
                 tx
             );
             // in a development env we want to draw attention to this case
-            if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+            if cfg!(feature = "integration_test") || cfg!(test) {
                 panic!("Transaction double removed!");
             }
         }
@@ -322,7 +322,7 @@ impl PaymentValidator {
         if !self.is_consistent() {
             warn!("Inconsistent payment validator! {:?}", self);
             // in a development env we want to draw attention to this case
-            if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+            if cfg!(feature = "integration_test") || cfg!(test) {
                 panic!("Inconsistent payment validator!");
             }
         }
@@ -514,7 +514,7 @@ fn handle_tx_messaging_althea(
 ) -> Option<(ToValidate, TxValidationStatus)> {
     if transactions.is_empty() {
         error!("Microtx payment with no transactions!");
-        if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+        if cfg!(feature = "integration_test") || cfg!(test) {
             panic!("Microtx payment with no transactions!");
         }
         return Some((ts, TxValidationStatus::FailureException));
@@ -525,7 +525,7 @@ fn handle_tx_messaging_althea(
         amount.into()
     } else {
         error!("Transaction with no amount!");
-        if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+        if cfg!(feature = "integration_test") || cfg!(test) {
             panic!("Transaction with no amount!");
         }
         return Some((ts, TxValidationStatus::FailureException));
@@ -535,7 +535,7 @@ fn handle_tx_messaging_althea(
         Ok(a) => a,
         Err(e) => {
             error!("Invalid receiver address! {}", e);
-            if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+            if cfg!(feature = "integration_test") || cfg!(test) {
                 panic!("Invalid reciever address!");
             }
             return Some((ts, TxValidationStatus::FailureException));
@@ -546,7 +546,7 @@ fn handle_tx_messaging_althea(
         Ok(a) => a,
         Err(e) => {
             error!("Invalid sender address! {}", e);
-            if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+            if cfg!(feature = "integration_test") || cfg!(test) {
                 panic!("Invalid sender address!");
             }
             return Some((ts, TxValidationStatus::FailureException));
@@ -566,7 +566,7 @@ fn handle_tx_messaging_althea(
             "Invalid Denom! We do not currently support {}!",
             amount.denom
         );
-        if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+        if cfg!(feature = "integration_test") || cfg!(test) {
             panic!("Invalid recieved denom");
         }
         // since we must always send a payment that's valid to ourselves this must be a failure
@@ -585,7 +585,7 @@ fn handle_tx_messaging_althea(
 
     if !value_correct {
         error!("Transaction with invalid amount!");
-        if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+        if cfg!(feature = "integration_test") || cfg!(test) {
             panic!("Transaction with invalid amount!");
         }
         return Some((ts, TxValidationStatus::FailureException));
@@ -636,7 +636,7 @@ fn decode_althea_microtx(response: GetTxResponse) -> Vec<MsgMicrotx> {
                 // this exists to handle a pointer in go, it should never happen
                 // unless the server has a go error where this value is nil on return
                 error!("Althea chain tx {:?} has no tx field?", tx_resp);
-                if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test)
+                if cfg!(feature = "integration_test") || cfg!(test)
                 {
                     panic!("Althea chain tx {:?} has no tx field?", tx_resp);
                 }
@@ -653,7 +653,7 @@ fn decode_althea_microtx(response: GetTxResponse) -> Vec<MsgMicrotx> {
             Ok(a) => a,
             Err(e) => {
                 error!("Unable to decode raw_tx with {}", e);
-                if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test)
+                if cfg!(feature = "integration_test") || cfg!(test)
                 {
                     panic!("Unable to decode raw_tx with {}", e);
                 }
@@ -670,7 +670,7 @@ fn decode_althea_microtx(response: GetTxResponse) -> Vec<MsgMicrotx> {
             Ok(a) => a,
             Err(e) => {
                 error!("Unable to decode body_any with {}", e);
-                if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test)
+                if cfg!(feature = "integration_test") || cfg!(test)
                 {
                     panic!("Unable to decode body_any with {}", e);
                 }
@@ -694,7 +694,7 @@ fn decode_althea_microtx(response: GetTxResponse) -> Vec<MsgMicrotx> {
         ret
     } else {
         error!("Althea chain tx {:?} has no tx_response field?", response);
-        if cfg!(feature = "development") || cfg!(feature = "integration_test") || cfg!(test) {
+        if cfg!(feature = "integration_test") || cfg!(test) {
             panic!("Althea chain tx {:?} has no tx_response field?", response);
         }
         Vec::new()

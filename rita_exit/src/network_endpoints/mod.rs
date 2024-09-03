@@ -2,16 +2,8 @@
 //! these are called by rita instances to operate the mesh
 
 use crate::database::{client_status, get_exit_info, signup_client};
-#[cfg(feature = "development")]
-use crate::rita_exit::database::db_client::DbClient;
-#[cfg(feature = "development")]
-use crate::rita_exit::database::db_client::TruncateTables;
 
 use crate::RitaExitError;
-#[cfg(feature = "development")]
-use actix::SystemService;
-#[cfg(feature = "development")]
-use actix_web::AsyncResponder;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
