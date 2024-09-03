@@ -17,7 +17,7 @@ settings = { path = "../settings" }
 babel_monitor = { path = "../babel_monitor" }
 actix-async = { package = "actix", version = "0.13"}
 awc = {workspace = true}
-handlebars = "5.1"
+handlebars = "6.0"
 lazy_static = "1.4"
 ipnetwork = "0.20"
 clarity = {workspace = true}
