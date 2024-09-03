@@ -14,10 +14,7 @@ use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::websockets::{
     OperatorAction, OperatorWebsocketMessage, PaymentAndNetworkSettings,
 };
-use althea_types::{
-    get_sequence_num, NeighborStatus, ShaperSettings,
-    UsageTrackerTransfer,
-};
+use althea_types::{get_sequence_num, NeighborStatus, ShaperSettings, UsageTrackerTransfer};
 use althea_types::{
     AuthorizedKeys, BillingDetails, ContactStorage, ContactType, CurExitInfo, ExitConnection,
     HardwareInfo,

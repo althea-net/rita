@@ -11,7 +11,10 @@ use althea_types::{
 };
 use awc::ws::Frame;
 use futures::{SinkExt, StreamExt};
-use settings::{get_billing_details, get_contact_info, get_install_details, get_operator_address, get_system_chain, get_user_bandwidth_limit};
+use settings::{
+    get_billing_details, get_contact_info, get_install_details, get_operator_address,
+    get_system_chain, get_user_bandwidth_limit,
+};
 use tokio::time::timeout;
 
 use crate::operator_update::{

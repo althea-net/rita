@@ -636,8 +636,7 @@ fn decode_althea_microtx(response: GetTxResponse) -> Vec<MsgMicrotx> {
                 // this exists to handle a pointer in go, it should never happen
                 // unless the server has a go error where this value is nil on return
                 error!("Althea chain tx {:?} has no tx field?", tx_resp);
-                if cfg!(feature = "integration_test") || cfg!(test)
-                {
+                if cfg!(feature = "integration_test") || cfg!(test) {
                     panic!("Althea chain tx {:?} has no tx field?", tx_resp);
                 }
                 return Vec::new();
@@ -653,8 +652,7 @@ fn decode_althea_microtx(response: GetTxResponse) -> Vec<MsgMicrotx> {
             Ok(a) => a,
             Err(e) => {
                 error!("Unable to decode raw_tx with {}", e);
-                if cfg!(feature = "integration_test") || cfg!(test)
-                {
+                if cfg!(feature = "integration_test") || cfg!(test) {
                     panic!("Unable to decode raw_tx with {}", e);
                 }
                 return Vec::new();
@@ -670,8 +668,7 @@ fn decode_althea_microtx(response: GetTxResponse) -> Vec<MsgMicrotx> {
             Ok(a) => a,
             Err(e) => {
                 error!("Unable to decode body_any with {}", e);
-                if cfg!(feature = "integration_test") || cfg!(test)
-                {
+                if cfg!(feature = "integration_test") || cfg!(test) {
                     panic!("Unable to decode body_any with {}", e);
                 }
                 return Vec::new();
