@@ -2,6 +2,7 @@
 //! these are called by rita instances to operate the mesh
 
 use crate::database::{client_status, signup_client};
+
 use crate::RitaExitError;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
 use althea_types::exit_encryption::{
