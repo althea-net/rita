@@ -191,9 +191,9 @@ pub enum OperatorWebsocketMessage {
     /// settings for babeld
     BabeldSettings(BabeldConfig),
     /// Updated contact info from ops tools
-    ContactInfo(ContactType),
+    ContactInfo(Option<ContactType>),
     /// Billing details from ops tools, so that we may sync changes
-    BillingDetails(BillingDetails),
+    BillingDetails(Option<BillingDetails>),
     /// Last seen hour that ops tools has for usage data, so we know from the router
     /// side how much history we need to send in with the next checkin cycle
     OpsLastSeenUsageHour(u64),

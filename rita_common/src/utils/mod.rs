@@ -9,11 +9,6 @@ use babel_monitor::structs::BabeldConfig;
 /// throw a dead code warning.
 pub mod ip_increment;
 
-#[allow(dead_code)]
-pub fn option_convert<B: std::convert::From<A>, A>(item: Option<A>) -> Option<B> {
-    item.map(|val| val.into())
-}
-
 pub fn env_vars_contains(var_name: &str) -> bool {
     for (key, _value) in env::vars_os() {
         if key == var_name {

@@ -18,7 +18,8 @@ extern crate log;
 extern crate arrayvec;
 
 use althea_kernel_interface::KI;
-use althea_types::Identity;
+use althea_types::{BillingDetails, ContactType, Identity, InstallationDetails, SystemChain};
+use clarity::Address;
 use network::NetworkSettings;
 use payment::PaymentSettings;
 use serde::Serialize;
@@ -88,6 +89,10 @@ pub enum SettingsType {
     Client,
     Exit,
     Adaptor,
+}
+
+pub fn option_convert<B: std::convert::From<A>, A>(item: Option<A>) -> Option<B> {
+    item.map(|val| val.into())
 }
 
 // WrappedSettingsAdaptor allows settings to be handled by a higher layer that wraps RitaClientSettings and adds its own additional fields.
@@ -299,6 +304,36 @@ pub fn get_rita_client() -> RitaClientSettings {
         Some(Settings::Exit(_)) => panic!("expected client settings, but got exit setttings"),
         None => panic!("expected settings but got none"),
     }
+}
+
+pub fn get_contact_info() -> Option<ContactType> {
+    let rita_client = get_rita_client();
+    let exit_client = rita_client.exit_client;
+    option_convert(exit_client.contact_info)
+}
+pub fn get_install_details() -> Option<InstallationDetails> {
+    let rita_client = get_rita_client();
+    let operator_settings = rita_client.operator;
+    operator_settings.installation_details
+}
+pub fn get_billing_details() -> Option<BillingDetails> {
+    let rita_client = get_rita_client();
+    let operator_settings = rita_client.operator;
+    operator_settings.billing_details
+}
+pub fn get_user_bandwidth_limit() -> Option<usize> {
+    let rita_client = get_rita_client();
+    rita_client.network.user_bandwidth_limit
+}
+pub fn get_operator_address() -> Option<Address> {
+    let rita_client = get_rita_client();
+    let operator_settings = rita_client.operator.clone();
+    operator_settings.operator_address
+}
+pub fn get_system_chain() -> SystemChain {
+    let rita_client = get_rita_client();
+    let payment = rita_client.payment;
+    payment.system_chain
 }
 
 /// Set exit settings into memory

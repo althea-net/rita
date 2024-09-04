@@ -15,7 +15,7 @@ use althea_types::websockets::{
     OperatorAction, OperatorWebsocketMessage, PaymentAndNetworkSettings,
 };
 use althea_types::{
-    get_sequence_num, InstallationDetails, NeighborStatus, ShaperSettings, SystemChain,
+    get_sequence_num, NeighborStatus, ShaperSettings,
     UsageTrackerTransfer,
 };
 use althea_types::{
@@ -23,14 +23,12 @@ use althea_types::{
     HardwareInfo,
 };
 use babel_monitor::structs::BabeldConfig;
-use clarity::Address;
 use num256::Uint256;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use rita_common::usage_tracker::structs::UsageType::{Client, Relay};
 use rita_common::usage_tracker::{get_current_hour, get_current_throughput, get_usage_data_map};
-use rita_common::utils::option_convert;
 use rita_common::DROPBEAR_AUTHORIZED_KEYS;
 use rita_common::KI;
 use serde_json::Map;
@@ -38,7 +36,7 @@ use serde_json::Value;
 use settings::client::RitaClientSettings;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
-use settings::set_rita_client;
+use settings::{option_convert, set_rita_client};
 use std::collections::{HashMap, HashSet};
 use std::fs::{remove_file, rename, File};
 use std::io::{BufRead, BufReader, Write};
@@ -61,16 +59,6 @@ lazy_static! {
     static ref RITA_UPTIME: Instant = Instant::now();
 }
 
-pub fn get_operator_address() -> Option<Address> {
-    let rita_client = settings::get_rita_client();
-    let operator_settings = rita_client.operator.clone();
-    operator_settings.operator_address
-}
-pub fn get_system_chain() -> SystemChain {
-    let rita_client = settings::get_rita_client();
-    let payment = rita_client.payment;
-    payment.system_chain
-}
 pub fn get_exit_con() -> Option<ExitConnection> {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client.clone();
@@ -98,21 +86,6 @@ pub fn get_neighbor_info() -> Vec<NeighborStatus> {
     }
     neighbor_info
 }
-pub fn get_contact_info() -> Option<ContactType> {
-    let rita_client = settings::get_rita_client();
-    let exit_client = rita_client.exit_client;
-    option_convert(exit_client.contact_info)
-}
-pub fn get_install_details() -> Option<InstallationDetails> {
-    let rita_client = settings::get_rita_client();
-    let operator_settings = rita_client.operator;
-    operator_settings.installation_details
-}
-pub fn get_billing_details() -> Option<BillingDetails> {
-    let rita_client = settings::get_rita_client();
-    let operator_settings = rita_client.operator;
-    operator_settings.billing_details
-}
 pub fn get_hardware_info_update() -> Option<HardwareInfo> {
     let rita_client = settings::get_rita_client();
     let logging_enabled = rita_client.log.enabled;
@@ -130,10 +103,6 @@ pub fn get_hardware_info_update() -> Option<HardwareInfo> {
 
     hardware_info_logs(&hardware_info);
     hardware_info
-}
-pub fn get_user_bandwidth_limit() -> Option<usize> {
-    let rita_client = settings::get_rita_client();
-    rita_client.network.user_bandwidth_limit
 }
 pub fn get_user_bandwidth_usage(
     ops_last_seen_usage_hour: Option<u64>,
@@ -204,12 +173,10 @@ pub fn handle_operator_update(
         }
         OperatorWebsocketMessage::ContactInfo(info) => {
             let mut rita_client = settings::get_rita_client();
-            let update = check_contacts_update(
-                rita_client.exit_client.contact_info.clone(),
-                Some(info.clone()),
-            );
+            let update =
+                check_contacts_update(rita_client.exit_client.contact_info.clone(), info.clone());
             if update {
-                rita_client.exit_client.contact_info = option_convert(Some(info));
+                rita_client.exit_client.contact_info = option_convert(info);
             }
             set_rita_client(rita_client);
         }
@@ -218,12 +185,9 @@ pub fn handle_operator_update(
             rita_client.operator.installation_details = None;
             if check_billing_update(
                 rita_client.operator.billing_details.clone(),
-                Some(details.clone()),
+                details.clone(),
             ) {
-                rita_client
-                    .operator
-                    .billing_details
-                    .clone_from(&Some(details));
+                rita_client.operator.billing_details.clone_from(&details);
                 set_rita_client(rita_client);
             }
         }

@@ -11,12 +11,12 @@ use althea_types::{
 };
 use awc::ws::Frame;
 use futures::{SinkExt, StreamExt};
+use settings::{get_billing_details, get_contact_info, get_install_details, get_operator_address, get_system_chain, get_user_bandwidth_limit};
 use tokio::time::timeout;
 
 use crate::operator_update::{
-    get_billing_details, get_client_mbps, get_contact_info, get_exit_con, get_hardware_info_update,
-    get_install_details, get_neighbor_info, get_operator_address, get_relay_mbps, get_rita_uptime,
-    get_system_chain, get_user_bandwidth_limit, get_user_bandwidth_usage, handle_operator_update,
+    get_client_mbps, get_exit_con, get_hardware_info_update, get_neighbor_info, get_relay_mbps,
+    get_rita_uptime, get_user_bandwidth_usage, handle_operator_update,
 };
 
 /// This function spawns a thread solely responsible for performing the websocket operator update
@@ -41,7 +41,7 @@ pub fn send_websocket_update() {
     if cfg!(feature = "dev_env") {
         url = "http://7.7.7.7:8080/ws/";
     } else if cfg!(feature = "operator_debug") {
-        url = "http://192.168.1.214:8080/ws/";
+        url = "http://192.168.10.2:8080/ws/";
     } else {
         url = "https://operator.althea.net:8080/ws/";
     }
