@@ -201,7 +201,7 @@ pub fn start_antenna_forwarder(settings: RitaClientSettings) {
         if cfg!(feature = "dev_env") {
             url = "7.7.7.7:33300";
         } else if cfg!(feature = "operator_debug") {
-            url = "192.168.1.214:33334";
+            url = "192.168.10.2:33334";
         } else {
             url = "operator.althea.net:33334";
         }

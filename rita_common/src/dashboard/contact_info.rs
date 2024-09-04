@@ -2,12 +2,12 @@
 //! we end up processing and moving contact data in a few other places (exit registration, text notifications) the contact_details member of
 //! the exit settings struct is the one true source. All the others are updated as needed and you should try to phase them out if practical.
 
-use crate::utils::option_convert;
 use actix_web_async::HttpRequest;
 use actix_web_async::HttpResponse;
 use althea_types::ContactType;
 use lettre::Address as EmailAddress;
 use phonenumber::PhoneNumber;
+use settings::option_convert;
 
 fn clean_quotes(val: &str) -> String {
     val.trim().trim_matches('"').trim_matches('\\').to_string()
