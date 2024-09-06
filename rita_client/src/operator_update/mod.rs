@@ -122,6 +122,7 @@ pub fn handle_operator_update(
     // now we have to save settings after each action though
     match new_settings {
         OperatorWebsocketMessage::PaymentAndNetworkSettings(settings) => {
+            info!("RECEIVED WEBSOCKET MESSAGE: PaymentAndNetworkSettings");
             let mut rita_client = settings::get_rita_client();
             let use_operator_price = rita_client.operator.use_operator_price
                 || rita_client.operator.force_use_operator_price;
@@ -140,6 +141,7 @@ pub fn handle_operator_update(
         }
 
         OperatorWebsocketMessage::OperatorFee(fee) => {
+            info!("RECEIVED WEBSOCKET MESSAGE: OperatorFee");
             let mut rita_client = settings::get_rita_client();
             let use_operator_price = rita_client.operator.use_operator_price
                 || rita_client.operator.force_use_operator_price;
@@ -151,22 +153,30 @@ pub fn handle_operator_update(
             }
         }
         OperatorWebsocketMessage::MergeJson(json) => {
+            info!("RECEIVED WEBSOCKET MESSAGE: MergeJson");
             let mut rita_client = settings::get_rita_client();
             // merge the new settings into the local settings
             merge_settings_safely(&mut rita_client, json);
             set_rita_client(rita_client);
         }
-        OperatorWebsocketMessage::OperatorAction(action) => perform_operator_action(action),
+        OperatorWebsocketMessage::OperatorAction(action) => {
+            info!("RECEIVED WEBSOCKET MESSAGE: OperatorAction");
+            perform_operator_action(action)
+        }
         OperatorWebsocketMessage::LocalUpdateInstruction(update_instructions) => {
+            info!("RECEIVED WEBSOCKET MESSAGE: LocalUpdateInstruction");
             set_router_update_instruction(update_instructions);
         }
         OperatorWebsocketMessage::ShaperSettings(settings) => {
+            info!("RECEIVED WEBSOCKET MESSAGE: ShaperSettings");
             apply_shaper_settings_update(settings)
         }
         OperatorWebsocketMessage::BabeldSettings(settings) => {
+            info!("RECEIVED WEBSOCKET MESSAGE: BabeldSettings");
             apply_babeld_settings_update(settings)
         }
         OperatorWebsocketMessage::ContactInfo(info) => {
+            info!("RECEIVED WEBSOCKET MESSAGE: ContactInfo");
             let mut rita_client = settings::get_rita_client();
             let update = check_contacts_update(
                 rita_client.payment.contact_info.clone(),
@@ -178,6 +188,7 @@ pub fn handle_operator_update(
             set_rita_client(rita_client);
         }
         OperatorWebsocketMessage::BillingDetails(details) => {
+            info!("RECEIVED WEBSOCKET MESSAGE: BillingDetails");
             let mut rita_client = settings::get_rita_client();
             rita_client.operator.installation_details = None;
             if check_billing_update(
@@ -189,6 +200,7 @@ pub fn handle_operator_update(
             }
         }
         OperatorWebsocketMessage::OpsLastSeenUsageHour(hour) => {
+            info!("RECEIVED WEBSOCKET MESSAGE: OpsLastSeenUsageHour");
             return Ok(Some(hour));
         }
     };
