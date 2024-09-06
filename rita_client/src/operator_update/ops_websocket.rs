@@ -45,10 +45,16 @@ pub fn send_websocket_update() {
     } else {
         url = "https://operator.althea.net:8080/ws/";
     }
-    thread::spawn(move || loop {
-        let runner = System::new();
-        runner.block_on(async move {
-            let res = awc::Client::new().ws(url).connect().await;
+    // outer thread is a watchdog inner thread is the runner
+    thread::spawn(move || {
+        // this will always be an error, so it's really just a loop statement
+        // with some fancy destructuring
+        while let Err(e) =
+            {
+                thread::spawn(move || loop {
+                    let runner = System::new();
+                    runner.block_on(async move {
+                        let res = awc::Client::new().ws(url).connect().await;
             match res {
                 Ok((res, mut ws)) => {
                     info!("Websocket actor is connected {:?}", res);
@@ -61,10 +67,11 @@ pub fn send_websocket_update() {
                     let mut five_minute_timer: Instant = Instant::now();
                     loop {
                         // check if there is anything to read first
-                        let res = timeout(SOCKET_CHECKER_TIMEOUT, ws.next()).await;
-                        if let Ok(Some(res)) = res {
-                            let msg = res.unwrap();
-                            ops_last_seen_usage_hour = handle_received_operator_message(msg);
+                        while let Ok(Some(msg)) = timeout(SOCKET_CHECKER_TIMEOUT, ws.next()).await {
+                            let msg = msg.unwrap();
+                            if let Some(hour) = handle_received_operator_message(msg) {
+                                ops_last_seen_usage_hour = Some(hour);
+                            }
                         }
 
                         // then send over new checkin data where applicable
@@ -76,6 +83,7 @@ pub fn send_websocket_update() {
                                 // the thread will simply reconnect the socket and retry
                                 ws.send(message).await.unwrap();
                             }
+                            info!("Ten minute websocket update sent");
                             ten_minute_timer = Instant::now();
                         }
                         if Instant::now() - five_minute_timer > FIVE_MINUTES {
@@ -85,20 +93,21 @@ pub fn send_websocket_update() {
                             for message in messages {
                                 ws.send(message).await.unwrap();
                             }
+                            info!("Five minute websocket update sent");
                             five_minute_timer = Instant::now();
                         }
-                        // the rest of these are 5 second interval updates and run every iteration of the loop
+                        // the rest of these are 10 second interval updates and run every iteration of the loop
                         let messages = get_ten_second_update_data(id);
                         for message in messages {
                             ws.send(message).await.unwrap();
                         }
+                        info!("Ten second websocket update sent");
 
                         // check again for any responses to read
-                        let res = timeout(SOCKET_CHECKER_TIMEOUT, ws.next()).await;
-                        if let Ok(Some(res)) = res {
-                            let msg = res.unwrap();
-                            if let Some(last) = handle_received_operator_message(msg) {
-                                ops_last_seen_usage_hour = Some(last);
+                        while let Ok(Some(msg)) = timeout(SOCKET_CHECKER_TIMEOUT, ws.next()).await {
+                            let msg = msg.unwrap();
+                            if let Some(hour) = handle_received_operator_message(msg) {
+                                ops_last_seen_usage_hour = Some(hour);
                             }
                         }
                         info!("Sleeping until next checkin...");
@@ -114,7 +123,13 @@ pub fn send_websocket_update() {
                 }
             }
         });
-        info!("Restarting websocket loop...");
+                    info!("Restarting websocket loop...");
+                })
+                .join()
+            }
+        {
+            error!("Websocket loop thread panicked! Respawning {:?}", e);
+        }
     });
 }
 
