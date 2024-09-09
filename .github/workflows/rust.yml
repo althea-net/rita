@@ -55,7 +55,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
       - name: Cross test aarch64
-        run: cargo install cross && cross test --target aarch64-unknown-linux-musl --verbose -- --test-threads=1
+        run: cargo install cross && cross build --target aarch64-unknown-linux-musl --verbose -p rita_bin --bin rita
   cross-armv7:
     needs: test
     runs-on: ubuntu-latest
@@ -63,7 +63,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
       - name: Cross test armv7
-        run: cargo install cross && cross test --target armv7-unknown-linux-musleabihf --verbose -- --test-threads=1
+        run: cargo install cross && cross build --target armv7-unknown-linux-musleabihf --verbose -p rita_bin --bin rita
   integration-test-five-nodes:
     needs: check
     runs-on: ubuntu-latest
