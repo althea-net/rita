@@ -9,8 +9,8 @@ env_logger = "0.11"
 log = "0.4"
 docopt = "1.1"
 actix-async = { package = "actix", version = "0.13" }
-nix = "0.26.1"
-petgraph = "0.6.2"
+nix = "0.26.4"
+petgraph = "0.6.5"
 babel_monitor = { path = "../babel_monitor" }
 althea_kernel_interface = { path = "../althea_kernel_interface", features = [
     "integration_test",
@@ -23,11 +23,11 @@ rita_common = { path = "../rita_common", features = ["integration_test"] }
 rita_exit = { path = "../rita_exit", features = ["dev_env"] }
 rita_client_registration = { path = "../rita_client_registration" }
 rita_db_migration = { path = "../rita_db_migration" }
-ctrlc = { version = "3.2.1", features = ["termination"] }
+ctrlc = { version = "3.4.5", features = ["termination"] }
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 diesel_migrations = { version = "1.4", features = ["postgres"] }
 awc = {workspace = true}
-actix-rt = "2.8"
+actix-rt = "2.10"
 deep_space = {workspace = true}
 clarity = {workspace = true}
 althea_proto = {workspace = true}
@@ -35,8 +35,8 @@ futures = { version = "0.3", features = ["compat"] }
 num256 = "0.5"
 num-traits="0.2"
 web30 = {workspace = true}
-lazy_static = "1.4"
-actix-web = { version = "4.6", default-features = false, features = [
+lazy_static = "1.5"
+actix-web = { version = "4.9", default-features = false, features = [
     "openssl",
 ] }
-phonenumber = "0.3.5"
+phonenumber = "0.3.6"

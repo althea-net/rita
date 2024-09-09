@@ -15,5 +15,5 @@ antenna_forwarding_protocol = {path = "../antenna_forwarding_protocol"}
 serde_json = "1.0"
 serde = "1.0"
 get_if_addrs = "0.5"
-lazy_static = "1.4"
+lazy_static = "1.5"
 rand = "0.8"

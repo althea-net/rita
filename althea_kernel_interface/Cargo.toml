@@ -8,16 +8,16 @@ edition = "2021"
 
 [dependencies]
 oping = "0.3"
-lazy_static = "1.4"
+lazy_static = "1.5"
 log = "0.4"
 serde_derive = "1.0"
 serde = "1.0"
 althea_types = { path = "../althea_types" }
 ipnetwork = "0.20"
-mac_address = "1.1.4"
+mac_address = "1.1.7"
 
 [dependencies.regex]
-version = "1.6"
+version = "1.10"
 default-features = false
 features = ["std"]
 

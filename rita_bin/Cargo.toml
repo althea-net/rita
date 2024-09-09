@@ -26,7 +26,7 @@ althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }
 clu = { path = "../clu" }
 actix-async = { package = "actix", version = "0.13" }
-actix-web-async = { package = "actix-web", version = "4.3", default-features = false, features = [
+actix-web-async = { package = "actix-web", version = "4.9", default-features = false, features = [
     "openssl",
 ] }
 docopt = "1.1"
@@ -40,10 +40,10 @@ arrayvec = { version = "0.7", features = ["serde"] }
 hex-literal = "0.4"
 openssl-probe = "0.1"
 env_logger = "0.11"
-lazy_static = "1.4"
-phonenumber = "0.3.5"
+lazy_static = "1.5"
+phonenumber = "0.3.6"
 r2d2 = "0.8"
-ctrlc = { version = "3.2.1", features = ["termination"] }
+ctrlc = { version = "3.4.5", features = ["termination"] }
 rita_common = { path = "../rita_common", default-features = false }
 rita_client = { path = "../rita_client", default-features = false }
 rita_client_registration = { path = "../rita_client_registration", default-features = false }

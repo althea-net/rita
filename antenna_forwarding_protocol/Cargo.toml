@@ -11,7 +11,7 @@ serde_derive = "1.0"
 serde = "1.0"
 clarity = {workspace = true}
 log = "0.4"
-lazy_static = "1.4"
+lazy_static = "1.5"
 crypto_box = "0.9"
 
 [dev-dependencies]

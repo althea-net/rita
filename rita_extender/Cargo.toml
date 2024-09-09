@@ -10,14 +10,14 @@ compressed_log = "0.5"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-lazy_static = "1.4"
+lazy_static = "1.5"
 rita_common = { path = "../rita_common" }
 rita_client = { path = "../rita_client" }
 log = { version = "0.4", features = ["release_max_level_info"] }
 settings = { path = "../settings" }
 awc = {workspace = true}
 actix-async = {package="actix", version = "0.13"}
-actix-web-async = { package="actix-web", version = "4.3", default-features = false, features= ["openssl"]}
+actix-web-async = { package="actix-web", version = "4.9", default-features = false, features= ["openssl"]}
 althea_types = {path = "../althea_types"}
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 
