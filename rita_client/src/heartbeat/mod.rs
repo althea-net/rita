@@ -24,12 +24,15 @@ use babel_monitor::parsing::get_neigh_given_route;
 use babel_monitor::structs::BabelMonitorError;
 use babel_monitor::structs::Neighbor;
 use babel_monitor::structs::Route;
+use crypto_box::aead::Aead;
+use crypto_box::aead::AeadCore;
+use crypto_box::aead::OsRng;
+use crypto_box::SalsaBox;
 use dummy::dummy_selected_exit_details;
 use rita_common::blockchain_oracle::get_oracle_balance;
 use rita_common::network_monitor::get_network_info;
 use rita_common::network_monitor::GetNetworkInfo;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
-use sodiumoxide::crypto::box_;
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 use std::net::ToSocketAddrs;
@@ -353,13 +356,14 @@ fn send_udp_heartbeat_packet(
     // serde will only fail under specific circumstances with specific structs
     // given the fixed nature of our application here I think this is safe
     let plaintext = serde_json::to_vec(&message).unwrap();
-    let nonce = box_::gen_nonce();
-    let ciphertext = box_::seal(&plaintext, &nonce, &their_publickey, &our_secretkey);
+    let nonce = SalsaBox::generate_nonce(&mut OsRng);
+    let b = SalsaBox::new(&their_publickey, &our_secretkey);
+    let ciphertext = b.encrypt(&nonce, plaintext.as_ref()).unwrap();
 
     let mut packet_contents = Vec::new();
     // build the packet from slices
     packet_contents.extend_from_slice(our_publickey.as_ref());
-    packet_contents.extend_from_slice(&nonce.0);
+    packet_contents.extend_from_slice(nonce.as_ref());
     packet_contents.extend_from_slice(&ciphertext);
 
     if let Err(e) = local_socket.set_write_timeout(Some(Duration::new(0, 100))) {

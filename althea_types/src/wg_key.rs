@@ -1,11 +1,15 @@
-use crate::error::AltheaTypesError;
-use num256::Uint256;
 /// This file under Apache 2.0
+use crate::error::AltheaTypesError;
+use crypto_box::PublicKey;
+use crypto_box::SecretKey;
+use num256::Uint256;
 use serde::de::{Deserialize, Error, Unexpected, Visitor};
 use serde::ser::{Serialize, Serializer};
 use serde::Deserializer;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
+#[cfg(test)]
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey as NaclPublicKey;
+#[cfg(test)]
+use sodiumoxide::crypto::box_::SecretKey as NaclSecretKey;
 use std::fmt;
 use std::str::FromStr;
 
@@ -29,13 +33,28 @@ impl From<WgKey> for [u8; 32] {
 /// Be very careful not to use this on the public key! That would be bad
 impl From<WgKey> for SecretKey {
     fn from(val: WgKey) -> SecretKey {
-        SecretKey(val.0)
+        SecretKey::from_bytes(val.0)
     }
 }
 
 impl From<WgKey> for PublicKey {
     fn from(val: WgKey) -> PublicKey {
-        PublicKey(val.0)
+        PublicKey::from_bytes(val.0)
+    }
+}
+
+// test implementations for libsodium
+#[cfg(test)]
+impl From<WgKey> for NaclSecretKey {
+    fn from(val: WgKey) -> NaclSecretKey {
+        NaclSecretKey(val.0)
+    }
+}
+
+#[cfg(test)]
+impl From<WgKey> for NaclPublicKey {
+    fn from(val: WgKey) -> NaclPublicKey {
+        NaclPublicKey(val.0)
     }
 }
 

@@ -16,9 +16,10 @@ extern crate lazy_static;
 
 use althea_types::Identity;
 use althea_types::WgKey;
-use sodiumoxide::crypto::box_;
-use sodiumoxide::crypto::box_::Nonce;
-use sodiumoxide::crypto::box_::NONCEBYTES;
+use crypto_box::aead::Aead;
+use crypto_box::aead::AeadCore;
+use crypto_box::aead::OsRng;
+use crypto_box::SalsaBox;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -50,6 +51,10 @@ pub const HEADER_LEN: usize = 22;
 /// The amount of time before we close a stream that has not gotten a message
 /// from an antenna or a client
 pub const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// This is the size in bytes of the nonce used by the crypto_box construct, it's quite large because
+/// nonce reuse is catastrophic for security, revealing the key. This is large enough to prevent collisons
+const NONCEBYTES: usize = 24;
 
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub enum ForwardingProtocolError {
@@ -354,10 +359,11 @@ impl ForwardingProtocolMessage {
             let client_publickey = client_publickey.into();
             let server_secretkey = server_secretkey.into();
             let plaintext = serde_json::to_vec(self).unwrap();
-            let nonce = box_::gen_nonce();
-            let ciphertext = box_::seal(&plaintext, &nonce, &client_publickey, &server_secretkey);
+            let nonce = SalsaBox::generate_nonce(&mut OsRng);
+            let b = SalsaBox::new(&client_publickey, &server_secretkey);
+            let ciphertext = b.encrypt(&nonce, plaintext.as_ref()).unwrap();
             let mut payload = Vec::new();
-            payload.extend_from_slice(&nonce.0);
+            payload.extend_from_slice(nonce.as_ref());
             payload.extend_from_slice(&ciphertext);
 
             let mut message = Vec::new();
@@ -413,12 +419,12 @@ impl ForwardingProtocolMessage {
         let nonce_end = HEADER_LEN + NONCEBYTES;
         let mut nonce: [u8; NONCEBYTES] = [0; NONCEBYTES];
         nonce.clone_from_slice(&payload[HEADER_LEN..nonce_end]);
-        let nonce = Nonce(nonce);
         let end_bytes = HEADER_LEN + packet_len as usize;
         let ciphertext = &payload[nonce_end..end_bytes];
         let sk = client_secretkey.into();
         let pk = server_publickey.into();
-        match box_::open(ciphertext, &nonce, &pk, &sk) {
+        let b = SalsaBox::new(&pk, &sk);
+        match b.decrypt(nonce.as_ref().into(), ciphertext.as_ref()) {
             Ok(plaintext) => match serde_json::from_slice(&plaintext) {
                 Ok(forward_message) => Ok((end_bytes, forward_message)),
                 Err(e) => Err(ForwardingProtocolError::SerdeError {

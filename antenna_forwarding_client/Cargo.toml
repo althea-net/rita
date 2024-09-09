@@ -8,7 +8,7 @@ edition = "2021"
 env_logger = "0.11"
 log = "0.4"
 oping = "0.3"
-sodiumoxide = "0.2"
+crypto_box = "0.9"
 althea_types = { path = "../althea_types"}
 althea_kernel_interface = { path = "../althea_kernel_interface"}
 antenna_forwarding_protocol = {path = "../antenna_forwarding_protocol"}

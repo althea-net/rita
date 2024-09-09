@@ -16,13 +16,13 @@ use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };
 use althea_types::{ExitList, WgKey};
+use crypto_box::SecretKey;
 use num256::Int256;
 use rita_client_registration::client_db::get_exits_list;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::rita_loop::get_web3_server;
 use settings::get_rita_exit;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -58,7 +58,7 @@ fn decrypt_exit_client_id_helper(
             DecryptResult::Failure(Ok(encrypt_setup_return(
                 state,
                 our_secretkey,
-                their_nacl_pubkey,
+                &their_nacl_pubkey,
             )))
         }
     }
@@ -110,7 +110,7 @@ pub async fn secure_setup_request(
             Ok(exit_state) => HttpResponse::Ok().json(encrypt_setup_return(
                 exit_state,
                 &our_secretkey.into(),
-                their_nacl_pubkey,
+                &their_nacl_pubkey,
             )),
             Err(e) => {
                 error!("Signup client failed with {:?}", e);
@@ -125,7 +125,7 @@ pub async fn secure_setup_request(
         HttpResponse::Ok().json(encrypt_setup_return(
             state,
             &our_secretkey.into(),
-            their_nacl_pubkey,
+            &their_nacl_pubkey,
         ))
     }
 }
@@ -179,7 +179,7 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
     HttpResponse::Ok().json(encrypt_setup_return(
         state,
         &our_secretkey.into(),
-        their_nacl_pubkey,
+        &their_nacl_pubkey,
     ))
 }
 

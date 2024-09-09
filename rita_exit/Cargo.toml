@@ -6,8 +6,6 @@ license = "Apache-2.0"
 
 
 [dependencies]
-# debug is used here to make sure exit logs remain accessible locally
-sodiumoxide = "0.2"
 num256 = "0.5"
 rita_common = { path = "../rita_common" }
 rita_client_registration = { path = "../rita_client_registration" }
@@ -33,6 +31,7 @@ actix-web-async = { package = "actix-web", version = "4.3", default-features = f
 ] }
 deep_space = { workspace = true }
 web30 = "1.0"
+crypto_box = "0.9"
 
 [features]
 # changes operator urls

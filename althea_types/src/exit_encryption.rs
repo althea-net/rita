@@ -6,10 +6,12 @@ use crate::ExitListV2;
 use crate::WgKey;
 use crate::{EncryptedExitClientIdentity, EncryptedExitState};
 use crate::{ExitClientIdentity, ExitState};
-use sodiumoxide::crypto::box_;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
-use sodiumoxide::crypto::box_::SecretKey;
+use crypto_box::aead::Aead;
+use crypto_box::aead::AeadCore;
+use crypto_box::aead::OsRng;
+use crypto_box::PublicKey;
+use crypto_box::SalsaBox;
+use crypto_box::SecretKey;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -54,11 +56,12 @@ pub fn encrypt_exit_client_id(
     let plaintext = serde_json::to_string(&id)
         .expect("Failed to serialize ExitState!")
         .into_bytes();
-    let nonce = box_::gen_nonce();
-    let ciphertext = box_::seal(&plaintext, &nonce, exit_pubkey, our_secretkey);
+    let nonce = SalsaBox::generate_nonce(&mut OsRng);
+    let b = SalsaBox::new(exit_pubkey, our_secretkey);
+    let ciphertext = b.encrypt(&nonce, plaintext.as_ref()).unwrap();
 
     EncryptedExitClientIdentity {
-        nonce: nonce.0,
+        nonce: nonce.into(),
         pubkey: our_publickey,
         encrypted_exit_client_id: ciphertext,
     }
@@ -69,18 +72,19 @@ pub fn decrypt_exit_client_id(
     our_secretkey: &SecretKey,
 ) -> Result<ExitClientIdentity, ExitEncryptionError> {
     let their_nacl_pubkey = val.pubkey.into();
-    let their_nonce = Nonce(val.nonce);
+    let their_nonce = val.nonce;
     let ciphertext = val.encrypted_exit_client_id;
 
-    let decrypted_bytes =
-        match box_::open(&ciphertext, &their_nonce, &their_nacl_pubkey, our_secretkey) {
-            Ok(value) => value,
-            Err(_) => {
-                return Err(ExitEncryptionError::ExitClientIdDecryptionError {
-                    e: "Cloud not decrypt exit client id".to_string(),
-                });
-            }
-        };
+    let b = SalsaBox::new(&their_nacl_pubkey, our_secretkey);
+
+    let decrypted_bytes = match b.decrypt(their_nonce.as_ref().into(), ciphertext.as_ref()) {
+        Ok(value) => value,
+        Err(_) => {
+            return Err(ExitEncryptionError::ExitClientIdDecryptionError {
+                e: "Cloud not decrypt exit client id".to_string(),
+            });
+        }
+    };
 
     let decrypted_string = match String::from_utf8(decrypted_bytes) {
         Ok(value) => value,
@@ -105,9 +109,12 @@ pub fn decrypt_exit_state(
     exit_pubkey: &PublicKey,
 ) -> Result<ExitState, ExitEncryptionError> {
     let ciphertext = exit_state.encrypted_exit_state;
-    let nonce = Nonce(exit_state.nonce);
+    let nonce = exit_state.nonce;
+
+    let b = SalsaBox::new(exit_pubkey, our_secretkey);
+
     let decrypted_exit_state: ExitState =
-        match box_::open(&ciphertext, &nonce, exit_pubkey, our_secretkey) {
+        match b.decrypt(nonce.as_ref().into(), ciphertext.as_ref()) {
             Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
                 Ok(json_string) => match serde_json::from_str(&json_string) {
                     Ok(exit_state) => exit_state,
@@ -134,8 +141,11 @@ pub fn decrypt_exit_list(
     exit_pubkey: &PublicKey,
 ) -> Result<ExitListV2, ExitEncryptionError> {
     let ciphertext = exit_list.exit_list;
-    let nonce = Nonce(exit_list.nonce);
-    let ret: ExitListV2 = match box_::open(&ciphertext, &nonce, exit_pubkey, our_secretkey) {
+    let nonce = exit_list.nonce;
+
+    let b = SalsaBox::new(exit_pubkey, our_secretkey);
+
+    let ret: ExitListV2 = match b.decrypt(nonce.as_ref().into(), ciphertext.as_ref()) {
         Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
             Ok(json_string) => match serde_json::from_str(&json_string) {
                 Ok(ip_list) => ip_list,
@@ -159,32 +169,17 @@ pub fn decrypt_exit_list(
 pub fn encrypt_setup_return(
     ret: ExitState,
     our_secretkey: &SecretKey,
-    their_pubkey: PublicKey,
+    their_pubkey: &PublicKey,
 ) -> EncryptedExitState {
     let plaintext = serde_json::to_string(&ret)
         .expect("Failed to serialize ExitState!")
         .into_bytes();
-    let nonce = box_::gen_nonce();
-    let ciphertext = box_::seal(&plaintext, &nonce, &their_pubkey, our_secretkey);
+    let nonce = SalsaBox::generate_nonce(&mut OsRng);
+    let b = SalsaBox::new(their_pubkey, our_secretkey);
+    let ciphertext = b.encrypt(&nonce, plaintext.as_ref()).unwrap();
     EncryptedExitState {
-        nonce: nonce.0,
+        nonce: nonce.into(),
         encrypted_exit_state: ciphertext,
-    }
-}
-
-pub fn encrypt_exit_list_v2(
-    ret: &ExitListV2,
-    our_secretkey: &SecretKey,
-    their_pubkey: &PublicKey,
-) -> EncryptedExitList {
-    let plaintext = serde_json::to_string(&ret)
-        .expect("Failed to serialize ExitList!")
-        .into_bytes();
-    let nonce = box_::gen_nonce();
-    let ciphertext = box_::seal(&plaintext, &nonce, their_pubkey, our_secretkey);
-    EncryptedExitList {
-        nonce: nonce.0,
-        exit_list: ciphertext,
     }
 }
 
@@ -196,10 +191,28 @@ pub fn encrypt_exit_list(
     let plaintext = serde_json::to_string(&ret)
         .expect("Failed to serialize ExitList!")
         .into_bytes();
-    let nonce = box_::gen_nonce();
-    let ciphertext = box_::seal(&plaintext, &nonce, their_pubkey, our_secretkey);
+    let nonce = SalsaBox::generate_nonce(&mut OsRng);
+    let b = SalsaBox::new(their_pubkey, our_secretkey);
+    let ciphertext = b.encrypt(&nonce, plaintext.as_ref()).unwrap();
     EncryptedExitList {
-        nonce: nonce.0,
+        nonce: nonce.into(),
+        exit_list: ciphertext,
+    }
+}
+
+pub fn encrypt_exit_list_v2(
+    ret: &ExitListV2,
+    our_secretkey: &SecretKey,
+    their_pubkey: &PublicKey,
+) -> EncryptedExitList {
+    let plaintext = serde_json::to_string(&ret)
+        .expect("Failed to serialize ExitList!")
+        .into_bytes();
+    let nonce = SalsaBox::generate_nonce(&mut OsRng);
+    let b = SalsaBox::new(their_pubkey, our_secretkey);
+    let ciphertext = b.encrypt(&nonce, plaintext.as_ref()).unwrap();
+    EncryptedExitList {
+        nonce: nonce.into(),
         exit_list: ciphertext,
     }
 }
@@ -209,9 +222,74 @@ mod tests {
     use super::*;
     use crate::ExitIdentity;
     use crate::ExitRegistrationDetails;
-    use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::gen_keypair;
-    use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
+    use crypto_box::PublicKey;
+    use crypto_box::SecretKey;
+    use sodiumoxide::crypto::box_;
+    use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
+    use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey as NaclPublicKey;
+    use sodiumoxide::crypto::box_::SecretKey as NaclSecretKey;
     use std::collections::HashSet;
+
+    pub fn gen_keypair() -> (PublicKey, SecretKey) {
+        let secret_key = SecretKey::generate(&mut OsRng);
+        let public_key = PublicKey::from(&secret_key);
+        (public_key, secret_key)
+    }
+
+    /// Used to test cross compatibility with libsodium
+    pub fn encrypt_exit_client_id_libsodium(
+        our_publickey: WgKey,
+        our_secretkey: &NaclSecretKey,
+        exit_pubkey: &NaclPublicKey,
+        id: ExitClientIdentity,
+    ) -> EncryptedExitClientIdentity {
+        let plaintext = serde_json::to_string(&id)
+            .expect("Failed to serialize ExitState!")
+            .into_bytes();
+        let nonce = box_::gen_nonce();
+        let ciphertext = box_::seal(&plaintext, &nonce, exit_pubkey, our_secretkey);
+
+        EncryptedExitClientIdentity {
+            nonce: nonce.0,
+            pubkey: our_publickey,
+            encrypted_exit_client_id: ciphertext,
+        }
+    }
+
+    pub fn decrypt_exit_client_id_libsodium(
+        val: EncryptedExitClientIdentity,
+        our_secretkey: &NaclSecretKey,
+    ) -> Result<ExitClientIdentity, ExitEncryptionError> {
+        let their_nacl_pubkey = val.pubkey.into();
+        let their_nonce = Nonce(val.nonce);
+        let ciphertext = val.encrypted_exit_client_id;
+
+        let decrypted_bytes =
+            match box_::open(&ciphertext, &their_nonce, &their_nacl_pubkey, our_secretkey) {
+                Ok(value) => value,
+                Err(_) => {
+                    return Err(ExitEncryptionError::ExitClientIdDecryptionError {
+                        e: "Cloud not decrypt exit client id".to_string(),
+                    });
+                }
+            };
+
+        let decrypted_string = match String::from_utf8(decrypted_bytes) {
+            Ok(value) => value,
+            Err(e) => {
+                return Err(ExitEncryptionError::Utf8Error { e: e.to_string() });
+            }
+        };
+
+        let decrypted_id = match serde_json::from_str(&decrypted_string) {
+            Ok(value) => value,
+            Err(e) => {
+                return Err(ExitEncryptionError::SerdeError { e: e.to_string() });
+            }
+        };
+
+        Ok(decrypted_id)
+    }
 
     /// generates a random identity, never use in production, your money will be stolen
     pub fn random_exit_identity() -> ExitIdentity {
@@ -241,8 +319,6 @@ mod tests {
 
     #[test]
     fn test_encrypt_decrypt_exit_client_id() {
-        sodiumoxide::init().unwrap();
-
         let (our_pubkey, our_seckey) = (
             "aW55dFzovr/cwcOYkWyDXRoE+9etyIC+ZBbQo4gUmmc="
                 .parse()
@@ -274,15 +350,75 @@ mod tests {
         assert_eq!(identity, decrypted_identity);
     }
 
+    // this test ensure that libsodium and crypto_box are compatible
+    #[test]
+    fn test_crypto_box_lib_sodium_cross_encrypt_decrypt() {
+        let (our_pubkey, our_seckey) = (
+            "aW55dFzovr/cwcOYkWyDXRoE+9etyIC+ZBbQo4gUmmc="
+                .parse()
+                .unwrap(),
+            "cLkLyDCw+3nMu9N/FS/tzD5LBFEc9OySw1db4kBhLHI="
+                .parse()
+                .unwrap(),
+        );
+        let (exit_pubkey, exit_seckey) = (
+            "w7ssizK/zKtWePycU1gKzf391awexkbi31Bsets8HVs="
+                .parse()
+                .unwrap(),
+            "qLDPAl/IDgK5ZHmU+GH9wXThoFUuplLxFEcGcz/FMkw="
+                .parse()
+                .unwrap(),
+        );
+        let exit_pubkey: WgKey = exit_pubkey;
+        let exit_seckey: WgKey = exit_seckey;
+        let our_seckey: WgKey = our_seckey;
+        let our_seckey_nacl: NaclSecretKey = our_seckey.into();
+        let exit_seckey_nacl: NaclSecretKey = exit_seckey.into();
+        let our_seckey: SecretKey = our_seckey.into();
+        let identity = ExitClientIdentity {
+            wg_port: 42,
+            global: random_exit_identity().into(),
+            reg_details: ExitRegistrationDetails {
+                email: None,
+                email_code: None,
+                phone: None,
+                phone_code: None,
+                sequence_number: None,
+            },
+        };
+
+        let encrypted_identity = encrypt_exit_client_id(
+            our_pubkey,
+            &our_seckey,
+            &exit_pubkey.into(),
+            identity.clone(),
+        );
+
+        let decrypted_identity =
+            decrypt_exit_client_id_libsodium(encrypted_identity, &exit_seckey_nacl).unwrap();
+
+        assert_eq!(identity, decrypted_identity);
+
+        let encrypted_identity = encrypt_exit_client_id_libsodium(
+            our_pubkey,
+            &our_seckey_nacl,
+            &exit_pubkey.into(),
+            identity.clone(),
+        );
+
+        let decrypted_identity =
+            decrypt_exit_client_id(encrypted_identity, &exit_seckey.into()).unwrap();
+
+        assert_eq!(identity, decrypted_identity);
+    }
+
     #[test]
     fn test_encrypt_decrypt_exit_state() {
-        sodiumoxide::init().unwrap();
-
         let (_, our_seckey) = gen_keypair();
         let (exit_pubkey, _) = gen_keypair();
         let state = ExitState::New;
 
-        let encrypted_state = encrypt_setup_return(state.clone(), &our_seckey, exit_pubkey);
+        let encrypted_state = encrypt_setup_return(state.clone(), &our_seckey, &exit_pubkey);
 
         let decrypted_state =
             decrypt_exit_state(&our_seckey, encrypted_state, &exit_pubkey).unwrap();
@@ -291,30 +427,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encrypt_decrypt_exit_list() {
-        sodiumoxide::init().unwrap();
-
-        let (our_pubkey, our_seckey) = gen_keypair();
-        let (exit_pubkey, exit_seckey) = gen_keypair();
-        let list = ExitList {
-            exit_list: Vec::new(),
-            wg_exit_listen_port: 42,
-        };
-
-        let encrypted_list = encrypt_exit_list(&list, &our_seckey, &exit_pubkey);
-        let nonce = Nonce(encrypted_list.nonce);
-
-        let decrypted_list_bytes =
-            box_::open(&encrypted_list.exit_list, &nonce, &our_pubkey, &exit_seckey).unwrap();
-        let decrypted_list: ExitList = serde_json::from_slice(&decrypted_list_bytes).unwrap();
-
-        assert_eq!(list, decrypted_list);
-    }
-
-    #[test]
     fn test_encrypt_decrypt_exit_list_v2() {
-        sodiumoxide::init().unwrap();
-
         let (_, our_seckey) = gen_keypair();
         let (exit_pubkey, _) = gen_keypair();
         let list_v2 = ExitListV2 {

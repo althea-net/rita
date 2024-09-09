@@ -343,9 +343,9 @@ mod tests {
     use crate::validate_mesh_ip;
     use althea_types::WgKey;
     use clarity::PrivateKey;
+    use crypto_box::SecretKey;
     use deep_space::EthermintPrivateKey;
     use deep_space::PrivateKey as _;
-    use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
     use std::collections::HashSet;
     use std::net::IpAddr;
 
@@ -393,7 +393,7 @@ mod tests {
             .unwrap();
         let libsodium_secret: SecretKey = wg_gen_secret.into();
         let libsodium_pub = libsodium_secret.public_key();
-        let libsodium_generated_public_key: WgKey = libsodium_pub.0.into();
+        let libsodium_generated_public_key: WgKey = (*libsodium_pub.as_bytes()).into();
         println!("{wg_gen_pub} vs {libsodium_generated_public_key}");
         assert_eq!(libsodium_generated_public_key, wg_gen_pub);
     }
