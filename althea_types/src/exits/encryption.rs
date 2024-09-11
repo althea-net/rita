@@ -1,11 +1,9 @@
 //! this file contains utility functions for the exit communcaiton which requires encrypting/decrypting requests
 //! to secure them as the pass over the babel network
-use crate::EncryptedExitList;
-use crate::ExitList;
-use crate::ExitListV2;
+use crate::exits::EncryptedExitList;
+use crate::exits::ExitList;
+use crate::exits::ExitListV2;
 use crate::WgKey;
-use crate::{EncryptedExitClientIdentity, EncryptedExitState};
-use crate::{ExitClientIdentity, ExitState};
 use crypto_box::aead::Aead;
 use crypto_box::aead::AeadCore;
 use crypto_box::aead::OsRng;
@@ -15,6 +13,11 @@ use crypto_box::SecretKey;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
+
+use super::EncryptedExitClientIdentity;
+use super::EncryptedExitState;
+use super::ExitClientIdentity;
+use super::ExitState;
 
 #[derive(Debug, Clone)]
 pub enum ExitEncryptionError {
@@ -218,10 +221,10 @@ pub fn encrypt_exit_list_v2(
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
+    use crate::exits::ExitRegistrationDetails;
     use crate::ExitIdentity;
-    use crate::ExitRegistrationDetails;
     use crypto_box::PublicKey;
     use crypto_box::SecretKey;
     use sodiumoxide::crypto::box_;

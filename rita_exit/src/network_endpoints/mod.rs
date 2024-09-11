@@ -5,13 +5,13 @@ use crate::database::{client_status, signup_client};
 
 use crate::RitaExitError;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
-use althea_types::exit_encryption::{
-    decrypt_exit_client_id, encrypt_exit_list, encrypt_exit_list_v2, encrypt_setup_return,
-};
 use althea_types::exit_identity_to_id;
 use althea_types::regions::Regions;
 use althea_types::ExitListV2;
 use althea_types::Identity;
+use althea_types::{
+    decrypt_exit_client_id, encrypt_exit_list, encrypt_exit_list_v2, encrypt_setup_return,
+};
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };

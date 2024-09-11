@@ -1,21 +1,40 @@
 #[macro_use]
 extern crate serde_derive;
 
+pub mod connection_monitoring;
 pub mod contact_info;
 pub mod error;
-pub mod exit_encryption;
-pub mod interop;
+pub mod exits;
+pub mod hardware_info;
+pub mod identity;
 pub mod legacy;
-pub mod monitoring;
+pub mod neighbors;
+pub mod openwrt_updates;
+pub mod operator_tools;
+pub mod payments;
 pub mod regions;
+pub mod ssh;
+pub mod system_chain;
 pub mod user_info;
 pub mod websockets;
 pub mod wg_key;
 pub mod wifi_info;
 
+pub use crate::connection_monitoring::*;
 pub use crate::contact_info::*;
-pub use crate::interop::*;
-pub use crate::monitoring::*;
+pub use crate::exits::encryption::*;
+pub use crate::exits::*;
+pub use crate::hardware_info::*;
+pub use crate::identity::*;
+pub use crate::neighbors::*;
+pub use crate::openwrt_updates::*;
+pub use crate::operator_tools::action::*;
+pub use crate::operator_tools::checkin::*;
+pub use crate::operator_tools::heartbeat::*;
+pub use crate::operator_tools::update::*;
+pub use crate::payments::*;
+pub use crate::ssh::*;
+pub use crate::system_chain::*;
 pub use crate::user_info::*;
 pub use crate::wg_key::WgKey;
 pub use crate::wifi_info::*;

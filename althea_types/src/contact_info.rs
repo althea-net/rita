@@ -3,7 +3,7 @@
 //! we need to convert said enum between different types left and right. Both to migrate from the old storage, to handle the fact that TOML refuses
 //! to serialize enums with struct members. This file is all boilerplate conversion code for pretty small storage formats.
 
-use crate::ExitRegistrationDetails;
+use crate::exits::ExitRegistrationDetails;
 use lettre::Address as EmailAddress;
 use phonenumber::PhoneNumber;
 

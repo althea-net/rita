@@ -1,3 +1,40 @@
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WifiChannel {
+    pub radio: String,
+    pub channel: u16,
+}
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WifiSsid {
+    pub radio: String,
+    pub ssid: String,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WifiPass {
+    pub radio: String,
+    pub pass: String,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WifiSecurity {
+    pub radio: String,
+    pub encryption: String,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WifiDisabled {
+    pub radio: String,
+    pub disabled: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum WifiToken {
+    WifiChannel(WifiChannel),
+    WifiSsid(WifiSsid),
+    WifiPass(WifiPass),
+    WifiDisabled(WifiDisabled),
+    WifiSecurity(WifiSecurity),
+}
+
 /// This struct contains information for wifi survey data
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct WifiSurveyData {

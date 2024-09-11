@@ -9,7 +9,7 @@ use crate::debt_keeper::payment_failed;
 use crate::payment_validator::ToValidate;
 use crate::payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT};
 use crate::rita_loop::get_web3_server;
-use althea_types::interop::UnpublishedPaymentTx;
+use althea_types::UnpublishedPaymentTx;
 use althea_types::{Denom, PaymentTx};
 use althea_types::{Identity, SystemChain};
 use awc;

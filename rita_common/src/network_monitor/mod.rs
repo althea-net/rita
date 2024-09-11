@@ -15,8 +15,8 @@ use crate::tunnel_manager::shaping::ShapingAdjustAction;
 use crate::tunnel_manager::Neighbor as RitaNeighbor;
 use crate::RitaCommonError;
 
-use althea_types::monitoring::has_packet_loss;
-use althea_types::monitoring::SAMPLE_PERIOD;
+use althea_types::connection_monitoring::has_packet_loss;
+use althea_types::connection_monitoring::SAMPLE_PERIOD;
 use althea_types::RunningLatencyStats;
 use althea_types::RunningPacketLossStats;
 use althea_types::WgKey;
