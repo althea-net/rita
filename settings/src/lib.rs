@@ -18,9 +18,9 @@ extern crate log;
 extern crate arrayvec;
 
 use althea_kernel_interface::KI;
-use logging::LoggingSettings;
 use althea_types::{BillingDetails, ContactType, Identity, InstallationDetails, SystemChain};
 use clarity::Address;
+use logging::LoggingSettings;
 use network::NetworkSettings;
 use payment::PaymentSettings;
 use serde::Serialize;
@@ -325,7 +325,6 @@ pub fn get_rita_client() -> RitaClientSettings {
         None => panic!("expected settings but got none"),
     }
 }
-
 
 pub fn get_contact_info() -> Option<ContactType> {
     let rita_client = get_rita_client();

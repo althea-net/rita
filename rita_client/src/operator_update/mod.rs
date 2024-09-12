@@ -12,10 +12,7 @@ use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::websockets::{
     OperatorAction, OperatorWebsocketMessage, PaymentAndNetworkSettings,
 };
-use althea_types::{
-    get_sequence_num, NeighborStatus, ShaperSettings,
-    UsageTrackerTransfer,
-};
+use althea_types::{get_sequence_num, NeighborStatus, ShaperSettings, UsageTrackerTransfer};
 use althea_types::{
     AuthorizedKeys, BillingDetails, ContactStorage, ContactType, CurExitInfo, ExitConnection,
     HardwareInfo,
@@ -178,10 +175,8 @@ pub fn handle_operator_update(
         OperatorWebsocketMessage::ContactInfo(info) => {
             info!("RECEIVED WEBSOCKET MESSAGE: ContactInfo");
             let mut rita_client = settings::get_rita_client();
-            let update = check_contacts_update(
-                rita_client.payment.contact_info.clone(),
-                info.clone(),
-            );
+            let update =
+                check_contacts_update(rita_client.payment.contact_info.clone(), info.clone());
             if update {
                 rita_client.payment.contact_info = option_convert(info);
             }
