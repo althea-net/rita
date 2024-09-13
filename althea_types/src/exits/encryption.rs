@@ -221,17 +221,17 @@ pub fn encrypt_exit_list_v2(
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
+    use crate::exits::identity::random_exit_identity;
     use crate::exits::ExitRegistrationDetails;
-    use crate::ExitIdentity;
+    use crate::ExitClientIdentity;
     use crypto_box::PublicKey;
     use crypto_box::SecretKey;
     use sodiumoxide::crypto::box_;
     use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
     use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey as NaclPublicKey;
     use sodiumoxide::crypto::box_::SecretKey as NaclSecretKey;
-    use std::collections::HashSet;
 
     pub fn gen_keypair() -> (PublicKey, SecretKey) {
         let secret_key = SecretKey::generate(&mut OsRng);
@@ -292,32 +292,6 @@ pub mod tests {
         };
 
         Ok(decrypted_id)
-    }
-
-    /// generates a random identity, never use in production, your money will be stolen
-    pub fn random_exit_identity() -> ExitIdentity {
-        use clarity::PrivateKey;
-
-        let secret: [u8; 32] = rand::random();
-        let mut ip: [u8; 16] = [0; 16];
-        ip.copy_from_slice(&secret[0..16]);
-
-        // the starting location of the funds
-        let eth_key = PrivateKey::from_bytes(secret).unwrap();
-        let eth_address = eth_key.to_address();
-
-        let payment_types = HashSet::new();
-        let allowed_regions = HashSet::new();
-
-        ExitIdentity {
-            mesh_ip: ip.into(),
-            eth_addr: eth_address,
-            wg_key: secret.into(),
-            registration_port: 0,
-            wg_exit_listen_port: 0,
-            allowed_regions,
-            payment_types,
-        }
     }
 
     #[test]

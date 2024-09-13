@@ -1,6 +1,6 @@
 use crate::default_system_chain;
 use crate::wg_key::WgKey;
-use crate::{ExitIdentity, Identity, SystemChain};
+use crate::{exits::identity::ExitIdentity, Identity, SystemChain};
 use ipnetwork::IpNetwork;
 use serde::Deserialize;
 use serde::Serialize;
@@ -8,6 +8,7 @@ use std::hash::Hash;
 use std::net::IpAddr;
 
 pub mod encryption;
+pub mod identity;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Default)]
 pub struct ExitRegistrationDetails {

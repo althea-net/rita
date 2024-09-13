@@ -895,9 +895,9 @@ mod tests {
     use crate::{
         blockchain_oracle::get_pay_thresh,
         debt_keeper::{send_debt_update, traffic_update, Traffic},
-        usage_tracker::tests::test::random_identity,
     };
     use actix_async::System;
+    use althea_types::identity::random_identity;
     use num256::Int256;
     use num_traits::Num;
     use settings::client::RitaClientSettings;

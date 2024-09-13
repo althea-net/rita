@@ -1,3 +1,4 @@
+use althea_types::random_identity;
 use althea_types::{regions::Regions, ExitIdentity, SystemChain};
 use clarity::{Address, PrivateKey};
 use rita_client_registration::client_db::{
@@ -5,7 +6,6 @@ use rita_client_registration::client_db::{
     check_and_add_user_admin, get_all_regsitered_clients, get_exits_list,
     get_registered_client_using_wgkey,
 };
-use rita_common::usage_tracker::tests::test::random_identity;
 use std::collections::HashSet;
 use web30::{client::Web3, types::SendTxOption};
 

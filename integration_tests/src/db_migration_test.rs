@@ -3,13 +3,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+use althea_types::random_identity;
 use clarity::{Address, PrivateKey};
 use diesel::{PgConnection, RunQueryDsl};
 use rita_client_registration::{
     client_db::{check_and_add_user_admin, get_all_regsitered_clients},
     register_client_batch_loop::register_client_batch_loop,
 };
-use rita_common::usage_tracker::tests::test::random_identity;
 use rita_db_migration::{
     get_database_connection, models::Client, schema::clients::dsl::clients, start_db_migration,
 };

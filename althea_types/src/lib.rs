@@ -23,6 +23,7 @@ pub mod wifi_info;
 pub use crate::connection_monitoring::*;
 pub use crate::contact_info::*;
 pub use crate::exits::encryption::*;
+pub use crate::exits::identity::*;
 pub use crate::exits::*;
 pub use crate::hardware_info::*;
 pub use crate::identity::*;

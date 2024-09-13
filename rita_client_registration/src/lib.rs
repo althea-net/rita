@@ -1,5 +1,6 @@
-use althea_types::{ExitClientIdentity, Identity, WgKey};
-use awc::error::{JsonPayloadError, SendRequestError};
+use althea_types::{error::AltheaTypesError, ExitClientIdentity, Identity, WgKey};
+use awc::error::JsonPayloadError;
+use awc::error::SendRequestError;
 use phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -9,6 +10,7 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+use web30::jsonrpc::error::Web3Error;
 
 #[macro_use]
 extern crate log;
@@ -326,5 +328,16 @@ pub async fn start_sms_auth_flow(
             error!("auth text error {:?}", e);
             Err(e.into())
         }
+    }
+}
+
+/// Required because althea types doesn't import web30 and web30 doesn't import althea types making a from or
+/// into conversion impossible
+pub fn convert_althea_types_to_web3_error<T>(
+    input: Result<T, AltheaTypesError>,
+) -> Result<T, Web3Error> {
+    match input {
+        Ok(a) => Ok(a),
+        Err(e) => Err(Web3Error::BadResponse(format!("{e}"))),
     }
 }

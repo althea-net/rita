@@ -14,6 +14,7 @@ pub mod test {
         convert_map_to_flat_usage_data, Identity, IndexedUsageHour, UnpublishedPaymentTx,
         UsageTrackerTransfer,
     };
+    use althea_types::{identity::random_identity, PaymentTx};
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
     use rand::{thread_rng, Rng};
@@ -181,24 +182,5 @@ pub mod test {
             id.push(random_identity());
         }
         id
-    }
-    /// generates a random identity, never use in production, your money will be stolen
-    pub fn random_identity() -> Identity {
-        use clarity::PrivateKey;
-
-        let secret: [u8; 32] = rand::random();
-        let mut ip: [u8; 16] = [0; 16];
-        ip.copy_from_slice(&secret[0..16]);
-
-        // the starting location of the funds
-        let eth_key = PrivateKey::from_bytes(secret).unwrap();
-        let eth_address = eth_key.to_address();
-
-        Identity {
-            mesh_ip: ip.into(),
-            eth_address,
-            wg_public_key: secret.into(),
-            nickname: None,
-        }
     }
 }
