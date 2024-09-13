@@ -5,6 +5,7 @@
 
 use serde::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
+use std::convert::Infallible;
 use std::{
     fmt::{self, Display},
     str::FromStr,
@@ -758,8 +759,8 @@ impl Display for Regions {
 }
 
 impl FromStr for Regions {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Regions, String> {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Regions, Infallible> {
         let lowercase_s = s.to_lowercase();
         for i in 0..Regions::NUM_REGIONS {
             let region = Regions::from(i);

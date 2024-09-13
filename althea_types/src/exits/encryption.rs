@@ -294,6 +294,7 @@ mod tests {
         Ok(decrypted_id)
     }
 
+
     #[test]
     fn test_encrypt_decrypt_exit_client_id() {
         let (our_pubkey, our_seckey) = (

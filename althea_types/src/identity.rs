@@ -4,6 +4,7 @@ use arrayvec::ArrayString;
 use clarity::abi::encode_tokens;
 use clarity::abi::AbiToken;
 use clarity::Address;
+use clarity::PrivateKey;
 use deep_space::Address as AltheaAddress;
 use num256::Uint256;
 use serde::Deserialize;
@@ -301,8 +302,10 @@ impl Hash for Identity {
 
 /// generates a random identity, never use in production
 pub fn random_identity() -> Identity {
-    use clarity::PrivateKey;
+    random_idenity_with_private_key().0
+}
 
+pub fn random_idenity_with_private_key() -> (Identity, PrivateKey) {
     let secret: [u8; 32] = rand::random();
     let not_secret: [u8; 32] = rand::random();
     let mut ip: [u8; 16] = [0; 16];
@@ -312,12 +315,15 @@ pub fn random_identity() -> Identity {
     let eth_key = PrivateKey::from_bytes(secret).unwrap();
     let eth_address = eth_key.to_address();
 
-    Identity {
-        mesh_ip: ip.into(),
-        eth_address,
-        wg_public_key: not_secret.into(),
-        nickname: None,
-    }
+    (
+        Identity {
+            mesh_ip: ip.into(),
+            eth_address,
+            wg_public_key: not_secret.into(),
+            nickname: None,
+        },
+        eth_key,
+    )
 }
 
 #[cfg(test)]
