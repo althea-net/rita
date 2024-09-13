@@ -9,6 +9,7 @@ use std::net::IpAddr;
 
 pub mod encryption;
 pub mod identity;
+pub mod server_list_signatures;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Default)]
 pub struct ExitRegistrationDetails {

@@ -1,0 +1,26 @@
+[package]
+name = "exit_trust_root"
+version = "0.21.5"
+edition = "2021"
+license = "Apache-2.0"
+description = "Server to provide a root of exit trust for Althea routers"
+
+[[bin]]
+name = "exit_trust_root"
+path = "src/bin.rs"
+
+[dependencies]
+althea_types = { path = "../althea_types" }
+actix-web = { version = "4.9", features = ["rustls","macros"] }
+openssl-probe = "0.1.5"
+env_logger = "0.11"
+rustls = "0.20"
+rustls-pemfile = "0.3"
+log = "0.4"
+clarity = "1.4"
+web30 = "1.4"
+crypto_box = "0.9"
+rita_client_registration = { path = "../rita_client_registration" }
+
+[features]
+development = []
