@@ -16,6 +16,7 @@ test.db-journal
 
 /scripts/cross_building/staging_dir/
 /scripts/cross_building/staging/
+/scripts/exit_trust_root
 legacy-integration-tests/private-key*
 legacy-integration-tests/deps/*
 legacy-integration-tests/*

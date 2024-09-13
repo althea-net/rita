@@ -1,0 +1,7 @@
+# Deploys the exit root of trust server
+
+- name: Install Exit Trust Root
+  hosts: exit_trust_root
+  user: root
+  roles:
+    - install-exit-trust-root

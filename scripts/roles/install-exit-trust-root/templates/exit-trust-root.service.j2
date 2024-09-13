@@ -1,0 +1,15 @@
+# This is a systemd service for exit-trust-root
+[Unit]
+Description=Exit Trust Root
+Requires=network.target
+
+[Service]
+Environment="RUST_LOG=info"
+Type=simple
+TimeoutStartSec=10s
+Restart=always
+RestartSec=10
+ExecStart=/usr/sbin/exit_trust_root
+
+[Install]
+WantedBy=multi-user.target

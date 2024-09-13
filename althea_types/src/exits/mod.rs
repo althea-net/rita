@@ -1,6 +1,7 @@
 use crate::default_system_chain;
 use crate::wg_key::WgKey;
 use crate::{exits::identity::ExitIdentity, Identity, SystemChain};
+use crypto_box::PublicKey;
 use ipnetwork::IpNetwork;
 use serde::Deserialize;
 use serde::Serialize;
@@ -9,6 +10,7 @@ use std::net::IpAddr;
 
 pub mod encryption;
 pub mod identity;
+pub mod server_list_signatures;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Default)]
 pub struct ExitRegistrationDetails {
@@ -157,4 +159,12 @@ pub struct ExitDetails {
 pub struct ExitClientDetails {
     pub client_internal_ip: IpAddr,
     pub internet_ipv6_subnet: Option<IpNetwork>,
+}
+
+/// Wrapper for secure box containing a Signed Exit Server List
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct EncryptedExitServerList {
+    pub pubkey: WgKey,
+    pub nonce: [u8; 24],
+    pub encrypted_exit_server_list: Vec<u8>,
 }

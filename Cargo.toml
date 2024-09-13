@@ -20,6 +20,7 @@ members = [
     "rita_bin",
     "test_runner",
     "integration_tests",
+    "exit_trust_root",
 ]
 
 # Production relase profile, every trick is used to reduce binary size
