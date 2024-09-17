@@ -2804,6 +2804,7 @@ name = "rita_client"
 version = "0.22.0"
 dependencies = [
  "actix",
+ "actix-rt",
  "actix-web",
  "actix-web-actors",
  "actix-web-httpauth",
