@@ -1,5 +1,5 @@
 use althea_types::{ExitClientIdentity, Identity, WgKey};
-use awc::error::SendRequestError;
+use awc::error::{JsonPayloadError, SendRequestError};
 use phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -49,6 +49,14 @@ impl Display for TextApiError {
 }
 
 impl Error for TextApiError {}
+
+impl From<JsonPayloadError> for TextApiError {
+    fn from(value: JsonPayloadError) -> Self {
+        TextApiError::InternalServerError {
+            error: value.to_string(),
+        }
+    }
+}
 
 impl From<SendRequestError> for TextApiError {
     fn from(value: SendRequestError) -> Self {
@@ -236,6 +244,18 @@ pub struct TelnyxSmsAuthCheck {
     code: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TelnyxSmsAuthResponseBody {
+    pub data: TelnyxSmsAuthResponse,
+}
+
+/// Response code is either accepted or rejected
+#[derive(Debug, Deserialize)]
+pub struct TelnyxSmsAuthResponse {
+    pub phone_number: String,
+    pub response_code: String,
+}
+
 /// Posts to the validation endpoint with the code, will return success if the code
 /// is the same as the one sent to the user
 pub async fn check_sms_auth_result(
@@ -261,7 +281,14 @@ pub async fn check_sms_auth_result(
         })
         .await
     {
-        Ok(a) => Ok(a.status().is_success()),
+        Ok(mut a) => {
+            let response = a.json::<TelnyxSmsAuthResponseBody>().await?;
+            if response.data.response_code == "accepted" {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
         Err(e) => {
             error!("Failed to verify code with {:?}", e);
             Err(e.into())
