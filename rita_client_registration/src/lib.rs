@@ -309,6 +309,11 @@ pub struct TelnyxSmsAuthCheck {
     code: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TelnyxSmsAuthResponseBody {
+    data: TelnyxSmsAuthResponse,
+}
+
 /// Response code is either accepted or rejected
 #[derive(Debug, Deserialize)]
 pub struct TelnyxSmsAuthResponse {
@@ -343,8 +348,8 @@ pub async fn check_sms_auth_result(
         .await
     {
         Ok(mut a) => {
-            let response = a.json::<TelnyxSmsAuthResponse>().await?;
-            if response.response_code == "accepted" {
+            let response = a.json::<TelnyxSmsAuthResponseBody>().await?;
+            if response.data.response_code == "accepted" {
                 Ok(true)
             } else {
                 Ok(false)
