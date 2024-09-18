@@ -761,201 +761,18 @@ impl FromStr for Regions {
     type Err = String;
     fn from_str(s: &str) -> Result<Regions, String> {
         let lowercase_s = s.to_lowercase();
-        match lowercase_s.as_str() {
-            "united states" => Ok(Regions::UnitedStates),
-            "us" => Ok(Regions::UnitedStates),
-            "canada" => Ok(Regions::Canada),
-            "ca" => Ok(Regions::Canada),
-            "mexico" => Ok(Regions::Mexico),
-            "mx" => Ok(Regions::Mexico),
-            "ghana" => Ok(Regions::Ghana),
-            "gh" => Ok(Regions::Ghana),
-            "nigeria" => Ok(Regions::Nigeria),
-            "ng" => Ok(Regions::Nigeria),
-            "colombia" => Ok(Regions::Colombia),
-            "co" => Ok(Regions::Colombia),
-            "lr" => Ok(Regions::Liberia),
-            "libya" => Ok(Regions::Libya),
-            "ly" => Ok(Regions::Libya),
-            "madagascar" => Ok(Regions::Madagascar),
-            "mg" => Ok(Regions::Madagascar),
-            "malawi" => Ok(Regions::Malawi),
-            "mw" => Ok(Regions::Malawi),
-            "mali" => Ok(Regions::Mali),
-            "ml" => Ok(Regions::Mali),
-            "mauritania" => Ok(Regions::Mauritania),
-            "mr" => Ok(Regions::Mauritania),
-            "mauritius" => Ok(Regions::Mauritius),
-            "mu" => Ok(Regions::Mauritius),
-            "morocco" => Ok(Regions::Morocco),
-            "ma" => Ok(Regions::Morocco),
-            "mozambique" => Ok(Regions::Mozambique),
-            "mz" => Ok(Regions::Mozambique),
-            "namibia" => Ok(Regions::Namibia),
-            "na" => Ok(Regions::Namibia),
-            "niger" => Ok(Regions::Niger),
-            "ne" => Ok(Regions::Niger),
-            "rwanda" => Ok(Regions::Rwanda),
-            "rw" => Ok(Regions::Rwanda),
-            "sao tome and principe" => Ok(Regions::SaoTomeAndPrincipe),
-            "st" => Ok(Regions::SaoTomeAndPrincipe),
-            "senegal" => Ok(Regions::Senegal),
-            "sn" => Ok(Regions::Senegal),
-            "seychelles" => Ok(Regions::Seychelles),
-            "sc" => Ok(Regions::Seychelles),
-            "sierra leone" => Ok(Regions::SierraLeone),
-            "sl" => Ok(Regions::SierraLeone),
-            "somalia" => Ok(Regions::Somalia),
-            "so" => Ok(Regions::Somalia),
-            "south africa" => Ok(Regions::SouthAfrica),
-            "za" => Ok(Regions::SouthAfrica),
-            "south sudan" => Ok(Regions::SouthSudan),
-            "ss" => Ok(Regions::SouthSudan),
-            "sudan" => Ok(Regions::Sudan),
-            "sd" => Ok(Regions::Sudan),
-            "tanzania" => Ok(Regions::Tanzania),
-            "tz" => Ok(Regions::Tanzania),
-            "togo" => Ok(Regions::Togo),
-            "tg" => Ok(Regions::Togo),
-            "tunisia" => Ok(Regions::Tunisia),
-            "tn" => Ok(Regions::Tunisia),
-            "uganda" => Ok(Regions::Uganda),
-            "ug" => Ok(Regions::Uganda),
-            "zambia" => Ok(Regions::Zambia),
-            "zm" => Ok(Regions::Zambia),
-            "zimbabwe" => Ok(Regions::Zimbabwe),
-            "zw" => Ok(Regions::Zimbabwe),
-            "afghanistan" => Ok(Regions::Afghanistan),
-            "af" => Ok(Regions::Afghanistan),
-            "bahrain" => Ok(Regions::Bahrain),
-            "bh" => Ok(Regions::Bahrain),
-            "bangladesh" => Ok(Regions::Bangladesh),
-            "bd" => Ok(Regions::Bangladesh),
-            "bhutan" => Ok(Regions::Bhutan),
-            "bt" => Ok(Regions::Bhutan),
-            "brunei" => Ok(Regions::Brunei),
-            "bn" => Ok(Regions::Brunei),
-            "cambodia" => Ok(Regions::Cambodia),
-            "kh" => Ok(Regions::Cambodia),
-            "china" => Ok(Regions::China),
-            "cn" => Ok(Regions::China),
-            "east timor" => Ok(Regions::EastTimor),
-            "tl" => Ok(Regions::EastTimor),
-            "india" => Ok(Regions::India),
-            "in" => Ok(Regions::India),
-            "indonesia" => Ok(Regions::Indonesia),
-            "id" => Ok(Regions::Indonesia),
-            "iran" => Ok(Regions::Iran),
-            "ir" => Ok(Regions::Iran),
-            "iraq" => Ok(Regions::Iraq),
-            "iq" => Ok(Regions::Iraq),
-            "israel" => Ok(Regions::Israel),
-            "il" => Ok(Regions::Israel),
-            "japan" => Ok(Regions::Japan),
-            "jp" => Ok(Regions::Japan),
-            "jordan" => Ok(Regions::Jordan),
-            "jo" => Ok(Regions::Jordan),
-            "kuwait" => Ok(Regions::Kuwait),
-            "kw" => Ok(Regions::Kuwait),
-            "kyrgyzstan" => Ok(Regions::Kyrgyzstan),
-            "kg" => Ok(Regions::Kyrgyzstan),
-            "eswatini" => Ok(Regions::Eswatini),
-            "ethiopia" => Ok(Regions::Ethiopia),
-            "gabon" => Ok(Regions::Gabon),
-            "gambia" => Ok(Regions::Gambia),
-            "guinea" => Ok(Regions::Guinea),
-            "guinea-bissau" => Ok(Regions::GuineaBissau),
-            "ivory coast" => Ok(Regions::IvoryCoast),
-            "kenya" => Ok(Regions::Kenya),
-            "lesotho" => Ok(Regions::Lesotho),
-            "liberia" => Ok(Regions::Liberia),
-            "laos" => Ok(Regions::Laos),
-            "la" => Ok(Regions::Laos),
-            "lebanon" => Ok(Regions::Lebanon),
-            "lb" => Ok(Regions::Lebanon),
-            "malaysia" => Ok(Regions::Malaysia),
-            "my" => Ok(Regions::Malaysia),
-            "maldives" => Ok(Regions::Maldives),
-            "mv" => Ok(Regions::Maldives),
-            "mongolia" => Ok(Regions::Mongolia),
-            "mn" => Ok(Regions::Mongolia),
-            "myanmar" => Ok(Regions::Myanmar),
-            "mm" => Ok(Regions::Myanmar),
-            "nepal" => Ok(Regions::Nepal),
-            "np" => Ok(Regions::Nepal),
-            "north korea" => Ok(Regions::NorthKorea),
-            "kp" => Ok(Regions::NorthKorea),
-            "oman" => Ok(Regions::Oman),
-            "om" => Ok(Regions::Oman),
-            "pakistan" => Ok(Regions::Pakistan),
-            "pk" => Ok(Regions::Pakistan),
-            "palestine" => Ok(Regions::Palestine),
-            "ps" => Ok(Regions::Palestine),
-            "philippines" => Ok(Regions::Philippines),
-            "ph" => Ok(Regions::Philippines),
-            "qatar" => Ok(Regions::Qatar),
-            "qa" => Ok(Regions::Qatar),
-            "saudi arabia" => Ok(Regions::SaudiArabia),
-            "sa" => Ok(Regions::SaudiArabia),
-            "singapore" => Ok(Regions::Singapore),
-            "sg" => Ok(Regions::Singapore),
-            "south korea" => Ok(Regions::SouthKorea),
-            "kr" => Ok(Regions::SouthKorea),
-            "sri lanka" => Ok(Regions::SriLanka),
-            "lk" => Ok(Regions::SriLanka),
-            "syria" => Ok(Regions::Syria),
-            "sy" => Ok(Regions::Syria),
-            "taiwan" => Ok(Regions::Taiwan),
-            "tw" => Ok(Regions::Taiwan),
-            "tajikistan" => Ok(Regions::Tajikistan),
-            "tj" => Ok(Regions::Tajikistan),
-            "thailand" => Ok(Regions::Thailand),
-            "th" => Ok(Regions::Thailand),
-            "turkmenistan" => Ok(Regions::Turkmenistan),
-            "tm" => Ok(Regions::Turkmenistan),
-            "united arab emirates" => Ok(Regions::UnitedArabEmirates),
-            "uae" => Ok(Regions::UnitedArabEmirates),
-            "uzbekistan" => Ok(Regions::Uzbekistan),
-            "uz" => Ok(Regions::Uzbekistan),
-            "vietnam" => Ok(Regions::Vietnam),
-            "vn" => Ok(Regions::Vietnam),
-            "yemen" => Ok(Regions::Yemen),
-            "ye" => Ok(Regions::Yemen),
-            "australia" => Ok(Regions::Australia),
-            "au" => Ok(Regions::Australia),
-            "new zealand" => Ok(Regions::NewZealand),
-            "nz" => Ok(Regions::NewZealand),
-            "antigua and barbuda" => Ok(Regions::AntiguaAndBarbuda),
-            "ag" => Ok(Regions::AntiguaAndBarbuda),
-            "bahamas" => Ok(Regions::Bahamas),
-            "bs" => Ok(Regions::Bahamas),
-            "barbados" => Ok(Regions::Barbados),
-            "bb" => Ok(Regions::Barbados),
-            "belize" => Ok(Regions::Belize),
-            "bz" => Ok(Regions::Belize),
-            "cuba" => Ok(Regions::Cuba),
-            "cu" => Ok(Regions::Cuba),
-            "dominica" => Ok(Regions::Dominica),
-            "dm" => Ok(Regions::Dominica),
-            "dominican republic" => Ok(Regions::DominicanRepublic),
-            "do" => Ok(Regions::DominicanRepublic),
-            "grenada" => Ok(Regions::Grenada),
-            "gd" => Ok(Regions::Grenada),
-            "haiti" => Ok(Regions::Haiti),
-            "ht" => Ok(Regions::Haiti),
-            "jamaica" => Ok(Regions::Jamaica),
-            "jm" => Ok(Regions::Jamaica),
-            "saint kitts and nevis" => Ok(Regions::SaintKittsAndNevis),
-            "kn" => Ok(Regions::SaintKittsAndNevis),
-            "saint lucia" => Ok(Regions::SaintLucia),
-            "lc" => Ok(Regions::SaintLucia),
-            "saint vincent and the grenadines" => Ok(Regions::SaintVincentAndTheGrenadines),
-            "vc" => Ok(Regions::SaintVincentAndTheGrenadines),
-            "trinidad and tobago" => Ok(Regions::TrinidadAndTobago),
-            "tt" => Ok(Regions::TrinidadAndTobago),
-            _ => Err("Invalid country code accepted formats are EX: US or United States (spaces included)".to_string()),
+        for i in 0..Regions::NUM_REGIONS {
+            let region = Regions::from(i);
+            if region.to_string().to_lowercase() == lowercase_s {
+                return Ok(region);
+            }
         }
+        Ok(Regions::UnkownRegion)
     }
+}
+
+impl Regions {
+    pub const NUM_REGIONS: u8 = 179;
 }
 
 impl Serialize for Regions {
@@ -974,5 +791,32 @@ impl<'de> Deserialize<'de> for Regions {
     {
         let s = String::deserialize(deserializer)?;
         s.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Regions;
+
+    /// The number of current valid regions
+    const NUM_REGIONS: u8 = 179;
+
+    #[test]
+    fn string_serialize_and_parse() {
+        for i in 0..NUM_REGIONS {
+            let region = Regions::from(i);
+            let region_str = region.to_string();
+            let parsed_region: Regions = region_str.parse().unwrap();
+            assert_eq!(region, parsed_region);
+        }
+    }
+
+    #[test]
+    fn integer_serialize_and_parse() {
+        for i in 0..NUM_REGIONS {
+            let region = Regions::from(i);
+            let region_num_2: u8 = region.into();
+            assert_eq!(i, region_num_2);
+        }
     }
 }
