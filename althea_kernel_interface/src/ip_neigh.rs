@@ -1,31 +1,29 @@
-use crate::KernelInterface;
+use crate::run_command;
 use mac_address::MacAddress;
 use std::io::{Error, ErrorKind};
 use std::net::IpAddr;
 
-impl dyn KernelInterface {
-    /// Runs the ip neigh command via the Kernel interface lazy static and returns an error if it doesn't work
-    pub fn grab_ip_neigh(&self) -> Result<Vec<(IpAddr, MacAddress)>, std::io::Error> {
-        info!("Sending ip neigh command to kernel");
-        let res = self.run_command("ip", &["neigh"]);
-        match res {
-            Ok(output) => {
-                // Extra checking since output struct is ambigious on how it works
-                if !output.stdout.is_empty() {
-                    let string_to_parse = String::from_utf8_lossy(&output.stdout).to_string();
-                    Ok(parse_ip_neigh(string_to_parse))
-                } else {
-                    Err(Error::new(
-                        ErrorKind::Other,
-                        "Empty ip neigh command. Failed".to_string(),
-                    ))
-                }
+/// Runs the ip neigh command via the Kernel interface lazy static and returns an error if it doesn't work
+pub fn grab_ip_neigh() -> Result<Vec<(IpAddr, MacAddress)>, std::io::Error> {
+    info!("Sending ip neigh command to kernel");
+    let res = run_command("ip", &["neigh"]);
+    match res {
+        Ok(output) => {
+            // Extra checking since output struct is ambigious on how it works
+            if !output.stdout.is_empty() {
+                let string_to_parse = String::from_utf8_lossy(&output.stdout).to_string();
+                Ok(parse_ip_neigh(string_to_parse))
+            } else {
+                Err(Error::new(
+                    ErrorKind::Other,
+                    "Empty ip neigh command. Failed".to_string(),
+                ))
             }
-            Err(e) => Err(Error::new(
-                ErrorKind::Other,
-                format!("Unable to grab ip neigh from router. Failed with error {e:?}"),
-            )),
         }
+        Err(e) => Err(Error::new(
+            ErrorKind::Other,
+            format!("Unable to grab ip neigh from router. Failed with error {e:?}"),
+        )),
     }
 }
 

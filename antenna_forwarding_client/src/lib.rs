@@ -4,11 +4,9 @@
 
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate lazy_static;
 
-use althea_kernel_interface::KernelInterface;
-use althea_kernel_interface::LinuxCommandRunner;
+use althea_kernel_interface::interface_tools::get_ip_from_iface;
+use althea_kernel_interface::run_command;
 use althea_types::Identity;
 use althea_types::WgKey;
 use antenna_forwarding_protocol::process_streams;
@@ -33,10 +31,6 @@ use std::time::Instant;
 
 mod error;
 pub use error::AntennaForwardingError;
-
-lazy_static! {
-    pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
-}
 
 const SLEEP_TIME: Duration = Duration::from_secs(20);
 /// The timeout time for pinging a local antenna, 100ms is very
@@ -312,7 +306,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
         trace!("Trying interface {}, with test ip {}", iface, our_ip);
         // this acts as a wildcard deletion across all interfaces, which is frankly really
         // dangerous if our default route overlaps, or if you enter an exit route ip
-        let _ = KI.run_command("ip", &["route", "del", &format!("{target_ip}/32")]);
+        let _ = run_command("ip", &["route", "del", &format!("{target_ip}/32")]);
         for iface in interfaces {
             // cleans up all previous forwarding ip's in some way this is more dangerous than the previous
             // solution, which only cleaned up the target and destination ip's. But the more through cleanup
@@ -322,7 +316,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
             // not cause issues with failing the find antenna command
             cleanup_interface(iface)?;
         }
-        let res = KI.run_command(
+        let res = run_command(
             "ip",
             &["addr", "add", &format!("{our_ip}/32"), "dev", iface],
         );
@@ -330,7 +324,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
         // you need to use src here to disambiguate the sending address
         // otherwise the first available ipv4 address on the interface will
         // be used
-        match KI.run_command(
+        match run_command(
             "ip",
             &[
                 "route",
@@ -433,12 +427,12 @@ fn send_error_message(server_stream: &mut TcpStream, message: String) {
 }
 
 fn cleanup_interface(iface: &str) -> Result<(), AntennaForwardingError> {
-    let values = KI.get_ip_from_iface(iface)?;
+    let values = get_ip_from_iface(iface)?;
     for (ip, netmask) in values {
         // we only clean up very specific routes, this doesn't prevent us from causing problems
         // but it does help prevent us from doing things like removing the default route.
         if netmask == 32 {
-            let _ = KI.run_command("ip", &["addr", "del", &format!("{ip}/32"), "dev", iface]);
+            let _ = run_command("ip", &["addr", "del", &format!("{ip}/32"), "dev", iface]);
         }
     }
     Ok(())

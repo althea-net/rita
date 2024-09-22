@@ -2,21 +2,25 @@
 //! versus updating operator tools on the status of this router which is the context of 'update' in the rest
 //! of this module
 
-use althea_kernel_interface::KernelInterfaceError;
+use althea_kernel_interface::{
+    is_openwrt::is_openwrt,
+    run_command,
+    upgrade::{perform_opkg, perform_sysupgrade},
+    KernelInterfaceError,
+};
 use althea_types::UpdateType;
-use rita_common::KI;
 
 /// Updates the system, including Rita and other packages by performing either a sysupgrade or opkg install
 pub fn update_system(instruction: UpdateType) -> Result<(), KernelInterfaceError> {
-    if KI.is_openwrt() {
+    if is_openwrt() {
         match instruction {
-            UpdateType::Sysupgrade(command) => match KI.perform_sysupgrade(command) {
+            UpdateType::Sysupgrade(command) => match perform_sysupgrade(command) {
                 Ok(_) => Ok(()),
                 Err(e) => Err(e),
             },
             UpdateType::Opkg(commands) => {
                 for cmd in commands {
-                    let res = KI.perform_opkg(cmd);
+                    let res = perform_opkg(cmd);
                     match res {
                         Ok(o) => match o.status.code() {
                             Some(0) => info!("opkg completed successfully! {:?}", o),
@@ -35,10 +39,10 @@ pub fn update_system(instruction: UpdateType) -> Result<(), KernelInterfaceError
 
                 // Restart rita after opkg
                 let args = vec!["restart"];
-                if let Err(e) = KI.run_command("/etc/init.d/rita", &args) {
+                if let Err(e) = run_command("/etc/init.d/rita", &args) {
                     error!("Unable to restart rita after opkg update: {}", e)
                 }
-                if let Err(e) = KI.run_command("/etc/init.d/rita_tower", &args) {
+                if let Err(e) = run_command("/etc/init.d/rita_tower", &args) {
                     error!("Unable to restart rita tower after opkg update: {}", e)
                 }
 

@@ -1,9 +1,9 @@
+use althea_kernel_interface::interface_tools::get_wg_remote_ip;
 use althea_types::regions::Regions;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use ipnetwork::IpNetwork;
 use rita_common::utils::ip_increment::is_unicast_link_local;
-use rita_common::KI;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Duration;
@@ -34,7 +34,7 @@ pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, Box<RitaExitErro
                     }
 
                     match route_to_des {
-                        Some(route) => Ok(match KI.get_wg_remote_ip(&route.iface) {
+                        Some(route) => Ok(match get_wg_remote_ip(&route.iface) {
                             Ok(a) => a,
                             Err(e) => return Err(Box::new(e.into())),
                         }),
@@ -91,7 +91,7 @@ pub fn get_gateway_ip_bulk(
                                             gateway_ip: *remote_ip,
                                         });
                                     } else {
-                                        match KI.get_wg_remote_ip(&route.iface) {
+                                        match get_wg_remote_ip(&route.iface) {
                                             Ok(remote_ip) => {
                                                 remote_ip_cache
                                                     .insert(route.iface.clone(), remote_ip);

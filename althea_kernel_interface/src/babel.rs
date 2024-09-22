@@ -1,7 +1,5 @@
-use crate::KernelInterface;
+use crate::run_command;
 
-impl dyn KernelInterface {
-    pub fn restart_babel(&self) {
-        let _res = self.run_command("/etc/init.d/babeld", &["restart"]);
-    }
+pub fn restart_babel() {
+    let _res = run_command("/etc/init.d/babeld", &["restart"]);
 }

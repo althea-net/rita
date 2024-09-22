@@ -5,6 +5,8 @@ pub mod dashboard;
 mod error;
 
 use actix_async::System as AsyncSystem;
+use althea_kernel_interface::run_command;
+use althea_kernel_interface::upgrade::perform_opkg;
 use althea_types::OpkgCommand;
 use althea_types::WifiSsid;
 use error::RitaExtenderError;
@@ -14,7 +16,6 @@ use rita_client::extender::ExtenderUpdate;
 use rita_common::dashboard::wifi::get_wifi_config_internal;
 use rita_common::dashboard::wifi::set_ssid;
 use rita_common::dashboard::wifi::WifiInterface;
-use rita_common::KI;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
@@ -218,7 +219,7 @@ fn apply_opkg_update_if_needed(router_version: String, extender_version: String)
             feed_name: "althea_extender".to_string(),
             arguments: common_args,
         };
-        let res = KI.perform_opkg(opkg_update);
+        let res = perform_opkg(opkg_update);
         match res {
             Ok(o) => match o.status.code() {
                 Some(0) => info!("opkg update completed successfully! {:?}", o),
@@ -240,7 +241,7 @@ fn apply_opkg_update_if_needed(router_version: String, extender_version: String)
             packages: vec!["rita_extender".to_string()],
             arguments: force_maintainer,
         };
-        let res = KI.perform_opkg(opkg_install);
+        let res = perform_opkg(opkg_install);
         match res {
             Ok(o) => match o.status.code() {
                 Some(0) => info!("opkg update completed successfully! {:?}", o),
@@ -258,7 +259,7 @@ fn apply_opkg_update_if_needed(router_version: String, extender_version: String)
         }
 
         // Restart after opkg is complete
-        if let Err(e) = KI.run_command("/etc/init.d/rita_extender", &["restart"]) {
+        if let Err(e) = run_command("/etc/init.d/rita_extender", &["restart"]) {
             error!("Unable to restart rita extender after opkg update: {}", e)
         }
     }

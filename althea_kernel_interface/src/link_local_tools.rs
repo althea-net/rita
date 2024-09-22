@@ -1,4 +1,4 @@
-use crate::{file_io::get_lines, KernelInterface, KernelInterfaceError};
+use crate::{file_io::get_lines, get_neighbors::get_neighbors, run_command, KernelInterfaceError};
 use regex::Regex;
 use std::{
     fs::read_dir,
@@ -57,174 +57,138 @@ fn get_link_local_device_ip_internal(
     ))
 }
 
-impl dyn KernelInterface {
-    fn get_proc_net_path(&self) -> String {
-        if cfg!(feature = "integration_test") {
-            // this is extremely overcomplicated and needs to be replaced by netlink at some point
-            // essentially we find the namespace file of a process spanwed in the namespace (babel)
-            // and then read it, only works in integration tests.
+fn get_proc_net_path() -> String {
+    if cfg!(feature = "integration_test") {
+        // this is extremely overcomplicated and needs to be replaced by netlink at some point
+        // essentially we find the namespace file of a process spanwed in the namespace (babel)
+        // and then read it, only works in integration tests.
 
-            let ns = self.run_command("ip", &["netns", "identify"]).unwrap();
-            let ns = match String::from_utf8(ns.stdout) {
-                Ok(s) => s,
-                Err(_) => panic!("Could not get netns name!"),
-            };
-            let ns = ns.trim();
+        let ns = run_command("ip", &["netns", "identify"]).unwrap();
+        let ns = match String::from_utf8(ns.stdout) {
+            Ok(s) => s,
+            Err(_) => panic!("Could not get netns name!"),
+        };
+        let ns = ns.trim();
 
-            let links = read_dir("/proc/").unwrap();
+        let links = read_dir("/proc/").unwrap();
 
-            // in the legacy test namespaces are netlab-1 but interfaces are veth-1-2
-            // so this lets us do the conversion
-            let legacy_test_ns_number = ns.strip_prefix("netlab-");
+        // in the legacy test namespaces are netlab-1 but interfaces are veth-1-2
+        // so this lets us do the conversion
+        let legacy_test_ns_number = ns.strip_prefix("netlab-");
 
-            for dir in links {
-                let dir = dir.unwrap();
-                if dir.path().is_dir() {
-                    let dir_name = dir.file_name().to_str().unwrap().to_string();
-                    // we're looking for a pid
-                    if let Ok(number) = dir_name.trim().parse() {
-                        let number: u32 = number;
-                        let path = format!("/proc/{number}/net/if_inet6");
-                        if let Ok(lines) = get_lines(&path) {
-                            for line in lines {
-                                let line = line.split_ascii_whitespace().last().unwrap();
-                                let prefix =
-                                    if let Some(legacy_test_ns_number) = legacy_test_ns_number {
-                                        format!("veth-{legacy_test_ns_number}")
-                                    } else {
-                                        format!("veth-{ns}")
-                                    };
-                                if line.starts_with(&prefix) {
-                                    return path;
-                                }
+        for dir in links {
+            let dir = dir.unwrap();
+            if dir.path().is_dir() {
+                let dir_name = dir.file_name().to_str().unwrap().to_string();
+                // we're looking for a pid
+                if let Ok(number) = dir_name.trim().parse() {
+                    let number: u32 = number;
+                    let path = format!("/proc/{number}/net/if_inet6");
+                    if let Ok(lines) = get_lines(&path) {
+                        for line in lines {
+                            let line = line.split_ascii_whitespace().last().unwrap();
+                            let prefix = if let Some(legacy_test_ns_number) = legacy_test_ns_number
+                            {
+                                format!("veth-{legacy_test_ns_number}")
+                            } else {
+                                format!("veth-{ns}")
+                            };
+                            if line.starts_with(&prefix) {
+                                return path;
                             }
                         }
                     }
                 }
             }
-            panic!(
-                "We did not find the babel process to locate this rita threads namespace {}!",
-                ns
-            );
-        } else {
-            // standard location
-            "/proc/net/if_inet6".to_string()
+        }
+        panic!(
+            "We did not find the babel process to locate this rita threads namespace {}!",
+            ns
+        );
+    } else {
+        // standard location
+        "/proc/net/if_inet6".to_string()
+    }
+}
+
+/// This gets our link local ip for a given device
+pub fn get_link_local_device_ip(dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
+    let path = get_proc_net_path();
+    let lines = get_lines(&path)?;
+    get_link_local_device_ip_internal(lines, dev, true)
+}
+
+/// This gets our global ip for a given device
+pub fn get_global_device_ip(dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
+    let path = get_proc_net_path();
+    let lines = get_lines(&path)?;
+    get_link_local_device_ip_internal(lines, dev, false)
+}
+
+pub fn get_global_device_ip_v4(dev: &str) -> Result<Ipv4Addr, KernelInterfaceError> {
+    let output = run_command("ip", &["addr", "show", "dev", dev, "scope", "global"])?;
+    trace!("Got {:?} from `ip addr`", output);
+
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"inet (\S*?)(/[0-9]+)? scope global")
+            .expect("Unable to compile regular expression");
+    }
+
+    let cap_str = String::from_utf8(output.stdout)?;
+    let cap = RE.captures(&cap_str);
+    if let Some(cap) = cap {
+        trace!("got global IP of {} from device {}", &cap[1], &dev);
+        Ok(cap[1].parse::<Ipv4Addr>()?)
+    } else {
+        Err(KernelInterfaceError::RuntimeError(
+            "No global found or no interface found".to_string(),
+        ))
+    }
+}
+
+/// Given a neighboring link local ip, return the device name
+pub fn get_device_name(their_ip: IpAddr) -> Result<String, KernelInterfaceError> {
+    let neigh = get_neighbors()?;
+    trace!("looking for {:?} in {:?} for device name", their_ip, neigh);
+    for (ip, dev) in neigh {
+        if ip == their_ip {
+            return Ok(dev);
         }
     }
 
-    /// This gets our link local ip for a given device
-    pub fn get_link_local_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
-        let path = self.get_proc_net_path();
-        let lines = get_lines(&path)?;
-        get_link_local_device_ip_internal(lines, dev, true)
-    }
+    Err(KernelInterfaceError::RuntimeError(
+        "Address not found in neighbors".to_string(),
+    ))
+}
 
-    /// This gets our global ip for a given device
-    pub fn get_global_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
-        let path = self.get_proc_net_path();
-        let lines = get_lines(&path)?;
-        get_link_local_device_ip_internal(lines, dev, false)
-    }
+/// This gets our link local ip that can be reached by another node with link local ip
+pub fn get_reply_ip(
+    their_ip: Ipv6Addr,
+    external_interface: Option<String>,
+) -> Result<Ipv6Addr, KernelInterfaceError> {
+    let neigh = get_neighbors()?;
 
-    pub fn get_global_device_ip_v4(&self, dev: &str) -> Result<Ipv4Addr, KernelInterfaceError> {
-        let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "global"])?;
-        trace!("Got {:?} from `ip addr`", output);
-
-        lazy_static! {
-            static ref RE: Regex = Regex::new(r"inet (\S*?)(/[0-9]+)? scope global")
-                .expect("Unable to compile regular expression");
-        }
-
-        let cap_str = String::from_utf8(output.stdout)?;
-        let cap = RE.captures(&cap_str);
-        if let Some(cap) = cap {
-            trace!("got global IP of {} from device {}", &cap[1], &dev);
-            Ok(cap[1].parse::<Ipv4Addr>()?)
-        } else {
-            Err(KernelInterfaceError::RuntimeError(
-                "No global found or no interface found".to_string(),
-            ))
+    trace!("Looking for {:?} in {:?} for reply ip", their_ip, neigh);
+    for (ip, dev) in neigh {
+        if ip == their_ip {
+            return get_link_local_device_ip(&dev);
         }
     }
 
-    /// Given a neighboring link local ip, return the device name
-    pub fn get_device_name(&self, their_ip: IpAddr) -> Result<String, KernelInterfaceError> {
-        let neigh = self.get_neighbors()?;
-        trace!("looking for {:?} in {:?} for device name", their_ip, neigh);
-        for (ip, dev) in neigh {
-            if ip == their_ip {
-                return Ok(dev);
-            }
-        }
-
+    if let Some(external_interface) = external_interface {
+        let global_ip = get_global_device_ip(&external_interface)?;
+        trace!(
+            "Didn't find {:?} in neighbors, sending global ip {:?}",
+            their_ip,
+            global_ip
+        );
+        Ok(global_ip)
+    } else {
+        trace!("Didn't find {:?} in neighbors, bailing out", their_ip);
         Err(KernelInterfaceError::RuntimeError(
             "Address not found in neighbors".to_string(),
         ))
     }
-
-    /// This gets our link local ip that can be reached by another node with link local ip
-    pub fn get_reply_ip(
-        &self,
-        their_ip: Ipv6Addr,
-        external_interface: Option<String>,
-    ) -> Result<Ipv6Addr, KernelInterfaceError> {
-        let neigh = self.get_neighbors()?;
-
-        trace!("Looking for {:?} in {:?} for reply ip", their_ip, neigh);
-        for (ip, dev) in neigh {
-            if ip == their_ip {
-                return self.get_link_local_device_ip(&dev);
-            }
-        }
-
-        if let Some(external_interface) = external_interface {
-            let global_ip = self.get_global_device_ip(&external_interface)?;
-            trace!(
-                "Didn't find {:?} in neighbors, sending global ip {:?}",
-                their_ip,
-                global_ip
-            );
-            Ok(global_ip)
-        } else {
-            trace!("Didn't find {:?} in neighbors, bailing out", their_ip);
-            Err(KernelInterfaceError::RuntimeError(
-                "Address not found in neighbors".to_string(),
-            ))
-        }
-    }
-}
-
-#[test]
-fn test_get_device_name_linux() {
-    use crate::KI;
-
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    KI.set_mock(Box::new(move |program, args| {
-        assert_eq!(program, "ip");
-        assert_eq!(args, &["neigh"]);
-
-        Ok(Output {
-            stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
-10.0.0.2 dev eth0  FAILED
-10.0.1.2 dev eth0 lladdr 00:00:00:aa:00:05 REACHABLE
-2001::2 dev eth0 lladdr 00:00:00:aa:00:56 REACHABLE
-fe80::7459:8eff:fe98:81 dev eth0 lladdr 76:59:8e:98:00:81 STALE
-fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
-2001::2 dev eth0  FAILED"
-                .to_vec(),
-            stderr: b"".to_vec(),
-            status: ExitStatus::from_raw(0),
-        })
-    }));
-
-    let dev = KI
-        .get_device_name("fe80::433:25ff:fe8c:e1ea".parse().unwrap())
-        .unwrap();
-
-    assert_eq!(dev, "eth2")
 }
 
 #[test]

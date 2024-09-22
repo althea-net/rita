@@ -1,6 +1,7 @@
-use crate::KI;
 use actix_web_async::http::StatusCode;
 use actix_web_async::{web::Path, HttpRequest, HttpResponse};
+use althea_kernel_interface::is_openwrt::is_openwrt;
+use althea_kernel_interface::run_command;
 use log::LevelFilter;
 
 pub async fn get_remote_logging(_req: HttpRequest) -> HttpResponse {
@@ -25,8 +26,8 @@ pub async fn remote_logging(path: Path<bool>) -> HttpResponse {
             .json(format!("Failed to write config {e:?}"));
     }
 
-    if KI.is_openwrt() {
-        if let Err(e) = KI.run_command(service_path.as_str(), &["restart"]) {
+    if is_openwrt() {
+        if let Err(e) = run_command(service_path.as_str(), &["restart"]) {
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
                 .json(format!("Failed to restart service {e:?}"));
         }
@@ -66,7 +67,7 @@ pub async fn remote_logging_level(path: Path<String>) -> HttpResponse {
             .json(format!("Failed to write config {e:?}"));
     }
 
-    if let Err(e) = KI.run_command(service_path.as_str(), &["restart"]) {
+    if let Err(e) = run_command(service_path.as_str(), &["restart"]) {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
             .json(format!("Failed to restart service {e:?}"));
     }

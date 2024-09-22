@@ -1,5 +1,6 @@
-use super::KernelInterface;
-use crate::KernelInterfaceError as Error;
+use crate::iptables::add_iptables_rule;
+use crate::netfilter::{does_nftables_exist, nft_init_counters};
+use crate::{run_command, KernelInterfaceError as Error};
 use regex::Regex;
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -131,406 +132,132 @@ add zxcv 1234:5678:9801:2345:6789:0123:4567:8902,wg0 packets 123456789 bytes 987
     }
 }
 
-impl dyn KernelInterface {
-    pub fn init_counter(&self, target: &FilterTarget) -> Result<(), Error> {
-        if self.does_nftables_exist() {
-            info!("Trying to init a counter!");
-            self.nft_init_counters(target.set_name(), target.chain(), target.nft_interface())?;
-        } else {
-            self.run_command(
-                "ipset",
-                &[
-                    "create",
-                    target.set_name(),
-                    "hash:net,iface",
-                    "family",
-                    "inet6",
-                    "counters",
-                ],
-            )?;
-            self.add_iptables_rule(
-                "ip6tables",
-                &[
-                    "-w",
-                    "-I",
-                    target.table(),
-                    "1",
-                    "-m",
-                    "set",
-                    "!",
-                    "--match-set",
-                    target.set_name(),
-                    &format!("dst,{}", target.interface()),
-                    "-j",
-                    "SET",
-                    "--add-set",
-                    target.set_name(),
-                    &format!("dst,{}", target.interface()),
-                ],
-            )?;
-        }
-
-        Ok(())
+pub fn init_counter(target: &FilterTarget) -> Result<(), Error> {
+    if does_nftables_exist() {
+        info!("Trying to init a counter!");
+        nft_init_counters(target.set_name(), target.chain(), target.nft_interface())?;
+    } else {
+        run_command(
+            "ipset",
+            &[
+                "create",
+                target.set_name(),
+                "hash:net,iface",
+                "family",
+                "inet6",
+                "counters",
+            ],
+        )?;
+        add_iptables_rule(
+            "ip6tables",
+            &[
+                "-w",
+                "-I",
+                target.table(),
+                "1",
+                "-m",
+                "set",
+                "!",
+                "--match-set",
+                target.set_name(),
+                &format!("dst,{}", target.interface()),
+                "-j",
+                "SET",
+                "--add-set",
+                target.set_name(),
+                &format!("dst,{}", target.interface()),
+            ],
+        )?;
     }
 
-    fn parse_nft_set_counters(
-        &self,
-        set_name: &str,
-    ) -> Result<HashMap<(IpAddr, String), u64>, Error> {
-        let mut ret_map = HashMap::new();
-        let out = self.run_command("nft", &["list", "set", "inet", "fw4", set_name])?;
-        // flush the list immediately to not missing accounting for any bytes
-        self.run_command("nft", &["flush", "set", "inet", "fw4", set_name])?;
-
-        let out = out.stdout;
-        let out = String::from_utf8(out).expect("fix command");
-        for line in out.lines() {
-            if line.contains("packets") {
-                let ret = line.replace("elements = { ", "");
-                let mut ret = ret.split_ascii_whitespace();
-
-                // line is in the form:
-                // ff02::1:6 . \"wg0\" counter packets 3 bytes 204,
-
-                let ip_addr = IpAddr::from_str(ret.next().unwrap_or(""))?;
-
-                ret.next();
-
-                let iface = ret.next();
-                let iface = if let Some(iface) = iface {
-                    iface.replace('\"', "")
-                } else {
-                    return Err(Error::ParseError(format!(
-                        "No interface to parse for counter string {:?}",
-                        line
-                    )));
-                };
-
-                ret.next();
-                ret.next();
-                let packets: u64 = ret.next().unwrap_or("").parse()?;
-
-                ret.next();
-                let bytes: u64 = ret.next().unwrap_or("").replace(',', "").parse()?;
-
-                let total_bytes = (packets * 40) + bytes;
-
-                trace!(
-                    "ipaddr, iface, packets, bytes, total: {:?}, {:?} {:?}, {:?}, {:?}",
-                    ip_addr,
-                    iface,
-                    packets,
-                    bytes,
-                    total_bytes
-                );
-
-                ret_map.insert((ip_addr, iface), total_bytes);
-            }
-        }
-
-        Ok(ret_map)
-    }
-
-    pub fn read_counters(
-        &self,
-        target: &FilterTarget,
-    ) -> Result<HashMap<(IpAddr, String), u64>, Error> {
-        if self.does_nftables_exist() {
-            self.parse_nft_set_counters(target.set_name())
-        } else {
-            self.run_command(
-                "ipset",
-                &[
-                    "create",
-                    &format!("tmp_{}", target.set_name()),
-                    "hash:net,iface",
-                    "family",
-                    "inet6",
-                    "counters",
-                ],
-            )?;
-
-            self.run_command(
-                "ipset",
-                &[
-                    "swap",
-                    &format!("tmp_{}", target.set_name()),
-                    target.set_name(),
-                ],
-            )?;
-
-            let output =
-                self.run_command("ipset", &["save", &format!("tmp_{}", target.set_name())])?;
-            let res = parse_ipset(&String::from_utf8(output.stdout)?);
-            trace!("ipset parsed into {:?}", res);
-
-            self.run_command("ipset", &["destroy", &format!("tmp_{}", target.set_name())])?;
-            res
-        }
-    }
+    Ok(())
 }
 
-#[test]
-fn test_init_counter() {
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
+fn parse_nft_set_counters(set_name: &str) -> Result<HashMap<(IpAddr, String), u64>, Error> {
+    let mut ret_map = HashMap::new();
+    let out = run_command("nft", &["list", "set", "inet", "fw4", set_name])?;
+    // flush the list immediately to not missing accounting for any bytes
+    run_command("nft", &["flush", "set", "inet", "fw4", set_name])?;
 
-    use crate::KI;
+    let out = out.stdout;
+    let out = String::from_utf8(out).expect("fix command");
+    for line in out.lines() {
+        if line.contains("packets") {
+            let ret = line.replace("elements = { ", "");
+            let mut ret = ret.split_ascii_whitespace();
 
-    let mut counter = 0;
+            // line is in the form:
+            // ff02::1:6 . \"wg0\" counter packets 3 bytes 204,
 
-    KI.set_mock(Box::new(move |program, args| {
-        counter += 1;
-        if KI.get_kernel_is_v4()? {
-            match counter {
-                1 => {
-                    assert_eq!(program, "ipset");
-                    assert_eq!(
-                        args,
-                        vec![
-                            "create",
-                            "rita_input",
-                            "hash:net,iface",
-                            "family",
-                            "inet6",
-                            "counters",
-                        ]
-                    );
+            let ip_addr = IpAddr::from_str(ret.next().unwrap_or(""))?;
 
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "ip6tables");
-                    assert_eq!(
-                        args,
-                        vec![
-                            "-w",
-                            "-C",
-                            "INPUT",
-                            "-m",
-                            "set",
-                            "!",
-                            "--match-set",
-                            "rita_input",
-                            "dst,src",
-                            "-j",
-                            "SET",
-                            "--add-set",
-                            "rita_input",
-                            "dst,src",
-                        ]
-                    );
+            ret.next();
 
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
+            let iface = ret.next();
+            let iface = if let Some(iface) = iface {
+                iface.replace('\"', "")
+            } else {
+                return Err(Error::ParseError(format!(
+                    "No interface to parse for counter string {:?}",
+                    line
+                )));
+            };
 
-                _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
-            }
-        } else {
-            match counter {
-                1 => {
-                    assert_eq!(program, "nft");
-                    assert_eq!(args, &["-v"]);
-                    Ok(Output {
-                        stdout: b"nftables v1.0.1 (Fearless Fosdick #3)".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "nft");
-                    assert_eq!(args, &["list", "set", "inet", "fw4", "rita_input"]);
+            ret.next();
+            ret.next();
+            let packets: u64 = ret.next().unwrap_or("").parse()?;
 
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                3 => {
-                    assert_eq!(program, "nft");
-                    assert_eq!(
-                        args,
-                        &[
-                            "add",
-                            "set",
-                            "inet",
-                            "fw4",
-                            "rita_input",
-                            "{",
-                            "type",
-                            "ipv6_addr",
-                            ".",
-                            "ifname;",
-                            "flags",
-                            "dynamic;",
-                            "counter;",
-                            "size",
-                            "65535;",
-                            "}",
-                        ]
-                    );
+            ret.next();
+            let bytes: u64 = ret.next().unwrap_or("").replace(',', "").parse()?;
 
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                4 => {
-                    assert_eq!(program, "nft");
-                    assert_eq!(
-                        args,
-                        &[
-                            "insert",
-                            "rule",
-                            "inet",
-                            "fw4",
-                            "input",
-                            "ip6",
-                            "daddr",
-                            ".",
-                            "meta",
-                            "iifname",
-                            "@rita_input",
-                        ]
-                    );
+            let total_bytes = (packets * 40) + bytes;
 
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
-            }
+            trace!(
+                "ipaddr, iface, packets, bytes, total: {:?}, {:?} {:?}, {:?}, {:?}",
+                ip_addr,
+                iface,
+                packets,
+                bytes,
+                total_bytes
+            );
+
+            ret_map.insert((ip_addr, iface), total_bytes);
         }
-    }));
-    KI.init_counter(&FilterTarget::Input)
-        .expect("Unable to init counter");
+    }
+
+    Ok(ret_map)
 }
-#[test]
-fn test_read_counters() {
-    use std::net::Ipv6Addr;
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
 
-    use crate::KI;
+pub fn read_counters(target: &FilterTarget) -> Result<HashMap<(IpAddr, String), u64>, Error> {
+    if does_nftables_exist() {
+        parse_nft_set_counters(target.set_name())
+    } else {
+        run_command(
+            "ipset",
+            &[
+                "create",
+                &format!("tmp_{}", target.set_name()),
+                "hash:net,iface",
+                "family",
+                "inet6",
+                "counters",
+            ],
+        )?;
 
-    let mut counter = 0;
+        run_command(
+            "ipset",
+            &[
+                "swap",
+                &format!("tmp_{}", target.set_name()),
+                target.set_name(),
+            ],
+        )?;
 
-    KI.set_mock(Box::new(move |program, args| {
-        counter += 1;
-        if KI.get_kernel_is_v4()? {
-            match counter {
-                1 => {
-                    assert_eq!(program, "ipset");
-                    assert_eq!(
-                        args,
-                        vec![
-                            "create",
-                            "tmp_rita_input",
-                            "hash:net,iface",
-                            "family",
-                            "inet6",
-                            "counters",
-                        ]
-                    );
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "ipset");
-                    assert_eq!(args, vec!["swap", "tmp_rita_input", "rita_input"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                3 => {
-                    assert_eq!(program, "ipset");
-                    assert_eq!(args, vec!["save", "tmp_rita_input"]);
-                    Ok(Output {
-                        stdout: b"
-    add xxx fd00::dead:beef,wg42 packets 111 bytes 222
-    "
-                        .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                4 => {
-                    assert_eq!(program, "ipset");
-                    assert_eq!(args, vec!["destroy", "tmp_rita_input"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
-            }
-        } else {
-            match counter {
-                1 => {
-                    assert_eq!(program, "nft");
-                    assert_eq!(args, &["-v"]);
-                    Ok(Output {
-                        stdout: b"nftables v1.0.1 (Fearless Fosdick #3)".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "nft");
-                    assert_eq!(args, &["list", "set", "inet", "fw4", "rita_input"]);
-                    Ok(Output {
-                        stdout: b"
-    fd00::dead:beef . \"wg42\" counter packets 111 bytes 222
-    "
-                        .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                3 => {
-                    assert_eq!(program, "nft");
-                    assert_eq!(args, &["flush", "set", "inet", "fw4", "rita_input"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
-            }
-        }
-    }));
+        let output = run_command("ipset", &["save", &format!("tmp_{}", target.set_name())])?;
+        let res = parse_ipset(&String::from_utf8(output.stdout)?);
+        trace!("ipset parsed into {:?}", res);
 
-    let result = KI
-        .read_counters(&FilterTarget::Input)
-        .expect("Unable to read values");
-    assert_eq!(result.len(), 1);
-
-    let value = result
-        .get(&(
-            IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0xdead, 0xbeef)),
-            "wg42".into(),
-        ))
-        .expect("Unable to find key");
-    assert_eq!(value, &(222u64 + 111u64 * 40));
+        run_command("ipset", &["destroy", &format!("tmp_{}", target.set_name())])?;
+        res
+    }
 }

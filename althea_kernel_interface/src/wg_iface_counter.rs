@@ -2,8 +2,8 @@
 //! this is mostly used in client and exit billing where we only have to concern ourselves with
 //! a single destination and a single price.
 
-use crate::KernelInterfaceError as Error;
-use crate::{KernelInterface, KernelInterfaceError};
+use crate::KernelInterfaceError;
+use crate::{run_command, KernelInterfaceError as Error};
 use althea_types::WgKey;
 use regex::Regex;
 use std::collections::HashMap;
@@ -43,75 +43,54 @@ pub fn prepare_usage_history<S: ::std::hash::BuildHasher>(
     }
 }
 
-impl dyn KernelInterface {
-    /// Takes a wg interface name and provides upload and download since creation in bytes
-    /// in a hashmap indexed by peer WireGuard key
-    pub fn read_wg_counters(&self, wg_name: &str) -> Result<HashMap<WgKey, WgUsage>, Error> {
-        let output = self.run_command("wg", &["show", wg_name, "transfer"])?;
-        if !output.stderr.is_empty() {
-            return Err(KernelInterfaceError::RuntimeError(format!(
-                "received error from wg command: {}",
-                String::from_utf8(output.stderr)?
-            )));
-        }
-
-        lazy_static! {
-            static ref RE: Regex = Regex::new(
-                r"(?P<key>[+/=0-9a-zA-Z]+)\t(?P<download>[0-9]+)\t(?P<upload>[0-9]+)\n*"
-            )
-            .expect("Unable to compile regular expression");
-        }
-
-        let mut result = HashMap::new();
-        for item in RE.captures_iter(&String::from_utf8(output.stdout)?) {
-            let usage = WgUsage {
-                upload: item["upload"].parse()?,
-                download: item["download"].parse()?,
-            };
-            match item["key"].parse() {
-                Ok(key) => {
-                    result.insert(key, usage);
-                }
-                Err(e) => warn!(
-                    "Failed to parse WgKey {} with {:?}",
-                    item["key"].to_string(),
-                    e
-                ),
-            }
-        }
-
-        Ok(result)
+/// Internal function to parse the output of `wg show <interface> transfer`
+fn read_wg_counters_internal(stdout: String) -> Result<HashMap<WgKey, WgUsage>, Error> {
+    lazy_static! {
+        static ref RE: Regex =
+            Regex::new(r"(?P<key>[+/=0-9a-zA-Z]+)\t(?P<download>[0-9]+)\t(?P<upload>[0-9]+)\n*")
+                .expect("Unable to compile regular expression");
     }
+
+    let mut result = HashMap::new();
+    for item in RE.captures_iter(&stdout) {
+        let usage = WgUsage {
+            upload: item["upload"].parse()?,
+            download: item["download"].parse()?,
+        };
+        match item["key"].parse() {
+            Ok(key) => {
+                result.insert(key, usage);
+            }
+            Err(e) => warn!(
+                "Failed to parse WgKey {} with {:?}",
+                item["key"].to_string(),
+                e
+            ),
+        }
+    }
+
+    Ok(result)
+}
+
+/// Takes a wg interface name and provides upload and download since creation in bytes
+/// in a hashmap indexed by peer WireGuard key
+pub fn read_wg_counters(wg_name: &str) -> Result<HashMap<WgKey, WgUsage>, Error> {
+    let output = run_command("wg", &["show", wg_name, "transfer"])?;
+    if !output.stderr.is_empty() {
+        return Err(KernelInterfaceError::RuntimeError(format!(
+            "received error from wg command: {}",
+            String::from_utf8(output.stderr)?
+        )));
+    }
+    read_wg_counters_internal(String::from_utf8(output.stdout)?)
 }
 
 #[test]
 fn test_read_wg_counters() {
-    use crate::KI;
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    let mut counter = 0;
-
-    KI.set_mock(Box::new(move |program, args| {
-        counter += 1;
-        match counter {
-            1 => {
-                assert_eq!(program, "wg");
-                assert_eq!(args, vec!["show", "wg_exit", "transfer"]);
-                Ok(Output {
-                    stdout: b"jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg=\t821519724\t13592616000"
-                        .to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
-            }
-            _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
-        }
-    }));
-    let wg_counter = KI
-        .read_wg_counters("wg_exit")
-        .expect("Unable to parse wg counters");
+    let wg_counter = read_wg_counters_internal(
+        "jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg=\t821519724\t13592616000".to_string(),
+    )
+    .unwrap();
     let test_key = "jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg="
         .parse()
         .unwrap();
@@ -124,43 +103,19 @@ fn test_read_wg_counters() {
 
 #[test]
 fn test_read_wg_exit_counters() {
-    use crate::KI;
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    let mut counter = 0;
-
-    KI.set_mock(Box::new(move |program, args| {
-        counter += 1;
-        match counter {
-            1 => {
-                assert_eq!(program, "wg");
-                assert_eq!(args, vec!["show", "wg_exit", "transfer"]);
-                Ok(Output {
-                    stdout: b"7fYutmH8iHIcuKjnzcgaDBNpVRw8ly0XMYFr7PtirDI=\t0\t0
-fFGhz1faSAqNjTqT5rpBWLD/FLrP6P/P59Z2Eo3jQDo=\t0\t3318456
-oum4Nd5nngTjG5Hw+XFoLk18pTY8DA7bl2OIwWkc4wQ=\t0\t0
-TFG8LAio7MDd+i5tExNX/vxR1pqpgNqo+RiUkmBekmU=\t0\t0
-Iz668/X70eo/PF9C94cKAZjrSjU961V8xndxTtk0FRM=\t7088439728\t15281630160
-Hgu1A3JFol3D6TFsmnjX/PVvupl0W2wMee0wRVFb0Aw=\t122193456\t1120342792
-7dxulyk1UcCJ0zUDcGbV+CQRY0uGUnbY5exi6I8EeyE=\t351530232\t5424629680
-b6HGtuWLAIHyINOgL7euzrMsMfzHIie5kYDScSCT7Ds=\t67526804\t88741160
-RW1XPRn4nJQaDqqeDFRilPjtYOUBitXIuHwoKZAtKWw=\t480230868\t3531367092
-AJYeYn4R+I+Jc7xiKQ15ImruYFXybTiR6BB6Ip3/njs=\t1777907382\t2034640104
-jL+LlqHAM63Qd9/ynAuqqn4wrYO7Hp8cYMlnf2OoSH8=\t679969972\t6539417596
-"
-                    .to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
-            }
-            _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
-        }
-    }));
-    let wg_counter = KI
-        .read_wg_counters("wg_exit")
-        .expect("Unable to parse wg counters");
+    let stdout = "7fYutmH8iHIcuKjnzcgaDBNpVRw8ly0XMYFr7PtirDI=\t0\t0
+    fFGhz1faSAqNjTqT5rpBWLD/FLrP6P/P59Z2Eo3jQDo=\t0\t3318456
+    oum4Nd5nngTjG5Hw+XFoLk18pTY8DA7bl2OIwWkc4wQ=\t0\t0
+    TFG8LAio7MDd+i5tExNX/vxR1pqpgNqo+RiUkmBekmU=\t0\t0
+    Iz668/X70eo/PF9C94cKAZjrSjU961V8xndxTtk0FRM=\t7088439728\t15281630160
+    Hgu1A3JFol3D6TFsmnjX/PVvupl0W2wMee0wRVFb0Aw=\t122193456\t1120342792
+    7dxulyk1UcCJ0zUDcGbV+CQRY0uGUnbY5exi6I8EeyE=\t351530232\t5424629680
+    b6HGtuWLAIHyINOgL7euzrMsMfzHIie5kYDScSCT7Ds=\t67526804\t88741160
+    RW1XPRn4nJQaDqqeDFRilPjtYOUBitXIuHwoKZAtKWw=\t480230868\t3531367092
+    AJYeYn4R+I+Jc7xiKQ15ImruYFXybTiR6BB6Ip3/njs=\t1777907382\t2034640104
+    jL+LlqHAM63Qd9/ynAuqqn4wrYO7Hp8cYMlnf2OoSH8=\t679969972\t6539417596
+    ";
+    let wg_counter = read_wg_counters_internal(stdout.to_string()).unwrap();
 
     let test_key = "Iz668/X70eo/PF9C94cKAZjrSjU961V8xndxTtk0FRM="
         .parse()

@@ -1,4 +1,4 @@
-use althea_kernel_interface::{KernelInterfaceError, KI};
+use althea_kernel_interface::{run_command, KernelInterfaceError};
 use nix::{
     fcntl::{open, OFlag},
     sys::stat::Mode,
@@ -119,12 +119,12 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
     // arbitrary number for the IP assignment
     let mut counter = 6;
     // clear namespaces
-    KI.run_command("ip", &["-all", "netns", "delete", "||", "true"])?;
+    run_command("ip", &["-all", "netns", "delete", "||", "true"])?;
     // add namespaces
     for ns in spaces.names.iter() {
-        KI.run_command("ip", &["netns", "add", &ns.get_name()])?;
+        run_command("ip", &["netns", "add", &ns.get_name()])?;
         // ip netns exec nB ip link set dev lo up
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns",
@@ -139,7 +139,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
             ],
         )?;
         // nft create table inet fw4
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns",
@@ -155,7 +155,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         // nft add chain inet fw4 input { type filter hook input priority filter; policy accept; }
         // nft add chain inet fw4 output { type filter hook output priority filter; policy accept; }
         // nft add chain inet fw4 forward { type filter hook forward priority filter; policy accept; }
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns",
@@ -179,7 +179,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 "}",
             ],
         )?;
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns",
@@ -203,7 +203,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 "}",
             ],
         )?;
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns",
@@ -253,10 +253,10 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
             // delete the old native namespace veth for repeated runs
             // this veth should go away on it's own when the veths are cleared but that
             // can take long enough to cause a race condition
-            KI.run_command("ip", &["link", "del", &veth_native_to_exit])?;
+            run_command("ip", &["link", "del", &veth_native_to_exit])?;
 
             // create link between exit and native namespace
-            KI.run_command(
+            run_command(
                 "ip",
                 &[
                     "link",
@@ -270,7 +270,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 ],
             )?;
             // set the exit side of the link to the correct namespace the other side is native
-            KI.run_command(
+            run_command(
                 "ip",
                 &[
                     "link",
@@ -280,8 +280,8 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                     &name.get_name(),
                 ],
             )?;
-            KI.run_command("ip", &["link", "set", "up", &veth_native_to_exit])?;
-            KI.run_command(
+            run_command("ip", &["link", "set", "up", &veth_native_to_exit])?;
+            run_command(
                 "ip",
                 &[
                     "netns",
@@ -295,7 +295,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 ],
             )?;
             // add ip address for the exit
-            KI.run_command(
+            run_command(
                 "ip",
                 &[
                     "netns",
@@ -310,7 +310,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 ],
             )?;
             // set default route
-            KI.run_command(
+            run_command(
                 "ip",
                 &[
                     "netns",
@@ -331,14 +331,14 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
 
     // now we need to loop the interfaces we created and build a single bridge interface
     // this will make our job of forwarding their traffic to the internet much easier
-    KI.run_command("ip", &["link", "add", BRIDGE_NAME, "type", "bridge"])?;
+    run_command("ip", &["link", "add", BRIDGE_NAME, "type", "bridge"])?;
     for iface in links_to_native_namespace {
-        KI.run_command("ip", &["link", "set", &iface, "master", BRIDGE_NAME])?;
+        run_command("ip", &["link", "set", &iface, "master", BRIDGE_NAME])?;
     }
-    KI.run_command("ip", &["link", "set", "up", BRIDGE_NAME])?;
-    KI.run_command("ip", &["addr", "add", BRIDGE_IP_PREFIX, "dev", BRIDGE_NAME])?;
+    run_command("ip", &["link", "set", "up", BRIDGE_NAME])?;
+    run_command("ip", &["addr", "add", BRIDGE_IP_PREFIX, "dev", BRIDGE_NAME])?;
     // finally we setup a nat between this bridge and the native namespace, allowing traffic to exit
-    KI.run_command(
+    run_command(
         "iptables",
         &[
             "-A",
@@ -355,7 +355,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
             "ACCEPT",
         ],
     )?;
-    KI.run_command(
+    run_command(
         "iptables",
         &[
             "-A",
@@ -368,7 +368,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
             "ACCEPT",
         ],
     )?;
-    KI.run_command(
+    run_command(
         "iptables",
         &[
             "-t",
@@ -395,24 +395,24 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
 
         counter += 1;
         // create veth to link them
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "link", "add", &veth_ab, "type", "veth", "peer", "name", &veth_ba,
             ],
         )?;
         // assign each side of the veth to one of the nodes namespaces
-        KI.run_command("ip", &["link", "set", &veth_ab, "netns", &a_name])?;
-        KI.run_command("ip", &["link", "set", &veth_ba, "netns", &b_name])?;
+        run_command("ip", &["link", "set", &veth_ab, "netns", &a_name])?;
+        run_command("ip", &["link", "set", &veth_ba, "netns", &b_name])?;
 
         // add ip addresses on each side
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns", "exec", &a_name, "ip", "addr", "add", &ip_ab, "dev", &veth_ab,
             ],
         )?;
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns", "exec", &b_name, "ip", "addr", "add", &ip_ba, "dev", &veth_ba,
@@ -420,14 +420,14 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         )?;
 
         // bring the interfaces up
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns", "exec", &a_name, "ip", "link", "set", "dev", &veth_ab, "up",
             ],
         )?;
 
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns", "exec", &b_name, "ip", "link", "set", "dev", &veth_ba, "up",
@@ -436,13 +436,13 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
 
         //  ip netns exec nC ip route add 192.168.0.0/24 dev veth-nC-nA
         // add routes to each other's subnets
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns", "exec", &a_name, "ip", "route", "add", &subnet_b, "dev", &veth_ab,
             ],
         )?;
-        KI.run_command(
+        run_command(
             "ip",
             &[
                 "netns", "exec", &b_name, "ip", "route", "add", &subnet_a, "dev", &veth_ba,

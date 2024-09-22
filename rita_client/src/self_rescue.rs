@@ -1,6 +1,10 @@
 use althea_kernel_interface::hardware_info::get_hardware_info;
-use althea_kernel_interface::KI;
-use rand::prelude::SliceRandom;
+use althea_kernel_interface::ping_check::ping_check;
+use althea_kernel_interface::run_command;
+use althea_kernel_interface::setup_wg_if::{
+    get_last_active_handshake_time, get_list_of_wireguard_interfaces,
+};
+use rand::seq::SliceRandom;
 use rand::Rng;
 use rita_common::TUNNEL_HANDSHAKE_TIMEOUT;
 use settings::get_rita_common;
@@ -33,7 +37,7 @@ pub fn start_rita_client_rescue_loop() {
             } else {
                 // If this router has been in a bad state for >10 mins, reboot
                 if (Instant::now() - last_successful_ping) > REBOOT_TIMEOUT {
-                    let _res = KI.run_command("reboot", &[]);
+                    let _res = run_command("reboot", &[]);
                 }
             }
 
@@ -45,13 +49,13 @@ pub fn start_rita_client_rescue_loop() {
             // If you're coming back and looking at expanding/improving this in the future, consider moving this out of a separate thread
             // and into rita_client or rita_common loops using a shared Instant that exists only in the context of those two threads rather than
             // a global lazy static Instant. This would keep us from having to make guesses around the system time
-            let wg_interfaces = KI.get_list_of_wireguard_interfaces();
+            let wg_interfaces = get_list_of_wireguard_interfaces();
             trace!("interfaces {:?}", wg_interfaces);
             if let Ok(interfaces) = wg_interfaces {
                 let mut rng = rand::thread_rng();
                 let sample = interfaces.choose_multiple(&mut rng, 3);
                 for interface in sample {
-                    if let Ok(times) = KI.get_last_active_handshake_time(interface) {
+                    if let Ok(times) = get_last_active_handshake_time(interface) {
                         // we grab only the first timestamps because none of these tunnels should have multiple timestamps
                         if let Some((_, time)) = times.first() {
                             if let Ok(elapsed) = time.elapsed() {
@@ -60,7 +64,7 @@ pub fn start_rita_client_rescue_loop() {
                                     last_successful_handshake_check.elapsed() > REBOOT_TIMEOUT,
                                 ) {
                                     (true, true) => {
-                                        let _res = KI.run_command("reboot", &[]);
+                                        let _res = run_command("reboot", &[]);
                                     }
                                     // wait
                                     (true, false) => {}
@@ -84,7 +88,7 @@ pub fn start_rita_client_rescue_loop() {
                 (Some(mdl), Ok(info)) => {
                     if mdl.contains("mikrotik_hap-ac2") && info.load_avg_fifteen_minute > 4.0 {
                         info!("15 minute load average > 4, rebooting!");
-                        let _res = KI.run_command("reboot", &[]);
+                        let _res = run_command("reboot", &[]);
                     }
                 }
                 (Some(_), Err(_)) => error!("Could not get hardware info!"),
@@ -122,7 +126,7 @@ pub fn run_ping_test() -> bool {
     let target_ip = PING_TEST_IPS[index];
 
     let timeout = Duration::from_secs(5);
-    match KI.ping_check(&target_ip.into(), timeout, None) {
+    match ping_check(&target_ip.into(), timeout, None) {
         Ok(out) => out,
         Err(e) => {
             error!("ipv4 ping error: {:?}", e);

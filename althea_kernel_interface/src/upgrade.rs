@@ -1,78 +1,75 @@
-use super::KernelInterface;
 use crate::{
     opkg_feeds::{get_release_feed, set_release_feed, CUSTOMFEEDS},
-    KernelInterfaceError as Error,
+    run_command, KernelInterfaceError as Error,
 };
 use althea_types::{OpkgCommand, SysupgradeCommand};
 use std::process::Output;
 
-impl dyn KernelInterface {
-    pub fn perform_sysupgrade(&self, command: SysupgradeCommand) -> Result<Output, Error> {
-        //If empty url, return error
-        if command.url.is_empty() {
-            info!("Empty url given to sysupgrade");
-            return Err(Error::RuntimeError(
-                "Empty url given to sysupgrade".to_string(),
-            ));
-        }
-
-        // append path to end of flags
-        let mut args = if command.flags.is_some() {
-            command.flags.unwrap()
-        } else {
-            Vec::new()
-        };
-        args.push(command.url);
-        let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
-        info!(
-            "Running the command /sbin/sysupgrade with args: {:?}",
-            args_ref
-        );
-        self.run_command("/sbin/sysupgrade", &args_ref)
+pub fn perform_sysupgrade(command: SysupgradeCommand) -> Result<Output, Error> {
+    //If empty url, return error
+    if command.url.is_empty() {
+        info!("Empty url given to sysupgrade");
+        return Err(Error::RuntimeError(
+            "Empty url given to sysupgrade".to_string(),
+        ));
     }
 
-    /// This function checks if the function provided is update or install. In case of install, for each of the packages
-    /// present, the arguments given are applied and opkg install is run
-    pub fn perform_opkg(&self, command: OpkgCommand) -> Result<Output, Error> {
-        match command {
-            OpkgCommand::Install {
-                packages,
-                arguments,
-            } => {
-                let mut args = arguments;
-                args.insert(0, "install".to_string());
-                for package in packages {
-                    args.push(package);
-                }
-                info!("Running opkg install with args: {:?}", args);
-                let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
-                self.run_command("opkg", &args_ref)
+    // append path to end of flags
+    let mut args = if command.flags.is_some() {
+        command.flags.unwrap()
+    } else {
+        Vec::new()
+    };
+    args.push(command.url);
+    let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
+    info!(
+        "Running the command /sbin/sysupgrade with args: {:?}",
+        args_ref
+    );
+    run_command("/sbin/sysupgrade", &args_ref)
+}
+
+/// This function checks if the function provided is update or install. In case of install, for each of the packages
+/// present, the arguments given are applied and opkg install is run
+pub fn perform_opkg(command: OpkgCommand) -> Result<Output, Error> {
+    match command {
+        OpkgCommand::Install {
+            packages,
+            arguments,
+        } => {
+            let mut args = arguments;
+            args.insert(0, "install".to_string());
+            for package in packages {
+                args.push(package);
             }
-            OpkgCommand::Remove {
-                packages,
-                arguments,
-            } => {
-                let mut args = arguments;
-                args.insert(0, "remove".to_string());
-                for package in packages {
-                    args.push(package);
-                }
-                info!("Running opkg remove with args: {:?}", args);
-                let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
-                self.run_command("opkg", &args_ref)
+            info!("Running opkg install with args: {:?}", args);
+            let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
+            run_command("opkg", &args_ref)
+        }
+        OpkgCommand::Remove {
+            packages,
+            arguments,
+        } => {
+            let mut args = arguments;
+            args.insert(0, "remove".to_string());
+            for package in packages {
+                args.push(package);
             }
-            OpkgCommand::Update {
-                feed,
-                feed_name,
-                arguments,
-            } => {
-                handle_release_feed_update(feed, feed_name)?;
-                let mut args = arguments;
-                args.insert(0, "update".to_string());
-                info!("Running opkg update with args: {:?}", args);
-                let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
-                self.run_command("opkg", &args_ref)
-            }
+            info!("Running opkg remove with args: {:?}", args);
+            let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
+            run_command("opkg", &args_ref)
+        }
+        OpkgCommand::Update {
+            feed,
+            feed_name,
+            arguments,
+        } => {
+            handle_release_feed_update(feed, feed_name)?;
+            let mut args = arguments;
+            args.insert(0, "update".to_string());
+            info!("Running opkg update with args: {:?}", args);
+            let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
+            run_command("opkg", &args_ref)
         }
     }
 }

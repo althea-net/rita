@@ -17,7 +17,7 @@ extern crate serde_derive;
 extern crate log;
 extern crate arrayvec;
 
-use althea_kernel_interface::KI;
+use althea_kernel_interface::netns::check_integration_test_netns;
 use althea_types::{BillingDetails, ContactType, Identity, InstallationDetails, SystemChain};
 use clarity::Address;
 use logging::LoggingSettings;
@@ -111,7 +111,7 @@ pub trait WrappedSettingsAdaptor {
 // Doing so will disable local reads/writes and instead call the adaptor's relevant fns
 // Can only be called once if no other settings exist in the SETTINGS global
 pub fn set_adaptor<T: 'static + WrappedSettingsAdaptor + Send + Sync>(adaptor: T) {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     let mut settings_ref = SETTINGS.write().unwrap();
     match settings_ref.contains_key(&netns) {
         // make sure this only gets called once on start
@@ -156,7 +156,7 @@ impl RitaSettings {
 
 /// write the current SETTINGS from memory to file
 pub fn write_config() -> Result<(), SettingsError> {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.write_config(),
         Some(Settings::Client(settings)) => {
@@ -191,7 +191,7 @@ pub fn save_settings_on_shutdown() {
 
 /// get a JSON value of all settings
 pub fn get_config_json() -> Result<serde_json::Value, SettingsError> {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.get_config_json(),
         Some(Settings::Client(settings)) => settings.get_all(),
@@ -202,7 +202,7 @@ pub fn get_config_json() -> Result<serde_json::Value, SettingsError> {
 
 /// merge a json of a subset of settings into global settings
 pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), SettingsError> {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     let mut settings_ref = SETTINGS.write().unwrap();
     let settings_ref = settings_ref.get_mut(&netns);
     match settings_ref {
@@ -217,7 +217,7 @@ pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), Sett
 /// Does not currently save the identity paramater, as we don't
 /// need to modify that in a generic context.
 pub fn set_rita_common(input: RitaSettings) {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     let mut settings_ref = SETTINGS.write().unwrap();
     match settings_ref.get_mut(&netns) {
         Some(Settings::Adaptor(adapt)) => {
@@ -249,7 +249,7 @@ pub fn set_rita_common(input: RitaSettings) {
 
 /// get the current settings and extract generic RitaSettings from it
 pub fn get_rita_common() -> RitaSettings {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(adapt)) => {
             let settings = adapt.adaptor.get_client().unwrap();
@@ -284,19 +284,19 @@ pub fn get_git_hash() -> String {
 }
 
 pub fn set_flag_config(flag_config: PathBuf) {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     FLAG_CONFIG.write().unwrap().insert(netns, flag_config);
 }
 
 pub fn get_flag_config() -> PathBuf {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     FLAG_CONFIG.read().unwrap().get(&netns).unwrap().clone()
 }
 
 /// set client settings into local or adaptor memory
 /// panics if called on exit settings
 pub fn set_rita_client(client_setting: RitaClientSettings) {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     let mut settings_ref = SETTINGS.write().unwrap();
     match settings_ref.get(&netns) {
         // if there's an adaptor already saved, then use it to set there
@@ -317,7 +317,7 @@ pub fn set_rita_client(client_setting: RitaClientSettings) {
 /// get client settings from local or adaptor memory
 /// panics if called on exit settings
 pub fn get_rita_client() -> RitaClientSettings {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.get_client().unwrap(),
         Some(Settings::Client(settings)) => settings.clone(),
@@ -357,7 +357,7 @@ pub fn get_system_chain() -> SystemChain {
 
 /// Set exit settings into memory
 pub fn set_rita_exit(exit_setting: RitaExitSettingsStruct) {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     SETTINGS
         .write()
         .unwrap()
@@ -366,7 +366,7 @@ pub fn set_rita_exit(exit_setting: RitaExitSettingsStruct) {
 
 /// Retrieve exit settings from memory
 pub fn get_rita_exit() -> RitaExitSettingsStruct {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     let temp = SETTINGS.read().unwrap();
     let temp = temp.get(&netns);
     if let Some(Settings::Exit(val)) = temp {
@@ -378,7 +378,7 @@ pub fn get_rita_exit() -> RitaExitSettingsStruct {
 
 /// This code checks to see if the current device/setting is client or not
 pub fn check_if_client() -> bool {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(_)) => false,
         Some(Settings::Client(_)) => true,
@@ -389,7 +389,7 @@ pub fn check_if_client() -> bool {
 
 /// This code checks to see if the current device/setting is an exit or not
 pub fn check_if_exit() -> bool {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(_)) => false,
         Some(Settings::Client(_)) => false,

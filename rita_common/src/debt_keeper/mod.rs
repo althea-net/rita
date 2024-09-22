@@ -15,7 +15,7 @@ use crate::tunnel_manager::tm_tunnel_state_change;
 use crate::tunnel_manager::TunnelAction;
 use crate::tunnel_manager::TunnelChange;
 use crate::RitaCommonError;
-use crate::KI;
+use althea_kernel_interface::netns::check_integration_test_netns;
 use althea_types::Denom;
 use althea_types::Identity;
 use althea_types::UnpublishedPaymentTx;
@@ -60,7 +60,7 @@ pub fn wei_denom() -> Denom {
 
 /// Gets DebtKeeper copy from the static ref, or default if no value has been set
 pub fn get_debt_keeper() -> DebtKeeper {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     DEBT_DATA
         .read()
         .unwrap()
@@ -74,7 +74,7 @@ pub fn get_debt_keeper() -> DebtKeeper {
 /// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
 /// but still hold the lock in the local thread to prevent parallel modification
 fn get_debt_keeper_write_ref(input: &mut HashMap<u32, DebtKeeper>) -> &mut DebtKeeper {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     input.entry(netns).or_default();
     input.get_mut(&netns).unwrap()
 }

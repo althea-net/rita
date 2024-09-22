@@ -1,16 +1,17 @@
 use crate::RitaCommonError;
 use crate::DROPBEAR_CONFIG;
-use crate::KI;
 use actix_web_async::http::StatusCode;
 use actix_web_async::web::Path;
 use actix_web_async::HttpRequest;
 use actix_web_async::HttpResponse;
 use althea_kernel_interface::file_io::get_lines;
 use althea_kernel_interface::file_io::write_out;
+use althea_kernel_interface::is_openwrt::is_openwrt;
+use althea_kernel_interface::run_command;
 static FIREWALL_CONFIG: &str = "/etc/config/firewall";
 
 pub async fn get_remote_access_status(_req: HttpRequest) -> HttpResponse {
-    if !KI.is_openwrt() {
+    if !is_openwrt() {
         return HttpResponse::new(StatusCode::BAD_REQUEST);
     }
     HttpResponse::Ok().json(match check_dropbear_config() {
@@ -25,7 +26,7 @@ pub async fn get_remote_access_status(_req: HttpRequest) -> HttpResponse {
 // the http responses at some point
 #[allow(dead_code)]
 pub fn get_remote_access_internal() -> Result<bool, RitaCommonError> {
-    if !KI.is_openwrt() {
+    if !is_openwrt() {
         return Err(RitaCommonError::ConversionError("Not Openwrt!".to_string()));
     }
     check_dropbear_config()
@@ -81,7 +82,7 @@ pub fn set_remote_access_internal(remote_access: bool) -> Result<(), RitaCommonE
     lines.push("        option Interface    'lan'".to_string());
 
     write_out(DROPBEAR_CONFIG, lines)?;
-    KI.run_command("/etc/init.d/dropbear", &["restart"])?;
+    run_command("/etc/init.d/dropbear", &["restart"])?;
 
     // this adds the updated rules to the firewall config, notice the versioning on the
     // firewall rules. The old ones will be left in place.
@@ -114,7 +115,7 @@ pub fn set_remote_access_internal(remote_access: bool) -> Result<(), RitaCommonE
     }
     if needs_mesh_ssh || needs_wan_ssh {
         write_out(FIREWALL_CONFIG, firewall_lines)?;
-        KI.run_command("reboot", &[])?;
+        run_command("reboot", &[])?;
         Ok(())
     } else {
         Ok(())

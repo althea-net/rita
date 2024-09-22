@@ -1,4 +1,4 @@
-use althea_kernel_interface::KI;
+use althea_kernel_interface::run_command;
 use log::info;
 use std::{fs::remove_file, path::Path, thread, time::Duration};
 
@@ -15,7 +15,7 @@ pub fn spawn_babel(ns: String, babelconf_path: String, babeld_path: String) {
         let babeld_pid = pid_path;
         let babeld_log = format!("/var/log/babeld-{ns}.log");
         // 1 here is for log
-        let res = KI.run_command(
+        let res = run_command(
             "ip",
             &[
                 "netns",

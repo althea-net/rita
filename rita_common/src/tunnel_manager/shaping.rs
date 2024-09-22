@@ -1,7 +1,8 @@
+use althea_kernel_interface::traffic_control::set_codel_shaping;
+
 use super::get_tunnel_manager_write_ref;
 use super::TunnelManager;
 use super::TUNNEL_MANAGER;
-use crate::KI;
 
 /// contains the state for the shaper
 #[derive(Debug, Default, Clone)]
@@ -123,7 +124,7 @@ impl TunnelManager {
 
 /// tiny little helper function for GotBloat() limit is in mbps
 fn set_shaping_or_error(iface: &str, limit: Option<usize>) {
-    if let Err(e) = KI.set_codel_shaping(iface, limit) {
+    if let Err(e) = set_codel_shaping(iface, limit) {
         error!("Failed to shape tunnel for bloat! {}", e);
     }
 }

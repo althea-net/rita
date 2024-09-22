@@ -1,5 +1,7 @@
 use std::{collections::HashMap, str::from_utf8, thread, time::Duration};
 
+use althea_kernel_interface::run_command;
+
 use crate::{
     registration_server::start_registration_server,
     setup_utils::{
@@ -12,7 +14,6 @@ use crate::{
         test_reach_all, test_routes,
     },
 };
-use althea_kernel_interface::KI;
 
 /*
 Nodes are connected as such, 4 and 5 are exit:
@@ -123,25 +124,22 @@ pub async fn run_multi_exit_test() {
 }
 
 fn kill_exit(exit: Namespace) {
-    let out = KI
-        .run_command("ip", &["netns", "pids", &exit.get_name()])
-        .unwrap();
+    let out = run_command("ip", &["netns", "pids", &exit.get_name()]).unwrap();
     let out = from_utf8(&out.stdout)
         .unwrap()
         .split('\n')
         .collect::<Vec<&str>>();
     for s in out {
-        KI.run_command("kill", &[s.trim()]).unwrap();
+        run_command("kill", &[s.trim()]).unwrap();
     }
 }
 
 fn get_current_exit(ns: Namespace, namespaces: NamespaceInfo) -> Namespace {
-    let out = KI
-        .run_command(
-            "ip",
-            &["netns", "exec", &ns.get_name(), "wg", "show", "wg_exit"],
-        )
-        .unwrap();
+    let out = run_command(
+        "ip",
+        &["netns", "exec", &ns.get_name(), "wg", "show", "wg_exit"],
+    )
+    .unwrap();
     let out = from_utf8(&out.stdout).unwrap();
     let out = out.split('\n').collect::<Vec<&str>>();
 

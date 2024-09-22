@@ -15,7 +15,8 @@ use crate::peer_listener::structs::PeerListener;
 use crate::tm_identity_callback;
 use crate::IdentityCallback;
 use crate::RitaCommonError;
-use crate::KI;
+use althea_kernel_interface::interface_tools::get_ifindex;
+use althea_kernel_interface::link_local_tools::get_link_local_device_ip;
 use althea_types::LocalIdentity;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
@@ -108,11 +109,11 @@ impl ListenInterface {
         let disc_ip = network.discovery_ip;
         trace!("Binding to {:?} for ListenInterface", ifname);
         // Lookup interface link local ip
-        let link_ip = KI.get_link_local_device_ip(ifname)?;
+        let link_ip = get_link_local_device_ip(ifname)?;
         trace!("Link ip is {:?}", link_ip);
 
         // Lookup interface index
-        let iface_index: u32 = KI.get_ifindex(ifname).unwrap_or(0) as u32;
+        let iface_index: u32 = get_ifindex(ifname).unwrap_or(0) as u32;
         // Bond to multicast discovery address on each listen port
         let multicast_socketaddr = SocketAddrV6::new(disc_ip, port, 0, iface_index);
         let multicast_socket = UdpSocket::bind(multicast_socketaddr)?;

@@ -3,7 +3,9 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-use althea_kernel_interface::KI;
+use althea_kernel_interface::create_wg_key::{create_wg_key, create_wg_keypair};
+use althea_kernel_interface::interface_tools::{del_interface, get_interfaces};
+use althea_kernel_interface::ip_route::restore_default_route;
 use clarity::PrivateKey;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -72,7 +74,7 @@ pub fn cleanup() -> Result<(), NewCluError> {
 
     let mut interfaces: Vec<String> = Vec::new();
 
-    for i in KI.get_interfaces()? {
+    for i in get_interfaces()? {
         if RE.is_match(&i) {
             interfaces.push(i);
         }
@@ -90,7 +92,7 @@ pub fn cleanup() -> Result<(), NewCluError> {
 /// are not deleted correctly with parallel deletion on some systems
 pub fn del_multiple_interfaces_sync(interfaces: Vec<String>) -> Result<(), NewCluError> {
     for interface in interfaces {
-        KI.del_interface(&interface)?;
+        del_interface(&interface)?;
     }
     Ok(())
 }
@@ -119,7 +121,7 @@ pub fn del_multiple_interfaces(interfaces: Vec<String>) {
         let mut threads = Vec::new();
         // for lifetime reasons
         for name in batch {
-            threads.push(thread::spawn(move || KI.del_interface(&name.clone())));
+            threads.push(thread::spawn(move || del_interface(&name.clone())));
         }
         for thread in threads {
             // we want to wait for these to complete, we don't care that much if they fail
@@ -133,7 +135,7 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, NewClu
     let mut settings = settings;
     let mut network_settings = settings.network;
     // this value will be none for most routers but a route for gateways.
-    KI.restore_default_route(&mut network_settings.last_default_route)?;
+    restore_default_route(&mut network_settings.last_default_route)?;
 
     // handle things we need to generate at runtime
     let mesh_ip_option = network_settings.mesh_ip;
@@ -202,13 +204,13 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, NewClu
     // generates a keypair if we don't already have a valid one
     if wg_privkey_option.is_none() || wg_pubkey_option.is_none() {
         info!("Existing wireguard keypair is invalid, generating from scratch");
-        let keypair = KI.create_wg_keypair().expect("failed to generate wg keys");
+        let keypair = create_wg_keypair().expect("failed to generate wg keys");
         network_settings.wg_public_key = Some(keypair.public);
         network_settings.wg_private_key = Some(keypair.private);
     }
 
     // Creates file on disk containing key
-    KI.create_wg_key(
+    create_wg_key(
         Path::new(&network_settings.wg_private_key_path),
         &network_settings
             .wg_private_key
@@ -286,13 +288,13 @@ fn linux_exit_init(
 
     if wg_privkey_option.is_none() || wg_pubkey_option.is_none() {
         info!("Existing wireguard keypair is invalid, generating from scratch");
-        let keypair = KI.create_wg_keypair().expect("failed to generate wg keys");
+        let keypair = create_wg_keypair().expect("failed to generate wg keys");
         network_settings.wg_public_key = Some(keypair.public);
         network_settings.wg_private_key = Some(keypair.private);
     }
 
     // Creates file on disk containing key
-    KI.create_wg_key(
+    create_wg_key(
         Path::new(&network_settings.wg_private_key_path),
         &network_settings
             .wg_private_key

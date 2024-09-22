@@ -2,8 +2,10 @@ use crate::handle_shaping;
 use crate::simulated_txfee_manager::tick_simulated_tx;
 use crate::token_bridge::tick_token_bridge;
 use crate::tunnel_manager::tm_common_slow_loop_helper;
-use crate::KI;
 use actix_async::System as AsyncSystem;
+use althea_kernel_interface::babel::restart_babel;
+use althea_kernel_interface::is_openwrt::is_openwrt;
+use althea_kernel_interface::run_command;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_interfaces;
 use babel_monitor::set_local_fee;
@@ -89,7 +91,7 @@ pub fn start_rita_slow_loop() {
                     error!("We have not successfully talked to babel in {} loop iterations, restarting babel", num_babel_failures);
                     // we restart babel here and then rely on the tm_monitor_check function to re-attach the tunnels in the next loop
                     // iteration
-                    KI.restart_babel();
+                    restart_babel();
                 }
 
                 thread::sleep(SLOW_LOOP_SPEED);
@@ -104,8 +106,8 @@ pub fn start_rita_slow_loop() {
             if Instant::now() - last_restart < Duration::from_secs(120) {
                 error!("Restarting too quickly, rebooting instead!");
                 // only reboot if we are on openwrt, otherwise we are probably on a datacenter server rebooting that is a bad idea
-                if KI.is_openwrt() {
-                    let _res = KI.run_command("reboot", &[]);
+                if is_openwrt() {
+                    let _res = run_command("reboot", &[]);
                 }
             }
             last_restart = Instant::now();

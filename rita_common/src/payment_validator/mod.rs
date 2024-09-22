@@ -14,7 +14,7 @@ use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
 use crate::RitaCommonError;
-use crate::KI;
+use althea_kernel_interface::netns::check_integration_test_netns;
 use althea_proto::althea::microtx::v1::MsgMicrotx;
 use althea_types::Denom;
 use althea_types::Identity;
@@ -82,7 +82,7 @@ lazy_static! {
 /// Adds an incoming transaction to the global incoming transaction queue abstracts netns handling
 /// to ensure that multiple instances can run in the same process without interfering with each other
 pub fn add_to_incoming_transaction_queue(tx: ToValidate) {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     INCOMING_TRANSACTIONS.push((netns, tx));
 }
 
@@ -90,7 +90,7 @@ pub fn add_to_incoming_transaction_queue(tx: ToValidate) {
 /// the queue while doing so. This abstracts netns handling to ensure that multiple instances
 /// can run in the same process without interfering with each other
 pub fn get_incoming_transaction_queue() -> Vec<ToValidate> {
-    let our_netns = KI.check_integration_test_netns();
+    let our_netns = check_integration_test_netns();
     // this is a hack, in order to avoid any locks at all we iterate
     // over the entire queue and only take the items that are for our netns
     // it helps that this overhead will only ever occur in the integration tests

@@ -10,8 +10,18 @@ use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::operator_fee_manager::tick_operator_payments;
 use actix_async::System as AsyncSystem;
+use althea_kernel_interface::dns::get_resolv_servers;
+use althea_kernel_interface::ip_addr::is_iface_up;
+use althea_kernel_interface::ip_route::manual_peers_route;
+use althea_kernel_interface::is_openwrt::is_openwrt;
+use althea_kernel_interface::manipulate_uci::get_uci_var;
+use althea_kernel_interface::manipulate_uci::openwrt_reset_dnsmasq;
+use althea_kernel_interface::manipulate_uci::set_uci_list;
+use althea_kernel_interface::manipulate_uci::set_uci_var;
+use althea_kernel_interface::manipulate_uci::uci_commit;
+use althea_kernel_interface::netns::check_integration_test_netns;
+use althea_kernel_interface::run_command;
 use althea_kernel_interface::KernelInterfaceError;
-use althea_kernel_interface::KI;
 use althea_types::ExitState;
 use antenna_forwarding_client::start_antenna_forwarding_proxy;
 use rita_common::dashboard::interfaces::get_interfaces;
@@ -48,7 +58,7 @@ lazy_static! {
 }
 
 pub fn is_gateway_client() -> bool {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     IS_GATEWAY_CLIENT
         .read()
         .unwrap()
@@ -59,7 +69,7 @@ pub fn is_gateway_client() -> bool {
 }
 
 pub fn set_gateway_client(input: bool) {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     let gw_lock = &mut *IS_GATEWAY_CLIENT.write().unwrap();
 
     // Clippy notation
@@ -148,7 +158,7 @@ pub fn start_rita_client_loop() {
             error!("Rita client loop thread paniced! Respawning {:?}", e);
             if Instant::now() - last_restart < Duration::from_secs(60) {
                 error!("Restarting too quickly, rebooting instead!");
-                let _res = KI.run_command("reboot", &[]);
+                let _res = run_command("reboot", &[]);
             }
             last_restart = Instant::now();
         }
@@ -229,7 +239,7 @@ fn manage_gateway() {
     // the is_up detection is mostly useless because these ports reside on switches which mark
     // all ports as up all the time.
     if let Some(external_nic) = settings::get_rita_common().network.external_nic {
-        if KI.is_iface_up(&external_nic).unwrap_or(false) {
+        if is_iface_up(&external_nic).unwrap_or(false) {
             if let Ok(interfaces) = get_interfaces() {
                 info!("We are a Gateway");
                 // this flag is used to handle billing around the corner case
@@ -243,16 +253,13 @@ fn manage_gateway() {
                 if let Some(mode) = interfaces.get(&external_nic) {
                     if matches!(mode, InterfaceMode::Wan | InterfaceMode::StaticWan { .. }) {
                         let mut common = settings::get_rita_common();
-                        match KI.get_resolv_servers() {
+                        match get_resolv_servers() {
                             Ok(s) => {
                                 for ip in s.iter() {
                                     trace!("Resolv route {:?}", ip);
 
-                                    KI.manual_peers_route(
-                                        ip,
-                                        &mut common.network.last_default_route,
-                                    )
-                                    .unwrap();
+                                    manual_peers_route(ip, &mut common.network.last_default_route)
+                                        .unwrap();
                                 }
                                 settings::set_rita_common(common);
                             }
@@ -349,7 +356,7 @@ pub fn update_dns_conf() {
     };
 
     // if we are on openwrt we can automatically configure the dhcp server, otherwise the user is on their own to santiy check their config
-    if KI.is_openwrt() {
+    if is_openwrt() {
         // the goal of this code is to make sure that the router is the only dns server offered during the dhcp negotiation process
         // not every device will take this dns server and use it, but many do, and some use it exclusively so it has to be correct
 
@@ -360,8 +367,8 @@ pub fn update_dns_conf() {
         // if it does not start with the exit internal nameserver add it. An empty value is acceptable
         // since dnsmasq simply uses resolv.conf servers which we update above in that case.
         match (
-            parse_list_to_ip(KI.get_uci_var(DHCP_DNS_LIST_KEY)),
-            maybe_parse_ip(KI.get_uci_var(LAN_IP_KEY)),
+            parse_list_to_ip(get_uci_var(DHCP_DNS_LIST_KEY)),
+            maybe_parse_ip(get_uci_var(LAN_IP_KEY)),
         ) {
             (Ok(dns_server_list), Ok(router_internal_ip)) => {
                 // an empty list uses the system resolver, this is acceptable since we just set the system resolver to
@@ -389,18 +396,18 @@ fn overwrite_dns_server_and_restart_dhcp(key: &str, ips: Vec<IpAddr>) {
     let slice_of_strs: Vec<&str> = ips.iter().map(|s| s.as_str()).collect();
     let reference_to_slice: &[&str] = &slice_of_strs;
 
-    let res = KI.set_uci_list(key, reference_to_slice);
+    let res = set_uci_list(key, reference_to_slice);
 
     if let Err(e) = res {
         error!("Failed to set dhcp server list via uci {:?}", e);
         return;
     }
-    let res = KI.uci_commit(key);
+    let res = uci_commit(key);
     if let Err(e) = res {
         error!("Failed to set dhcp server list via uci {:?}", e);
         return;
     }
-    let res = KI.openwrt_reset_dnsmasq();
+    let res = openwrt_reset_dnsmasq();
     if let Err(e) = res {
         error!("Failed to restart dhcp config with {:?}", e);
     }
@@ -411,20 +418,20 @@ fn ensure_dhcp_resolvfile() {
     const DHCP_RESOLV_FILE_KEY: &str = "dhcp.@dnsmasq[0].resolvfile";
     const DHCP_RESOLV_FILE_VALUE: &str = "/etc/resolv.conf";
 
-    match KI.get_uci_var(DHCP_RESOLV_FILE_KEY) {
+    match get_uci_var(DHCP_RESOLV_FILE_KEY) {
         Ok(resolv_file) => {
             if resolv_file != DHCP_RESOLV_FILE_VALUE {
-                let res = KI.set_uci_var(DHCP_RESOLV_FILE_KEY, DHCP_RESOLV_FILE_VALUE);
+                let res = set_uci_var(DHCP_RESOLV_FILE_KEY, DHCP_RESOLV_FILE_VALUE);
                 if let Err(e) = res {
                     error!("Failed to set dhcp resolvfile {:?}", e);
                     return;
                 }
-                let res = KI.uci_commit(DHCP_RESOLV_FILE_KEY);
+                let res = uci_commit(DHCP_RESOLV_FILE_KEY);
                 if let Err(e) = res {
                     error!("Failed to set dhcp resolvfile {:?}", e);
                     return;
                 }
-                let res = KI.openwrt_reset_dnsmasq();
+                let res = openwrt_reset_dnsmasq();
                 if let Err(e) = res {
                     error!("Failed to restart dhcp config with {:?}", e);
                 }
@@ -456,7 +463,7 @@ pub fn update_system_time() {
         );
         let seconds = last_saved * 3600;
         let formatted_seconds = format!("@{}", seconds);
-        match KI.run_command("date", &["-s", &formatted_seconds]) {
+        match run_command("date", &["-s", &formatted_seconds]) {
             Ok(_) => info!("System time updated!"),
             Err(e) => error!("{}", e),
         }

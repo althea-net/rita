@@ -1,7 +1,7 @@
 //! This module is responsible for checking in with the operator server and getting updated local settings
 pub mod update_loop;
+use althea_kernel_interface::setup_wg_if::get_wg_exit_clients_online;
 use althea_types::OperatorExitCheckinMessage;
-use rita_common::KI;
 use std::time::{Duration, Instant};
 
 use crate::rita_loop::EXIT_INTERFACE;
@@ -47,7 +47,7 @@ pub async fn operator_update(rita_started: Instant) {
             id,
             exit_uptime: rita_started.elapsed(),
             // Since this checkin works only from b20, we only need to look on wg_exit_v2
-            users_online: KI.get_wg_exit_clients_online(EXIT_INTERFACE).ok(),
+            users_online: get_wg_exit_clients_online(EXIT_INTERFACE).ok(),
         })
         .await;
     match response {

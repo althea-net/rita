@@ -4,6 +4,12 @@ use crate::heartbeat::get_exit_registration_state;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use actix_web_async::Result;
+use althea_kernel_interface::exit_client_tunnel::{
+    block_client_nat, create_client_nat_rules, restore_client_nat, set_client_exit_tunnel_config,
+    set_ipv6_route_to_tunnel, set_route_to_tunnel,
+};
+use althea_kernel_interface::ip_route::update_settings_route;
+use althea_kernel_interface::setup_wg_if::create_blank_wg_interface;
 use althea_kernel_interface::{
     exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
 };
@@ -16,7 +22,6 @@ use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;
-use rita_common::KI;
 use settings::set_rita_client;
 use std::net::SocketAddr;
 
@@ -30,10 +35,10 @@ pub fn linux_setup_exit_tunnel(
     let local_mesh_ip = network.mesh_ip;
 
     // TODO this should be refactored to return a value
-    KI.update_settings_route(&mut network.last_default_route)?;
+    update_settings_route(&mut network.last_default_route)?;
     info!("Updated settings route");
 
-    if let Err(KernelInterfaceError::RuntimeError(v)) = KI.create_blank_wg_interface("wg_exit") {
+    if let Err(KernelInterfaceError::RuntimeError(v)) = create_blank_wg_interface("wg_exit") {
         return Err(RitaClientError::MiscStringError(v));
     }
 
@@ -53,23 +58,23 @@ pub fn linux_setup_exit_tunnel(
     rita_client.network = network;
     settings::set_rita_client(rita_client);
 
-    KI.set_client_exit_tunnel_config(args, local_mesh_ip)?;
-    KI.set_route_to_tunnel(&general_details.server_internal_ip)?;
-    KI.set_ipv6_route_to_tunnel()?;
+    set_client_exit_tunnel_config(args, local_mesh_ip)?;
+    set_route_to_tunnel(&general_details.server_internal_ip)?;
+    set_ipv6_route_to_tunnel()?;
 
-    KI.create_client_nat_rules()?;
+    create_client_nat_rules()?;
 
     Ok(())
 }
 
 pub fn restore_nat() {
-    if let Err(e) = KI.restore_client_nat() {
+    if let Err(e) = restore_client_nat() {
         error!("Failed to restore client nat! {:?}", e);
     }
 }
 
 pub fn remove_nat() {
-    if let Err(e) = KI.block_client_nat() {
+    if let Err(e) = block_client_nat() {
         error!("Failed to block client nat! {:?}", e);
     }
 }

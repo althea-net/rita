@@ -13,7 +13,7 @@ use crate::tm_identity_callback;
 use crate::tunnel_manager::get_tunnel_manager;
 use crate::IdentityCallback;
 use crate::RitaCommonError;
-use crate::KI;
+use althea_kernel_interface::ip_route::manual_peers_route;
 use althea_types::LocalIdentity;
 use futures::future::join_all;
 use std::net::ToSocketAddrs;
@@ -73,7 +73,7 @@ pub async fn tm_neighbor_inquiry_manual_peer(peer: Peer) -> Result<(), RitaCommo
     trace!("TunnelManager neigh inquiry for {:?}", peer);
     let our_port = get_tunnel_manager().get_next_available_port()?;
     let mut settings = settings::get_rita_common();
-    let changed = KI.manual_peers_route(
+    let changed = manual_peers_route(
         &peer.contact_socket.ip(),
         &mut settings.network.last_default_route,
     )?;

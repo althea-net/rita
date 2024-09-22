@@ -11,6 +11,9 @@
 #![allow(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
+use althea_kernel_interface::babel::restart_babel;
+use althea_kernel_interface::check_cron::check_cron;
+use althea_kernel_interface::is_openwrt::is_openwrt;
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
 #[cfg(feature = "jemalloc")]
@@ -18,12 +21,8 @@ use jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
 extern crate log;
 
-use althea_kernel_interface::KernelInterface;
-use althea_kernel_interface::LinuxCommandRunner;
 use docopt::Docopt;
 use rita_client::dashboard::start_client_dashboard;
 use rita_client::get_client_usage;
@@ -44,10 +43,6 @@ use rita_common::utils::env_vars_contains;
 use settings::client::RitaClientSettings;
 use settings::save_settings_on_shutdown;
 use settings::FileWrite;
-
-lazy_static! {
-    pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
-}
 
 fn main() {
     //Setup a SIGTERM hadler
@@ -130,7 +125,7 @@ fn main() {
     // the old tunnels is now in an incorrect state. We must either restart babel or empty it's interfaces list so that the newly
     // created wireguard tunnels can be re-added by this instance of Rita. Due to errors in babel (see git history there)
     // restarting is the way to go as removing dead interfaces often does not work
-    KI.restart_babel();
+    restart_babel();
     apply_babeld_settings_defaults(
         settings.network.babel_port,
         settings.network.babeld_settings,
@@ -167,7 +162,7 @@ fn main() {
     }
 
     // If we are an an OpenWRT device try and rescue it from update issues
-    if KI.is_openwrt() && KI.check_cron().is_err() {
+    if is_openwrt() && check_cron().is_err() {
         error!("Failed to setup cron!");
     }
 

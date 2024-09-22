@@ -1,9 +1,13 @@
 use crate::dashboard::extend_hardware_info;
 use actix_web_async::{HttpRequest, HttpResponse};
-use althea_kernel_interface::hardware_info::get_hardware_info;
+use althea_kernel_interface::{
+    hardware_info::get_hardware_info,
+    interface_tools::{get_ip_from_iface, get_ipv6_from_iface},
+    ip_neigh::grab_ip_neigh,
+    run_command,
+};
 use althea_types::HardwareInfo;
 use mac_address::MacAddress;
-use rita_common::KI;
 use serde::Serializer;
 use std::{
     collections::{HashMap, HashSet},
@@ -27,8 +31,8 @@ fn consolidate_wlan_arp_table(
 
 /// Used to prune all devices not part of the lan by using the netmask to delete invalid ips
 fn prune_non_lan_entries(mut arp_table: Vec<(IpAddr, MacAddress)>) -> Vec<(IpAddr, MacAddress)> {
-    let ip4 = KI.get_ip_from_iface("br-lan");
-    let ip6 = KI.get_ipv6_from_iface("br-lan");
+    let ip4 = get_ip_from_iface("br-lan");
+    let ip6 = get_ipv6_from_iface("br-lan");
 
     // The long set of calls essentially grabs each ipaddress out of the arp table and checks if there is a singular
     // address match within each of the interfaces for ipv4 or ipv6. Otherwise, it prunes the ipaddress out of the arp
@@ -163,7 +167,7 @@ pub fn generate_lan_device(
 /// if it isn't it simply returns its mac addresses to use
 fn resolve_name(ip_addresses: HashSet<IpAddr>, mac_addr: MacAddress) -> String {
     info!("Sending cat command to kernel");
-    let res = KI.run_command("cat", &["/tmp/dhcp.leases"]);
+    let res = run_command("cat", &["/tmp/dhcp.leases"]);
     match res {
         Ok(output) => {
             if !output.stdout.is_empty() {
@@ -206,7 +210,7 @@ fn resolve_name(ip_addresses: HashSet<IpAddr>, mac_addr: MacAddress) -> String {
 /// This is an endpoint to grab all the lan devices mapping to ip address and
 /// returns the json request populated with the related hardware information
 pub async fn get_devices_lan_endpoint(_req: HttpRequest) -> HttpResponse {
-    let command_response = KI.grab_ip_neigh();
+    let command_response = grab_ip_neigh();
     match command_response {
         Ok(output) => {
             let arp_table = output;

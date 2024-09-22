@@ -1,5 +1,5 @@
 use super::{Tunnel, TunnelManager};
-use crate::KI;
+use althea_kernel_interface::setup_wg_if::get_last_handshake_time;
 use althea_types::Identity;
 use babel_monitor::structs::Interface;
 use std::time::Duration;
@@ -193,7 +193,7 @@ pub fn insert_into_tunnel_list(input: &Tunnel, tunnels_list: &mut HashMap<Identi
 /// it returns false if we fail to get the handshake time or if all last tunnel handshakes are
 /// older than the allowed time limit
 fn check_handshake_time(handshake_timeout: Duration, ifname: &str) -> bool {
-    let res = KI.get_last_handshake_time(ifname);
+    let res = get_last_handshake_time(ifname);
     match res {
         Ok(handshakes) => {
             for (_key, time) in handshakes {

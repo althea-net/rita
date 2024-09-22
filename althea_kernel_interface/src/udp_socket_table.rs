@@ -1,4 +1,3 @@
-use crate::KernelInterface;
 use crate::KernelInterfaceError;
 use crate::KernelInterfaceError as Error;
 use std::collections::HashSet;
@@ -29,31 +28,29 @@ fn parse_local_port(s: &str) -> Result<u16, Error> {
     }
 }
 
-impl dyn KernelInterface {
-    fn read_udp_socket_table(&self) -> Result<String, Error> {
-        let mut f = File::open("/proc/net/udp")?;
-        let mut contents = String::new();
+fn read_udp_socket_table() -> Result<String, Error> {
+    let mut f = File::open("/proc/net/udp")?;
+    let mut contents = String::new();
 
-        f.read_to_string(&mut contents)?;
+    f.read_to_string(&mut contents)?;
 
-        Ok(contents)
-    }
+    Ok(contents)
+}
 
-    /// Returns list of ports in use as seen in the UDP socket table (/proc/net/udp)
-    pub fn used_ports(&self) -> Result<HashSet<u16>, Error> {
-        let udp_sockets_table = self.read_udp_socket_table()?;
-        let mut lines = udp_sockets_table.split('\n');
+/// Returns list of ports in use as seen in the UDP socket table (/proc/net/udp)
+pub fn used_ports() -> Result<HashSet<u16>, Error> {
+    let udp_sockets_table = read_udp_socket_table()?;
+    let mut lines = udp_sockets_table.split('\n');
 
-        lines.next(); // advance iterator to skip header
+    lines.next(); // advance iterator to skip header
 
-        let ports: HashSet<u16> = lines
-            .take_while(|line| !line.is_empty()) // until end of the table is reached,
-            .map(parse_local_port) // parse each udp port,
-            .filter_map(Result::ok) // only taking those which parsed successfully
-            .collect();
+    let ports: HashSet<u16> = lines
+        .take_while(|line| !line.is_empty()) // until end of the table is reached,
+        .map(parse_local_port) // parse each udp port,
+        .filter_map(Result::ok) // only taking those which parsed successfully
+        .collect();
 
-        Ok(ports)
-    }
+    Ok(ports)
 }
 
 #[test]

@@ -17,6 +17,8 @@ use crate::network_endpoints::*;
 use crate::traffic_watcher::watch_exit_traffic;
 use actix_async::System as AsyncSystem;
 use actix_web_async::{web, App, HttpServer};
+use althea_kernel_interface::exit_server_tunnel::{one_time_exit_setup, setup_nat};
+use althea_kernel_interface::setup_wg_if::create_blank_wg_interface;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::ExitClient;
 use althea_types::{Identity, WgKey};
@@ -24,7 +26,6 @@ use babel_monitor::{open_babel_stream, parse_routes};
 use rita_client_registration::client_db::get_all_regsitered_clients;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
-use rita_common::KI;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -278,11 +279,11 @@ fn check_regions(start: Instant, clients_list: Vec<Identity>) -> Option<Vec<Iden
 
 fn setup_exit_wg_tunnel() {
     // Setup legacy wg_exit
-    if let Err(e) = KI.create_blank_wg_interface(LEGACY_INTERFACE) {
+    if let Err(e) = create_blank_wg_interface(LEGACY_INTERFACE) {
         warn!("exit setup returned {}", e)
     }
     // Setup new wg_exit
-    if let Err(e) = KI.create_blank_wg_interface(EXIT_INTERFACE) {
+    if let Err(e) = create_blank_wg_interface(EXIT_INTERFACE) {
         warn!("new exit setup returned {}", e)
     }
 
@@ -301,11 +302,11 @@ fn setup_exit_wg_tunnel() {
         .map(|ipv6_subnet| (ipv6_subnet.ip(), ipv6_subnet.prefix()));
 
     // Setup legacy wg_exit
-    KI.one_time_exit_setup(None, None, mesh_ip, LEGACY_INTERFACE, enforcement_enabled)
+    one_time_exit_setup(None, None, mesh_ip, LEGACY_INTERFACE, enforcement_enabled)
         .expect("Failed to setup wg_exit!");
 
     // Setup wg_exit_v2. Local address added is same as that used by wg_exit
-    KI.one_time_exit_setup(
+    one_time_exit_setup(
         Some((local_ip, netmask)),
         external_v6,
         mesh_ip,
@@ -314,13 +315,13 @@ fn setup_exit_wg_tunnel() {
     )
     .expect("Failed to setup wg_exit_v2!");
 
-    KI.setup_nat(
+    setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
         LEGACY_INTERFACE,
         None,
     )
     .unwrap();
-    KI.setup_nat(
+    setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
         EXIT_INTERFACE,
         external_v6,
