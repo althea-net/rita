@@ -24,7 +24,7 @@ rita_exit = { path = "../rita_exit", features = ["dev_env"] }
 rita_client_registration = { path = "../rita_client_registration" }
 rita_db_migration = { path = "../rita_db_migration" }
 ctrlc = { version = "3.4.5", features = ["termination"] }
-diesel = { version = "1.4", features = ["postgres", "r2d2"] }
+diesel = { version = "2.2", features = ["postgres", "r2d2"] }
 diesel_migrations = { version = "1.4", features = ["postgres"] }
 awc = {workspace = true}
 actix-rt = "2.10"
