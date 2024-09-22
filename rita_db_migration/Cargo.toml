@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 r2d2 = "0.8"
-diesel = { version = "1.4", features = ["postgres", "r2d2"] }
+diesel = { version = "2.2", features = ["postgres", "r2d2"] }
 log = { version = "0.4", features = ["release_max_level_info"] }
 dotenv = "0.15"
 althea_types = { path = "../althea_types" }
