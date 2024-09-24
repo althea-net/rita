@@ -4,10 +4,12 @@ use babel_monitor::structs::BabeldConfig;
 use clarity::Address;
 use num256::Uint256;
 
+pub mod encryption;
+
 use crate::{
     BillingDetails, ContactType, ExitConnection, HardwareInfo, Identity, InstallationDetails,
     NeighborStatus, ShaperSettings, SystemChain, UpdateType, UpdateTypeLegacy,
-    UsageTrackerTransfer, WifiToken,
+    UsageTrackerTransfer, WgKey, WifiToken,
 };
 
 /// Variants of this enum are the types of data that ops can receive over a websocket connection
@@ -76,6 +78,89 @@ pub enum RouterWebsocketMessage {
     },
 }
 
+// just ignore the hardware info field on the timeseries data message for now
+impl PartialEq for RouterWebsocketMessage {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                RouterWebsocketMessage::OperatorAddress {
+                    id: id1,
+                    address: address1,
+                    chain: chain1,
+                },
+                RouterWebsocketMessage::OperatorAddress {
+                    id: id2,
+                    address: address2,
+                    chain: chain2,
+                },
+            ) => id1 == id2 && address1 == address2 && chain1 == chain2,
+            (
+                RouterWebsocketMessage::TimeseriesData {
+                    id: id1,
+                    neighbor_info: neighbor_info1,
+                    hardware_info: _hardware_info1,
+                    rita_uptime: rita_uptime1,
+                },
+                RouterWebsocketMessage::TimeseriesData {
+                    id: id2,
+                    neighbor_info: neighbor_info2,
+                    hardware_info: _hardware_info2,
+                    rita_uptime: rita_uptime2,
+                },
+            ) => {
+                id1 == id2
+                    && neighbor_info1 == neighbor_info2
+                    && rita_uptime1 == rita_uptime2
+            }
+            (
+                RouterWebsocketMessage::CustomerDetails {
+                    id: id1,
+                    contact_info: contact_info1,
+                    install_details: install_details1,
+                    billing_details: billing_details1,
+                },
+                RouterWebsocketMessage::CustomerDetails {
+                    id: id2,
+                    contact_info: contact_info2,
+                    install_details: install_details2,
+                    billing_details: billing_details2,
+                },
+            ) => {
+                id1 == id2
+                    && contact_info1 == contact_info2
+                    && install_details1 == install_details2
+                    && billing_details1 == billing_details2
+            }
+            (
+                RouterWebsocketMessage::ConnectionDetails {
+                    id: id1,
+                    exit_con: exit_con1,
+                    user_bandwidth_limit: user_bandwidth_limit1,
+                    user_bandwidth_usage: user_bandwidth_usage1,
+                    client_mbps: client_mbps1,
+                    relay_mbps: relay_mbps1,
+                },
+                RouterWebsocketMessage::ConnectionDetails {
+                    id: id2,
+                    exit_con: exit_con2,
+                    user_bandwidth_limit: user_bandwidth_limit2,
+                    user_bandwidth_usage: user_bandwidth_usage2,
+                    client_mbps: client_mbps2,
+                    relay_mbps: relay_mbps2,
+                },
+            ) => {
+                id1 == id2
+                    && exit_con1 == exit_con2
+                    && user_bandwidth_limit1 == user_bandwidth_limit2
+                    && user_bandwidth_usage1 == user_bandwidth_usage2
+                    && client_mbps1 == client_mbps2
+                    && relay_mbps1 == relay_mbps2
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Something the operator may want to do to a router under their control
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum OperatorAction {
@@ -131,7 +216,7 @@ pub enum OperatorAction {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PaymentAndNetworkSettings {
     /// The default 'gateway' price, this comes with a few caveats mainly that gateway
     /// auto detection is based around having a wan port and is not always accurate but
@@ -169,8 +254,11 @@ pub struct PaymentAndNetworkSettings {
 
 /// Variants of this enum are the types of data that ops can send a router over a websocket connection,
 /// generally when responding to messages from routers or syncing with operator tools.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OperatorWebsocketMessage {
+    /// Operator's wg public key to be used for encryption. this must be received by the router
+    /// before any further messages can proceed.
+    OperatorWgKey(WgKey),
     /// Contains all the payment and network settings to be changed from ops
     PaymentAndNetworkSettings(PaymentAndNetworkSettings),
     /// This is the pro-rated fee paid to the operator, defined as wei/second
@@ -197,4 +285,18 @@ pub enum OperatorWebsocketMessage {
     /// Last seen hour that ops tools has for usage data, so we know from the router
     /// side how much history we need to send in with the next checkin cycle
     OpsLastSeenUsageHour(u64),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EncryptedRouterWebsocketMessage {
+    pub pubkey: WgKey,
+    pub nonce: [u8; 24],
+    pub encrypted_router_websocket_msg: Vec<u8>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EncryptedOpsWebsocketMessage {
+    pub pubkey: WgKey,
+    pub nonce: [u8; 24],
+    pub encrypted_ops_websocket_msg: Vec<u8>,
 }

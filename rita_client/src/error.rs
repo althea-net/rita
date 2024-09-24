@@ -7,6 +7,7 @@ use std::{
 };
 
 use althea_kernel_interface::KernelInterfaceError;
+use althea_types::websockets::encryption::WebsocketEncryptionError;
 use awc::error::{JsonPayloadError, SendRequestError};
 use babel_monitor::structs::BabelMonitorError;
 use compressed_log::builder::LoggerError;
@@ -36,8 +37,14 @@ pub enum RitaClientError {
     NoExitIPError(String),
     RitaCommonError(RitaCommonError),
     ParseIntError(ParseIntError),
+    EncryptionError(WebsocketEncryptionError),
 }
 
+impl From<WebsocketEncryptionError> for RitaClientError {
+    fn from(error: WebsocketEncryptionError) -> Self {
+        RitaClientError::EncryptionError(error)
+    }
+}
 impl From<LoggerError> for RitaClientError {
     fn from(error: LoggerError) -> Self {
         RitaClientError::RitaCommonError(RitaCommonError::LoggerError(error))
@@ -142,6 +149,7 @@ impl Display for RitaClientError {
             }
             RitaClientError::RitaCommonError(e) => write!(f, "{e}"),
             RitaClientError::ParseIntError(e) => write!(f, "{e}"),
+            RitaClientError::EncryptionError(e) => write!(f, "{e}"),
         }
     }
 }
