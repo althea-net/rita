@@ -1,10 +1,12 @@
 use crate::error::AltheaTypesError;
+use crypto_box::PublicKey as CryptoboxPublicKey;
+use crypto_box::SecretKey as CryptoboxSecretKey;
 /// This file under Apache 2.0
 use serde::de::{Deserialize, Error, Unexpected, Visitor};
 use serde::ser::{Serialize, Serializer};
 use serde::Deserializer;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
-use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey as SodiumoxidePublicKey;
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey as SodiumoxideSecretKey;
 use std::fmt;
 use std::str::FromStr;
 
@@ -26,15 +28,27 @@ impl From<WgKey> for [u8; 32] {
 /// This is somewhat dangerous, since libsodium provides seperate
 /// public and private key types while we don't have those here.
 /// Be very careful not to use this on the public key! That would be bad
-impl From<WgKey> for SecretKey {
-    fn from(val: WgKey) -> SecretKey {
-        SecretKey(val.0)
+impl From<WgKey> for SodiumoxideSecretKey {
+    fn from(val: WgKey) -> SodiumoxideSecretKey {
+        SodiumoxideSecretKey(val.0)
     }
 }
 
-impl From<WgKey> for PublicKey {
-    fn from(val: WgKey) -> PublicKey {
-        PublicKey(val.0)
+impl From<WgKey> for SodiumoxidePublicKey {
+    fn from(val: WgKey) -> SodiumoxidePublicKey {
+        SodiumoxidePublicKey(val.0)
+    }
+}
+
+impl From<WgKey> for CryptoboxSecretKey {
+    fn from(val: WgKey) -> CryptoboxSecretKey {
+        CryptoboxSecretKey::from_bytes(val.0)
+    }
+}
+
+impl From<WgKey> for CryptoboxPublicKey {
+    fn from(val: WgKey) -> CryptoboxPublicKey {
+        CryptoboxPublicKey::from_bytes(val.0)
     }
 }
 

@@ -5,10 +5,13 @@ use crate::operator_update::{
 use actix_async::System;
 use actix_web_actors::ws;
 use althea_types::{
-    websockets::{OperatorWebsocketMessage, RouterWebsocketMessage},
+    websockets::{
+        encryption::encrypt_router_websocket_msg, EncryptedOpsWebsocketMessage, RouterWebsocketMessage
+    },
     Identity,
 };
 use awc::ws::Frame;
+use crypto_box::{PublicKey, SecretKey};
 use futures::{SinkExt, StreamExt};
 use settings::{
     get_billing_details, get_contact_info, get_install_details, get_operator_address,
@@ -19,6 +22,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time::timeout;
+
+use super::ReceivedOpsData;
 
 /// This function spawns a thread solely responsible for performing the websocket operator update
 pub fn start_operator_socket_update_loop() {
@@ -67,6 +72,34 @@ pub fn send_websocket_update() {
                                 // we only need to get the identity once
                                 let rita_client = settings::get_rita_client();
                                 let id = rita_client.get_identity().unwrap();
+                                let our_secretkey = match rita_client.network.wg_private_key {
+                                    Some(key) => SecretKey::from(key),
+                                    None => {
+                                        error!("No private key found, can't connect to operator server");
+                                        return;
+                                    }
+                                };
+                                let ops_pubkey;
+                                // we must receive the ops pubkey before we can proceed with encryption
+                                loop {
+                                    // check if we have received the ops pubkey
+                                    if let Ok(Some(msg)) =
+                                        timeout(SOCKET_CHECKER_TIMEOUT, ws.next()).await
+                                    {
+                                        let msg = msg.unwrap();
+                                        if let Some(hour) = handle_received_operator_message(msg, &our_secretkey, None) {
+                                            match hour {
+                                                ReceivedOpsData::WgKey(public_key) => {
+                                                    ops_pubkey = public_key;
+                                                    break;
+                                                },
+                                                ReceivedOpsData::UsageHour(_) => panic!("Why are we receiving a usage hour from ops on socket startup? restarting!"),
+                                            }
+                                        }
+                                    } else {
+                                        thread::sleep(Duration::from_secs(1));
+                                    }
+                                }
 
                                 let mut ten_minute_timer: Instant = Instant::now();
                                 let mut five_minute_timer: Instant = Instant::now();
@@ -79,8 +112,13 @@ pub fn send_websocket_update() {
                                         // tht will then fall out of this loop into the outer loop, restarting the whole thing
                                         // and reconnecting the socket
                                         let msg = msg.unwrap();
-                                        if let Some(hour) = handle_received_operator_message(msg) {
-                                            ops_last_seen_usage_hour = Some(hour);
+                                        if let Some(hour) = handle_received_operator_message(msg, &our_secretkey, Some(&ops_pubkey)) {
+                                            match hour {
+                                                ReceivedOpsData::UsageHour(hour) => { 
+                                                    ops_last_seen_usage_hour = Some(hour);
+                                                },
+                                                _ => panic!("Why are we receiving a public key again from ops? restarting!"),
+                                            }
                                         }
                                     }
 
@@ -89,7 +127,7 @@ pub fn send_websocket_update() {
                                         info!(
                                         "Ten minutes have passed, sending data to operator server"
                                     );
-                                        let messages = get_ten_minute_update_data(id);
+                                        let messages = get_ten_minute_update_data(id, &our_secretkey, &ops_pubkey);
                                         for message in messages {
                                             // if this unwrap panics, send has failed because the socket has disconnected;
                                             // the thread will simply reconnect the socket and retry
@@ -105,6 +143,7 @@ pub fn send_websocket_update() {
                                         let messages = get_five_minute_update_data(
                                             id,
                                             ops_last_seen_usage_hour,
+                                            &our_secretkey, &ops_pubkey
                                         );
                                         for message in messages {
                                             ws.send(message).await.unwrap();
@@ -113,7 +152,7 @@ pub fn send_websocket_update() {
                                         five_minute_timer = Instant::now();
                                     }
                                     // the rest of these are 10 second interval updates and run every iteration of the loop
-                                    let messages = get_ten_second_update_data(id);
+                                    let messages = get_ten_second_update_data(id,&our_secretkey, &ops_pubkey);
                                     for message in messages {
                                         ws.send(message).await.unwrap();
                                     }
@@ -124,8 +163,11 @@ pub fn send_websocket_update() {
                                         timeout(SOCKET_CHECKER_TIMEOUT, ws.next()).await
                                     {
                                         let msg = msg.unwrap();
-                                        if let Some(hour) = handle_received_operator_message(msg) {
-                                            ops_last_seen_usage_hour = Some(hour);
+                                        if let Some(hour) = handle_received_operator_message(msg, &our_secretkey, Some(&ops_pubkey)) {
+                                            match hour {
+                                                ReceivedOpsData::UsageHour(hour) => {ops_last_seen_usage_hour = Some(hour);},
+                                                _ => panic!("Why are we receiving a public key again from ops? restarting!"),
+                                            }
                                         }
                                     }
                                     info!("Sleeping until next checkin...");
@@ -150,22 +192,27 @@ pub fn send_websocket_update() {
     });
 }
 
-/// Handles reception of OperatorUpdateMessage from a given Message, returns the last seen usage hour if
-/// the message was successfully parsed and handled
-fn handle_received_operator_message(msg: Frame) -> Option<u64> {
+/// Handles reception of OperatorUpdateMessage from a given Message, returns the a ReceivedOpsData if
+/// the message was successfully parsed and handled. if ops_publickey is None, we will return the given pub key- 
+/// this is the first message we receive from the operator server.
+fn handle_received_operator_message(msg: Frame, our_secretkey: &SecretKey, ops_publickey: Option<&PublicKey>) -> Option<ReceivedOpsData> {
     match msg {
         ws::Frame::Binary(bytes) => {
-            let info = serde_json::from_slice::<OperatorWebsocketMessage>(&bytes);
+            let info = serde_json::from_slice::<EncryptedOpsWebsocketMessage>(&bytes);
             match info {
                 Ok(info) => {
                     info!("Received operator update message: {:?}", info);
-                    match handle_operator_update(info) {
-                        Ok(last) => last,
-                        Err(e) => {
-                            error!("Failed to handle operator update message: {:?}", e);
-                            None
-                        }
+                    match ops_publickey {
+                        Some(key) => {match handle_operator_update(info, our_secretkey, key) {
+                            Ok(data) => data,
+                            Err(e) => {
+                                error!("Failed to handle operator update message: {:?}", e);
+                                None
+                            }
+                        }},
+                        None => Some(ReceivedOpsData::WgKey(info.pubkey.into()))
                     }
+                    
                 }
                 Err(e) => {
                     error!("Failed to parse operator socket message: {:?}", e);
@@ -185,7 +232,11 @@ fn handle_received_operator_message(msg: Frame) -> Option<u64> {
 
 /// gets checkin data for the ten minute update and converts it to a Vec of ws Binary messages
 /// to be sent to the operator server
-fn get_ten_minute_update_data(id: Identity) -> Vec<ws::Message> {
+fn get_ten_minute_update_data(
+    id: Identity,
+    our_secretkey: &SecretKey,
+    ops_pubkey: &PublicKey,
+) -> Vec<ws::Message> {
     let mut messages = Vec::new();
 
     let contact_info = get_contact_info();
@@ -197,13 +248,16 @@ fn get_ten_minute_update_data(id: Identity) -> Vec<ws::Message> {
         install_details,
         billing_details,
     };
-    let serialized = serde_json::to_vec(&data).unwrap();
+    // encrypt the data
+    let encrypted = encrypt_router_websocket_msg(id.wg_public_key, our_secretkey, ops_pubkey, data);
+    let serialized = serde_json::to_vec(&encrypted).unwrap();
     messages.push(ws::Message::Binary(serialized.into()));
 
     let address = get_operator_address();
     let chain = get_system_chain();
     let data = RouterWebsocketMessage::OperatorAddress { id, address, chain };
-    let serialized = serde_json::to_vec(&data).unwrap();
+    let encrypted = encrypt_router_websocket_msg(id.wg_public_key, our_secretkey, ops_pubkey, data);
+    let serialized = serde_json::to_vec(&encrypted).unwrap();
     messages.push(ws::Message::Binary(serialized.into()));
 
     messages
@@ -213,6 +267,8 @@ fn get_ten_minute_update_data(id: Identity) -> Vec<ws::Message> {
 fn get_five_minute_update_data(
     id: Identity,
     ops_last_seen_usage_hour: Option<u64>,
+    our_secretkey: &SecretKey,
+    ops_pubkey: &PublicKey,
 ) -> Vec<ws::Message> {
     let mut messages = Vec::new();
 
@@ -229,14 +285,18 @@ fn get_five_minute_update_data(
         client_mbps,
         relay_mbps,
     };
-    let serialized = serde_json::to_vec(&data).unwrap();
+    let encrypted = encrypt_router_websocket_msg(id.wg_public_key, our_secretkey, ops_pubkey, data);
+    let serialized = serde_json::to_vec(&encrypted).unwrap();
     messages.push(ws::Message::Binary(serialized.into()));
 
     messages
 }
 
 /// gets checkin data for the ten second upate and converts it to a Vec of ws Binary messages
-fn get_ten_second_update_data(id: Identity) -> Vec<ws::Message> {
+fn get_ten_second_update_data(id: Identity,
+    our_secretkey: &SecretKey,
+    ops_pubkey: &PublicKey,
+) -> Vec<ws::Message> {
     let mut messages = Vec::new();
 
     let neighbor_info = get_neighbor_info();
@@ -248,7 +308,8 @@ fn get_ten_second_update_data(id: Identity) -> Vec<ws::Message> {
         hardware_info,
         rita_uptime,
     };
-    let serialized = serde_json::to_vec(&data).unwrap();
+    let encrypted = encrypt_router_websocket_msg(id.wg_public_key, our_secretkey, ops_pubkey, data);
+    let serialized = serde_json::to_vec(&encrypted).unwrap();
     messages.push(ws::Message::Binary(serialized.into()));
 
     messages

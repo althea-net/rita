@@ -11,8 +11,10 @@ use crate::{
     RitaClientError,
 };
 use althea_kernel_interface::hardware_info::get_hardware_info;
+use althea_types::websockets::encryption::decrypt_ops_websocket_msg;
 use althea_types::websockets::{
-    OperatorAction, OperatorWebsocketMessage, PaymentAndNetworkSettings,
+    EncryptedOpsWebsocketMessage, OperatorAction, OperatorWebsocketMessage,
+    PaymentAndNetworkSettings,
 };
 use althea_types::{get_sequence_num, NeighborStatus, ShaperSettings, UsageTrackerTransfer};
 use althea_types::{
@@ -20,6 +22,7 @@ use althea_types::{
     HardwareInfo,
 };
 use babel_monitor::structs::BabeldConfig;
+use crypto_box::{PublicKey, SecretKey};
 use num256::Uint256;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
@@ -116,13 +119,29 @@ pub fn get_rita_uptime() -> Duration {
     RITA_UPTIME.elapsed()
 }
 
+pub enum ReceivedOpsData {
+    WgKey(PublicKey),
+    UsageHour(u64),
+}
+
 /// Handle updates to settings received from operator server in OperatorUpdateMessage, returns a None except when
 /// the ops_last_seen_usage_hour is updated, in which case it returns the new value.
 pub fn handle_operator_update(
-    new_settings: OperatorWebsocketMessage,
-) -> Result<Option<u64>, RitaClientError> {
+    new_settings: EncryptedOpsWebsocketMessage,
+    our_secretkey: &SecretKey,
+    ops_publickey: &PublicKey,
+) -> Result<Option<ReceivedOpsData>, RitaClientError> {
+    // first try decrypting the message
+    let decrypted_message =
+        match decrypt_ops_websocket_msg(our_secretkey, ops_publickey, new_settings) {
+            Ok(message) => message,
+            Err(e) => {
+                error!("Failed to decrypt operator message {:?}", e);
+                return Err(RitaClientError::EncryptionError(e));
+            }
+        };
     // now we have to save settings after each action though
-    match new_settings {
+    match decrypted_message {
         OperatorWebsocketMessage::PaymentAndNetworkSettings(settings) => {
             info!("RECEIVED WEBSOCKET MESSAGE: PaymentAndNetworkSettings");
             let mut rita_client = settings::get_rita_client();
@@ -201,7 +220,10 @@ pub fn handle_operator_update(
         }
         OperatorWebsocketMessage::OpsLastSeenUsageHour(hour) => {
             info!("RECEIVED WEBSOCKET MESSAGE: OpsLastSeenUsageHour");
-            return Ok(Some(hour));
+            return Ok(Some(ReceivedOpsData::UsageHour(hour)));
+        }
+        OperatorWebsocketMessage::OperatorWgKey(wg_key) => {
+            return Ok(Some(ReceivedOpsData::WgKey(PublicKey::from(wg_key))))
         }
     };
     Ok(None)
