@@ -107,11 +107,7 @@ impl PartialEq for RouterWebsocketMessage {
                     hardware_info: _hardware_info2,
                     rita_uptime: rita_uptime2,
                 },
-            ) => {
-                id1 == id2
-                    && neighbor_info1 == neighbor_info2
-                    && rita_uptime1 == rita_uptime2
-            }
+            ) => id1 == id2 && neighbor_info1 == neighbor_info2 && rita_uptime1 == rita_uptime2,
             (
                 RouterWebsocketMessage::CustomerDetails {
                     id: id1,

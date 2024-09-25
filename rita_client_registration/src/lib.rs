@@ -336,7 +336,6 @@ pub async fn check_sms_auth_result(
         number
     );
 
-
     let client = awc::Client::default();
     match client
         .post(check_url)
@@ -354,7 +353,7 @@ pub async fn check_sms_auth_result(
             } else {
                 Ok(false)
             }
-        },
+        }
         Err(e) => {
             error!("Failed to verify code with {:?}", e);
             Err(e.into())

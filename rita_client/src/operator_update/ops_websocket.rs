@@ -6,7 +6,8 @@ use actix_async::System;
 use actix_web_actors::ws;
 use althea_types::{
     websockets::{
-        encryption::encrypt_router_websocket_msg, EncryptedOpsWebsocketMessage, RouterWebsocketMessage
+        encryption::encrypt_router_websocket_msg, EncryptedOpsWebsocketMessage,
+        RouterWebsocketMessage,
     },
     Identity,
 };
@@ -114,7 +115,7 @@ pub fn send_websocket_update() {
                                         let msg = msg.unwrap();
                                         if let Some(hour) = handle_received_operator_message(msg, &our_secretkey, Some(&ops_pubkey)) {
                                             match hour {
-                                                ReceivedOpsData::UsageHour(hour) => { 
+                                                ReceivedOpsData::UsageHour(hour) => {
                                                     ops_last_seen_usage_hour = Some(hour);
                                                 },
                                                 _ => panic!("Why are we receiving a public key again from ops? restarting!"),
@@ -193,9 +194,13 @@ pub fn send_websocket_update() {
 }
 
 /// Handles reception of OperatorUpdateMessage from a given Message, returns the a ReceivedOpsData if
-/// the message was successfully parsed and handled. if ops_publickey is None, we will return the given pub key- 
+/// the message was successfully parsed and handled. if ops_publickey is None, we will return the given pub key-
 /// this is the first message we receive from the operator server.
-fn handle_received_operator_message(msg: Frame, our_secretkey: &SecretKey, ops_publickey: Option<&PublicKey>) -> Option<ReceivedOpsData> {
+fn handle_received_operator_message(
+    msg: Frame,
+    our_secretkey: &SecretKey,
+    ops_publickey: Option<&PublicKey>,
+) -> Option<ReceivedOpsData> {
     match msg {
         ws::Frame::Binary(bytes) => {
             let info = serde_json::from_slice::<EncryptedOpsWebsocketMessage>(&bytes);
@@ -203,16 +208,15 @@ fn handle_received_operator_message(msg: Frame, our_secretkey: &SecretKey, ops_p
                 Ok(info) => {
                     info!("Received operator update message: {:?}", info);
                     match ops_publickey {
-                        Some(key) => {match handle_operator_update(info, our_secretkey, key) {
+                        Some(key) => match handle_operator_update(info, our_secretkey, key) {
                             Ok(data) => data,
                             Err(e) => {
                                 error!("Failed to handle operator update message: {:?}", e);
                                 None
                             }
-                        }},
-                        None => Some(ReceivedOpsData::WgKey(info.pubkey.into()))
+                        },
+                        None => Some(ReceivedOpsData::WgKey(info.pubkey.into())),
                     }
-                    
                 }
                 Err(e) => {
                     error!("Failed to parse operator socket message: {:?}", e);
@@ -293,7 +297,8 @@ fn get_five_minute_update_data(
 }
 
 /// gets checkin data for the ten second upate and converts it to a Vec of ws Binary messages
-fn get_ten_second_update_data(id: Identity,
+fn get_ten_second_update_data(
+    id: Identity,
     our_secretkey: &SecretKey,
     ops_pubkey: &PublicKey,
 ) -> Vec<ws::Message> {
