@@ -167,7 +167,6 @@ mod tests {
         use crypto_box::SecretKey;
         use rand::rngs::OsRng;
 
-
         let ip: IpAddr = IpAddr::V6("::1".parse().unwrap());
 
         // generate keys
