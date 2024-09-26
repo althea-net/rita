@@ -5,7 +5,10 @@ use crate::operator_update::{
 use actix_async::System;
 use actix_web_actors::ws;
 use althea_types::{
-    websockets::{OperatorWebsocketResponse, RouterWebsocketMessage},
+    websockets::{
+        OperatorWebsocketResponse, RouterWebsocketMessage, WsConnectionDetailsStruct,
+        WsCustomerDetailsStruct, WsOperatorAddressStruct, WsTimeseriesDataStruct,
+    },
     Identity,
 };
 use awc::ws::Frame;
@@ -78,10 +81,10 @@ pub fn send_websocket_update() {
                                     }
                                 };
                                 let mut ops_pubkey;
-                                // we must receive the ops pubkey before we can proceed with encryption and sending- ops will send
-                                // its public WgKey down as ping response so we must first ping and get our key
+                                // we must receive the ops pubkey before we can proceed with encryption and sending! 
+                                // ops sends this on websocket open and on ping response, so if for some reason we don't receive it 
+                                // automatically after opening the connection, send a ping
                                 loop {
-                                    ws.send(ws::Message::Ping("ping".into())).await.unwrap();
                                     // check if we have received the ops pubkey
                                     if let Ok(Some(msg)) =
                                         timeout(SOCKET_CHECKER_TIMEOUT, ws.next()).await
@@ -98,6 +101,7 @@ pub fn send_websocket_update() {
                                             }
                                         }
                                     } else {
+                                        ws.send(ws::Message::Ping("ping".into())).await.unwrap();
                                         thread::sleep(Duration::from_secs(1));
                                     }
                                 }
@@ -115,7 +119,7 @@ pub fn send_websocket_update() {
                                         let msg = msg.unwrap();
                                         if let Some(hour) = handle_received_operator_message(msg, &our_secretkey, Some(&ops_pubkey)) {
                                             match hour {
-                                                ReceivedOpsData::UsageHour(hour) => { 
+                                                ReceivedOpsData::UsageHour(hour) => {
                                                     ops_last_seen_usage_hour = Some(hour);
                                                 },
                                                 ReceivedOpsData::WgKey(public_key) => {
@@ -198,16 +202,20 @@ pub fn send_websocket_update() {
 }
 
 /// Handles reception of OperatorUpdateMessage from a given Message, returns the a ReceivedOpsData if
-/// the message was successfully parsed and handled. if ops_publickey is None, we will return the given pub key- 
+/// the message was successfully parsed and handled. if ops_publickey is None, we will return the given pub key-
 /// this is the first message we receive from the operator server.
-fn handle_received_operator_message(msg: Frame, our_secretkey: &SecretKey, ops_publickey: Option<&PublicKey>) -> Option<ReceivedOpsData> {
+fn handle_received_operator_message(
+    msg: Frame,
+    our_secretkey: &SecretKey,
+    ops_publickey: Option<&PublicKey>,
+) -> Option<ReceivedOpsData> {
     match msg {
         ws::Frame::Binary(bytes) => {
             let message = serde_json::from_slice::<OperatorWebsocketResponse>(&bytes);
             // check if we got a wg key or a message
             match message {
                 Ok(message) => {
-                    info!("Received encrypted operator update message");
+                    info!("Received operator websocket message");
                     match handle_operator_update(message, our_secretkey, ops_publickey) {
                         Ok(data) => data,
                         Err(e) => {
@@ -215,7 +223,6 @@ fn handle_received_operator_message(msg: Frame, our_secretkey: &SecretKey, ops_p
                             None
                         }
                     }
-                    
                 }
                 Err(e) => {
                     error!("Failed to parse operator socket message: {:?}", e);
@@ -245,12 +252,12 @@ fn get_ten_minute_update_data(
     let contact_info = get_contact_info();
     let install_details = get_install_details();
     let billing_details = get_billing_details();
-    let data = RouterWebsocketMessage::CustomerDetails {
+    let data = RouterWebsocketMessage::CustomerDetails(WsCustomerDetailsStruct {
         id,
         contact_info,
         install_details,
         billing_details,
-    };
+    });
     // encrypt the data
     let encrypted_json = data
         .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
@@ -259,7 +266,8 @@ fn get_ten_minute_update_data(
 
     let address = get_operator_address();
     let chain = get_system_chain();
-    let data = RouterWebsocketMessage::OperatorAddress { id, address, chain };
+    let data =
+        RouterWebsocketMessage::OperatorAddress(WsOperatorAddressStruct { id, address, chain });
     let encrypted_json = data
         .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
         .json();
@@ -281,14 +289,14 @@ fn get_five_minute_update_data(
     let user_bandwidth_usage = get_user_bandwidth_usage(ops_last_seen_usage_hour);
     let client_mbps = get_client_mbps();
     let relay_mbps = get_relay_mbps();
-    let data = RouterWebsocketMessage::ConnectionDetails {
+    let data = RouterWebsocketMessage::ConnectionDetails(WsConnectionDetailsStruct {
         id,
         exit_con,
         user_bandwidth_limit,
         user_bandwidth_usage,
         client_mbps,
         relay_mbps,
-    };
+    });
     let encrypted_json = data
         .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
         .json();
@@ -297,7 +305,8 @@ fn get_five_minute_update_data(
 }
 
 /// gets checkin data for the ten second upate and converts it to a Vec of ws Binary messages
-fn get_ten_second_update_data(id: Identity,
+fn get_ten_second_update_data(
+    id: Identity,
     our_secretkey: &SecretKey,
     ops_pubkey: &PublicKey,
 ) -> Vec<ws::Message> {
@@ -306,12 +315,12 @@ fn get_ten_second_update_data(id: Identity,
     let neighbor_info = get_neighbor_info();
     let hardware_info = get_hardware_info_update();
     let rita_uptime = get_rita_uptime();
-    let data = RouterWebsocketMessage::TimeseriesData {
+    let data = RouterWebsocketMessage::TimeseriesData(WsTimeseriesDataStruct {
         id,
         neighbor_info,
         hardware_info,
         rita_uptime,
-    };
+    });
     let encrypted_json = data
         .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
         .json();

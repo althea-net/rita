@@ -1,6 +1,6 @@
 use althea_kernel_interface::KernelInterfaceError;
-use althea_types::ExitEncryptionError;
 use althea_types::websockets::encryption::WebsocketEncryptionError;
+use althea_types::ExitEncryptionError;
 use awc::error::{JsonPayloadError, SendRequestError};
 use babel_monitor::structs::BabelMonitorError;
 use compressed_log::builder::LoggerError;

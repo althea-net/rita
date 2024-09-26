@@ -157,7 +157,7 @@ mod tests {
     use std::net::IpAddr;
 
     use crate::{
-        websockets::{OperatorWebsocketMessage, RouterWebsocketMessage},
+        websockets::{OperatorWebsocketMessage, RouterWebsocketMessage, WsOperatorAddressStruct},
         Identity, WgKey,
     };
 
@@ -166,7 +166,6 @@ mod tests {
     fn test_router_encryption() {
         use crypto_box::SecretKey;
         use rand::rngs::OsRng;
-
 
         let ip: IpAddr = IpAddr::V6("::1".parse().unwrap());
 
@@ -178,7 +177,7 @@ mod tests {
         let ops_secretkey = SecretKey::generate(&mut OsRng);
         let ops_publickey = ops_secretkey.public_key();
 
-        let message = RouterWebsocketMessage::OperatorAddress {
+        let message = RouterWebsocketMessage::OperatorAddress(WsOperatorAddressStruct {
             id: Identity {
                 mesh_ip: ip,
                 eth_address: "0x0000000000000000000000000000000000000001"
@@ -189,7 +188,7 @@ mod tests {
             },
             address: None,
             chain: crate::SystemChain::Xdai,
-        };
+        });
 
         // router encrypts this
         let encrypted_message = message.encrypt(router_wg_pub, &router_secretkey, &ops_publickey);
