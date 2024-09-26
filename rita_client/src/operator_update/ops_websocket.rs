@@ -1,15 +1,12 @@
-use crate::{
-    heartbeat::HEARTBEAT_SERVER_KEY,
-    operator_update::{
-        get_client_mbps, get_exit_con, get_hardware_info_update, get_neighbor_info, get_relay_mbps,
-        get_rita_uptime, get_user_bandwidth_usage, handle_operator_update,
-    },
+use crate::operator_update::{
+    get_client_mbps, get_exit_con, get_hardware_info_update, get_neighbor_info, get_relay_mbps,
+    get_rita_uptime, get_user_bandwidth_usage, handle_operator_update,
 };
 use actix_async::System;
 use actix_web_actors::ws;
 use althea_types::{
-    websockets::{EncryptedOpsWebsocketMessage, RouterWebsocketMessage},
-    Identity, WgKey,
+    websockets::{OperatorWebsocketResponse, RouterWebsocketMessage},
+    Identity,
 };
 use awc::ws::Frame;
 use crypto_box::{PublicKey, SecretKey};
@@ -81,8 +78,10 @@ pub fn send_websocket_update() {
                                     }
                                 };
                                 let mut ops_pubkey;
-                                // we must receive the ops pubkey before we can proceed with encryption and sending
+                                // we must receive the ops pubkey before we can proceed with encryption and sending- ops will send
+                                // its public WgKey down as ping response so we must first ping and get our key
                                 loop {
+                                    ws.send(ws::Message::Ping("ping".into())).await.unwrap();
                                     // check if we have received the ops pubkey
                                     if let Ok(Some(msg)) =
                                         timeout(SOCKET_CHECKER_TIMEOUT, ws.next()).await
@@ -94,7 +93,7 @@ pub fn send_websocket_update() {
                                                     ops_pubkey = public_key;
                                                     break;
                                                 },
-                                                // we cannot actually decrypt any messages until we have the ops pubkey
+                                                // we cannot actually decrypt any messages until we have the ops pubkey so this will never reach panic
                                                 _ => panic!("Why are we receiving a usage hour from ops on socket startup? restarting!"),
                                             }
                                         }
@@ -204,25 +203,16 @@ pub fn send_websocket_update() {
 fn handle_received_operator_message(msg: Frame, our_secretkey: &SecretKey, ops_publickey: Option<&PublicKey>) -> Option<ReceivedOpsData> {
     match msg {
         ws::Frame::Binary(bytes) => {
-            let info = serde_json::from_slice::<EncryptedOpsWebsocketMessage>(&bytes);
-            match info {
-                Ok(info) => {
-                    info!("Received operator update message: {:?}", info);
-                    match ops_publickey {
-                        Some(key) => match handle_operator_update(info, our_secretkey, key) {
-                            Ok(data) => data,
-                            Err(e) => {
-                                error!("Failed to handle operator update message: {:?}", e);
-                                None
-                            }
-                        },
-                        None => {
-                            // set the heartbeat server key to the received pubkey, then return it
-                            let ops_pubkey: WgKey = info.pubkey;
-                            let mut heartbeat_server_key = HEARTBEAT_SERVER_KEY.write().unwrap();
-                            *heartbeat_server_key = ops_pubkey;
-                            warn!("Received a new public key from ops!");
-                            Some(ReceivedOpsData::WgKey(info.pubkey.into()))
+            let message = serde_json::from_slice::<OperatorWebsocketResponse>(&bytes);
+            // check if we got a wg key or a message
+            match message {
+                Ok(message) => {
+                    info!("Received encrypted operator update message");
+                    match handle_operator_update(message, our_secretkey, ops_publickey) {
+                        Ok(data) => data,
+                        Err(e) => {
+                            error!("Failed to handle operator update message: {:?}", e);
+                            None
                         }
                     }
                     

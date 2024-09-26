@@ -256,9 +256,6 @@ pub struct PaymentAndNetworkSettings {
 /// generally when responding to messages from routers or syncing with operator tools.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OperatorWebsocketMessage {
-    /// Operator's wg public key to be used for encryption. this must be received by the router
-    /// before any further messages can proceed.
-    OperatorWgKey(WgKey),
     /// Contains all the payment and network settings to be changed from ops
     PaymentAndNetworkSettings(PaymentAndNetworkSettings),
     /// This is the pro-rated fee paid to the operator, defined as wei/second
@@ -296,7 +293,13 @@ pub struct EncryptedRouterWebsocketMessage {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedOpsWebsocketMessage {
-    pub pubkey: WgKey,
     pub nonce: [u8; 24],
     pub encrypted_ops_websocket_msg: Vec<u8>,
+}
+
+/// these are what we deserialize from an ops message and use as our ws::Message implementation
+#[derive(Debug, Serialize, Deserialize)]
+pub enum OperatorWebsocketResponse {
+    WgKey(WgKey),
+    EncryptedMessage(EncryptedOpsWebsocketMessage),
 }

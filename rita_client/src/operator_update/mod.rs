@@ -6,12 +6,12 @@ extern crate openssh_keys;
 use crate::dashboard::extender_checkin::extend_hardware_info;
 use crate::dashboard::router::set_router_update_instruction;
 use crate::exit_manager::{get_current_exit_ip, utils::get_client_pub_ipv6};
+use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::rita_loop::is_gateway_client;
 use crate::RitaClientError;
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::websockets::{
-    EncryptedOpsWebsocketMessage, OperatorAction, OperatorWebsocketMessage,
-    PaymentAndNetworkSettings,
+    OperatorAction, OperatorWebsocketMessage, OperatorWebsocketResponse, PaymentAndNetworkSettings,
 };
 use althea_types::{get_sequence_num, NeighborStatus, ShaperSettings, UsageTrackerTransfer};
 use althea_types::{
@@ -121,12 +121,27 @@ pub enum ReceivedOpsData {
 /// Handle updates to settings received from operator server in OperatorUpdateMessage, returns a None except when
 /// the ops_last_seen_usage_hour is updated, in which case it returns the new value.
 pub fn handle_operator_update(
-    new_settings: EncryptedOpsWebsocketMessage,
+    response: OperatorWebsocketResponse,
     our_secretkey: &SecretKey,
-    ops_publickey: &PublicKey,
+    ops_publickey: Option<&PublicKey>,
 ) -> Result<Option<ReceivedOpsData>, RitaClientError> {
+    let encrypted_message = match response {
+        OperatorWebsocketResponse::WgKey(wg_key) => {
+            info!("Received operator websocket wg key: {:?}", wg_key);
+            // set the heartbeat server key to the received pubkey, then return it
+            let mut heartbeat_server_key = HEARTBEAT_SERVER_KEY.write().unwrap();
+            *heartbeat_server_key = wg_key;
+            return Ok(Some(ReceivedOpsData::WgKey(wg_key.into())));
+        }
+        OperatorWebsocketResponse::EncryptedMessage(encrypted_router_websocket_message) => {
+            encrypted_router_websocket_message
+        }
+    };
     // first try decrypting the message
-    let decrypted_message = match new_settings.decrypt(our_secretkey, ops_publickey) {
+    let decrypted_message = match encrypted_message.decrypt(
+        our_secretkey,
+        ops_publickey.expect("Cannot decrypt message without ops public key"),
+    ) {
         Ok(message) => message,
         Err(e) => {
             error!("Failed to decrypt operator message {:?}", e);
@@ -214,9 +229,6 @@ pub fn handle_operator_update(
         OperatorWebsocketMessage::OpsLastSeenUsageHour(hour) => {
             info!("RECEIVED WEBSOCKET MESSAGE: OpsLastSeenUsageHour");
             return Ok(Some(ReceivedOpsData::UsageHour(hour)));
-        }
-        OperatorWebsocketMessage::OperatorWgKey(wg_key) => {
-            return Ok(Some(ReceivedOpsData::WgKey(PublicKey::from(wg_key))))
         }
     };
     Ok(None)
