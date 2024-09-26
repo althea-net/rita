@@ -65,17 +65,14 @@ pub struct HeartbeatCache {
     exit_neighbor_rita: RitaNeighbor,
 }
 
-#[cfg(not(any(feature = "operator_debug", feature = "dev_env")))]
 lazy_static! {
-    pub static ref HEARTBEAT_SERVER_KEY: WgKey = "hizclQFo/ArWY+/9+AJ0LBY2dTiQK4smy5icM7GA5ng="
-        .parse()
-        .unwrap();
-}
-#[cfg(any(feature = "operator_debug", feature = "dev_env"))]
-lazy_static! {
-    pub static ref HEARTBEAT_SERVER_KEY: WgKey = "RECW5xQfDzo3bzaZtzepM/+qWRuFTohChKKzUqGA0n4="
-        .parse()
-        .unwrap();
+    pub static ref HEARTBEAT_SERVER_KEY: Arc<RwLock<WgKey>> = Arc::new(RwLock::new(
+        // this is a random key, it will be overwritten as soon as we connect to ops and ops sends the key over websocket
+        // until then we cannot heartbeat.
+        "hizclQFo/ArWY+/9+AJ0LBY2dTiQK4smy5icM7GA5ng="
+            .parse()
+            .unwrap()
+    ));
 }
 lazy_static! {
     pub static ref HEARTBEAT_CACHE: Arc<RwLock<Option<HeartbeatCache>>> =
@@ -326,7 +323,7 @@ fn send_udp_heartbeat_packet(
         .wg_private_key
         .expect("No private key?")
         .into();
-    let their_publickey: WgKey = *HEARTBEAT_SERVER_KEY;
+    let their_publickey: WgKey = *HEARTBEAT_SERVER_KEY.read().unwrap();
     let their_publickey = their_publickey.into();
     drop(network_settings);
 
