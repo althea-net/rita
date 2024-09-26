@@ -212,7 +212,7 @@ pub fn start_antenna_forwarder(settings: RitaClientSettings) {
         start_antenna_forwarding_proxy(
             url.to_string(),
             our_id,
-            *HEARTBEAT_SERVER_KEY,
+            *HEARTBEAT_SERVER_KEY.read().unwrap(),
             network.wg_public_key.unwrap(),
             network.wg_private_key.unwrap(),
             interfaces,

@@ -1,12 +1,15 @@
-use crate::operator_update::{
-    get_client_mbps, get_exit_con, get_hardware_info_update, get_neighbor_info, get_relay_mbps,
-    get_rita_uptime, get_user_bandwidth_usage, handle_operator_update,
+use crate::{
+    heartbeat::HEARTBEAT_SERVER_KEY,
+    operator_update::{
+        get_client_mbps, get_exit_con, get_hardware_info_update, get_neighbor_info, get_relay_mbps,
+        get_rita_uptime, get_user_bandwidth_usage, handle_operator_update,
+    },
 };
 use actix_async::System;
 use actix_web_actors::ws;
 use althea_types::{
     websockets::{EncryptedOpsWebsocketMessage, RouterWebsocketMessage},
-    Identity,
+    Identity, WgKey,
 };
 use awc::ws::Frame;
 use crypto_box::{PublicKey, SecretKey};
@@ -77,21 +80,22 @@ pub fn send_websocket_update() {
                                         return;
                                     }
                                 };
-                                let ops_pubkey;
-                                // we must receive the ops pubkey before we can proceed with encryption
+                                let mut ops_pubkey;
+                                // we must receive the ops pubkey before we can proceed with encryption and sending
                                 loop {
                                     // check if we have received the ops pubkey
                                     if let Ok(Some(msg)) =
                                         timeout(SOCKET_CHECKER_TIMEOUT, ws.next()).await
                                     {
                                         let msg = msg.unwrap();
-                                        if let Some(hour) = handle_received_operator_message(msg, &our_secretkey, None) {
-                                            match hour {
+                                        if let Some(data) = handle_received_operator_message(msg, &our_secretkey, None) {
+                                            match data {
                                                 ReceivedOpsData::WgKey(public_key) => {
                                                     ops_pubkey = public_key;
                                                     break;
                                                 },
-                                                ReceivedOpsData::UsageHour(_) => panic!("Why are we receiving a usage hour from ops on socket startup? restarting!"),
+                                                // we cannot actually decrypt any messages until we have the ops pubkey
+                                                _ => panic!("Why are we receiving a usage hour from ops on socket startup? restarting!"),
                                             }
                                         }
                                     } else {
@@ -115,7 +119,9 @@ pub fn send_websocket_update() {
                                                 ReceivedOpsData::UsageHour(hour) => { 
                                                     ops_last_seen_usage_hour = Some(hour);
                                                 },
-                                                _ => panic!("Why are we receiving a public key again from ops? restarting!"),
+                                                ReceivedOpsData::WgKey(public_key) => {
+                                                    ops_pubkey = public_key;
+                                                },
                                             }
                                         }
                                     }
@@ -164,7 +170,9 @@ pub fn send_websocket_update() {
                                         if let Some(hour) = handle_received_operator_message(msg, &our_secretkey, Some(&ops_pubkey)) {
                                             match hour {
                                                 ReceivedOpsData::UsageHour(hour) => {ops_last_seen_usage_hour = Some(hour);},
-                                                _ => panic!("Why are we receiving a public key again from ops? restarting!"),
+                                                ReceivedOpsData::WgKey(public_key) => {
+                                                    ops_pubkey = public_key;
+                                                },
                                             }
                                         }
                                     }
@@ -201,14 +209,21 @@ fn handle_received_operator_message(msg: Frame, our_secretkey: &SecretKey, ops_p
                 Ok(info) => {
                     info!("Received operator update message: {:?}", info);
                     match ops_publickey {
-                        Some(key) => {match handle_operator_update(info, our_secretkey, key) {
+                        Some(key) => match handle_operator_update(info, our_secretkey, key) {
                             Ok(data) => data,
                             Err(e) => {
                                 error!("Failed to handle operator update message: {:?}", e);
                                 None
                             }
-                        }},
-                        None => Some(ReceivedOpsData::WgKey(info.pubkey.into()))
+                        },
+                        None => {
+                            // set the heartbeat server key to the received pubkey, then return it
+                            let ops_pubkey: WgKey = info.pubkey;
+                            let mut heartbeat_server_key = HEARTBEAT_SERVER_KEY.write().unwrap();
+                            *heartbeat_server_key = ops_pubkey;
+                            warn!("Received a new public key from ops!");
+                            Some(ReceivedOpsData::WgKey(info.pubkey.into()))
+                        }
                     }
                     
                 }
