@@ -9,7 +9,6 @@ use crate::exit_manager::{get_current_exit_ip, utils::get_client_pub_ipv6};
 use crate::rita_loop::is_gateway_client;
 use crate::RitaClientError;
 use althea_kernel_interface::hardware_info::get_hardware_info;
-use althea_types::websockets::encryption::decrypt_ops_websocket_msg;
 use althea_types::websockets::{
     EncryptedOpsWebsocketMessage, OperatorAction, OperatorWebsocketMessage,
     PaymentAndNetworkSettings,
@@ -127,14 +126,13 @@ pub fn handle_operator_update(
     ops_publickey: &PublicKey,
 ) -> Result<Option<ReceivedOpsData>, RitaClientError> {
     // first try decrypting the message
-    let decrypted_message =
-        match decrypt_ops_websocket_msg(our_secretkey, ops_publickey, new_settings) {
-            Ok(message) => message,
-            Err(e) => {
-                error!("Failed to decrypt operator message {:?}", e);
-                return Err(RitaClientError::WebsocketEncryptionError(e));
-            }
-        };
+    let decrypted_message = match new_settings.decrypt(our_secretkey, ops_publickey) {
+        Ok(message) => message,
+        Err(e) => {
+            error!("Failed to decrypt operator message {:?}", e);
+            return Err(RitaClientError::WebsocketEncryptionError(e));
+        }
+    };
     // now we have to save settings after each action though
     match decrypted_message {
         OperatorWebsocketMessage::PaymentAndNetworkSettings(settings) => {
