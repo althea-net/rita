@@ -96,7 +96,6 @@ impl EncryptedRouterWebsocketMessage {
 impl OperatorWebsocketMessage {
     pub fn encrypt(
         &self,
-        our_publickey: WgKey,
         our_secretkey: &SecretKey,
         their_publickey: &PublicKey,
     ) -> EncryptedOpsWebsocketMessage {
@@ -109,7 +108,6 @@ impl OperatorWebsocketMessage {
         EncryptedOpsWebsocketMessage {
             nonce: nonce.into(),
             encrypted_ops_websocket_msg: ciphertext,
-            pubkey: our_publickey,
         }
     }
 }
@@ -178,7 +176,6 @@ mod tests {
 
         let ops_secretkey = SecretKey::generate(&mut OsRng);
         let ops_publickey = ops_secretkey.public_key();
-        let ops_wg_pub = WgKey::from(*ops_publickey.as_bytes());
 
         let message = RouterWebsocketMessage::OperatorAddress {
             id: Identity {
@@ -205,7 +202,7 @@ mod tests {
 
         // now we test the ops message:
         let message = OperatorWebsocketMessage::OperatorFee(123);
-        let encrypted_message = message.encrypt(ops_wg_pub, &ops_secretkey, &router_publickey);
+        let encrypted_message = message.encrypt(&ops_secretkey, &router_publickey);
         let decrypted_message = encrypted_message
             .decrypt(&router_secretkey, &ops_publickey)
             .expect("Failed to decrypt ops message");
