@@ -14,68 +14,17 @@ use crate::{
 
 /// Variants of this enum are the types of data that ops can receive over a websocket connection
 /// and decode from a device, replacing the old http send of all of it at once which was inefficient.
-/// data sent here must also be sent with the router ID in order for ops to process.
+/// data sent here must also be sent with the router ID in order for ops to process. This struct is
+/// encrypted in EncryptedRouterWebsocketMessage and sent to ops server, not directly as-is
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RouterWebsocketMessage {
-    OperatorAddress {
-        id: Identity,
-        address: Option<Address>,
-        /// we include a system chain here because if there is no operator address
-        /// we don't know what this router is supposed to be configured like, the best
-        /// proxy for that is the system chain value
-        chain: SystemChain,
-    },
+    OperatorAddress(WsOperatorAddressStruct),
     /// Data saved in the timeseries data struct on ops
-    TimeseriesData {
-        id: Identity,
-        /// The status of this devices peers, this is data that we want to communicate
-        /// with the operator server but don't really have space in the purely udp
-        /// heartbeat packet, neither is it required that this data be sent very often
-        /// we don't need instant updates of it. Arguably the phone number and email
-        /// values for heartbeats should come in through here.
-        neighbor_info: Vec<NeighborStatus>,
-        /// Info about the current state of this device, including it's model, CPU,
-        /// memory, and temperature if sensors are available
-        hardware_info: Option<HardwareInfo>,
-        /// This is to keep track of the rita client uptime for debugging purposes
-        /// In the event something whacko happens, serde will magically derive default value.
-        rita_uptime: Duration,
-    },
+    TimeseriesData(WsTimeseriesDataStruct),
     /// Information about the customer and the router
-    CustomerDetails {
-        id: Identity,
-        /// The user contact details, stored in exit client details but used throughout
-        /// for various reasons.
-        /// see the type definition for more details about how this type restricts values
-        contact_info: Option<ContactType>,
-        /// Details about this installation, including ip addresses, phone ip address and other
-        /// info to insert into a spreadsheet displayed by operator tools.
-        install_details: Option<InstallationDetails>,
-        /// Details about this user, including city, state, postal code and other
-        /// info to insert into a spreadsheet displayed by operator tools. Or submit
-        /// to a billing partner to ease onboarding.
-        billing_details: Option<BillingDetails>,
-    },
+    CustomerDetails(WsCustomerDetailsStruct),
     /// Information about the router's connection and bandwidth usage
-    ConnectionDetails {
-        id: Identity,
-        /// Infomation about current exit
-        exit_con: Option<ExitConnection>,
-        /// This is a user set bandwidth limit value, it will cap the users download
-        /// and upload to the provided value of their choosing. Denoted in mbps
-        user_bandwidth_limit: Option<usize>,
-        /// Details of both the Client and Relay bandwidth usage over a given period determined
-        /// by the ops_last_seen_usage_hour in OperatorUpdateMessage. When the device's last
-        /// saved usage hour is the same as the ops last seen, we are up to date. Data sent
-        /// through here gets added to a database entry for each device.
-        user_bandwidth_usage: Option<UsageTrackerTransfer>,
-        /// Current client data usage in mbps computed as the last input to the usage tracker
-        /// so an average of around 5-10 seconds
-        client_mbps: Option<u64>,
-        /// Curent relay data usage in mbps, coputed as the last input to the usage tracker
-        /// so an average of around 5-10 seconds
-        relay_mbps: Option<u64>,
-    },
+    ConnectionDetails(WsConnectionDetailsStruct),
 }
 
 // just ignore the hardware info field on the timeseries data message for now
@@ -83,44 +32,44 @@ impl PartialEq for RouterWebsocketMessage {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
-                RouterWebsocketMessage::OperatorAddress {
+                RouterWebsocketMessage::OperatorAddress(WsOperatorAddressStruct {
                     id: id1,
                     address: address1,
                     chain: chain1,
-                },
-                RouterWebsocketMessage::OperatorAddress {
+                }),
+                RouterWebsocketMessage::OperatorAddress(WsOperatorAddressStruct {
                     id: id2,
                     address: address2,
                     chain: chain2,
-                },
+                }),
             ) => id1 == id2 && address1 == address2 && chain1 == chain2,
             (
-                RouterWebsocketMessage::TimeseriesData {
+                RouterWebsocketMessage::TimeseriesData(WsTimeseriesDataStruct {
                     id: id1,
                     neighbor_info: neighbor_info1,
                     hardware_info: _hardware_info1,
                     rita_uptime: rita_uptime1,
-                },
-                RouterWebsocketMessage::TimeseriesData {
+                }),
+                RouterWebsocketMessage::TimeseriesData(WsTimeseriesDataStruct {
                     id: id2,
                     neighbor_info: neighbor_info2,
                     hardware_info: _hardware_info2,
                     rita_uptime: rita_uptime2,
-                },
+                }),
             ) => id1 == id2 && neighbor_info1 == neighbor_info2 && rita_uptime1 == rita_uptime2,
             (
-                RouterWebsocketMessage::CustomerDetails {
+                RouterWebsocketMessage::CustomerDetails(WsCustomerDetailsStruct {
                     id: id1,
                     contact_info: contact_info1,
                     install_details: install_details1,
                     billing_details: billing_details1,
-                },
-                RouterWebsocketMessage::CustomerDetails {
+                }),
+                RouterWebsocketMessage::CustomerDetails(WsCustomerDetailsStruct {
                     id: id2,
                     contact_info: contact_info2,
                     install_details: install_details2,
                     billing_details: billing_details2,
-                },
+                }),
             ) => {
                 id1 == id2
                     && contact_info1 == contact_info2
@@ -128,22 +77,22 @@ impl PartialEq for RouterWebsocketMessage {
                     && billing_details1 == billing_details2
             }
             (
-                RouterWebsocketMessage::ConnectionDetails {
+                RouterWebsocketMessage::ConnectionDetails(WsConnectionDetailsStruct {
                     id: id1,
                     exit_con: exit_con1,
                     user_bandwidth_limit: user_bandwidth_limit1,
                     user_bandwidth_usage: user_bandwidth_usage1,
                     client_mbps: client_mbps1,
                     relay_mbps: relay_mbps1,
-                },
-                RouterWebsocketMessage::ConnectionDetails {
+                }),
+                RouterWebsocketMessage::ConnectionDetails(WsConnectionDetailsStruct {
                     id: id2,
                     exit_con: exit_con2,
                     user_bandwidth_limit: user_bandwidth_limit2,
                     user_bandwidth_usage: user_bandwidth_usage2,
                     client_mbps: client_mbps2,
                     relay_mbps: relay_mbps2,
-                },
+                }),
             ) => {
                 id1 == id2
                     && exit_con1 == exit_con2
@@ -155,6 +104,67 @@ impl PartialEq for RouterWebsocketMessage {
             _ => false,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WsOperatorAddressStruct {
+    pub id: Identity,
+    pub address: Option<Address>,
+    /// we include a system chain here because if there is no operator address
+    /// we don't know what this router is supposed to be configured like, the best
+    /// proxy for that is the system chain value
+    pub chain: SystemChain,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WsTimeseriesDataStruct {
+    pub id: Identity,
+    /// The status of this devices peers, this is data that we want to communicate
+    /// with the operator server but don't really have space in the purely udp
+    /// heartbeat packet, neither is it required that this data be sent very often
+    /// we don't need instant updates of it. Arguably the phone number and email
+    /// values for heartbeats should come in through here.
+    pub neighbor_info: Vec<NeighborStatus>,
+    /// Info about the current state of this device, including it's model, CPU,
+    /// memory, and temperature if sensors are available
+    pub hardware_info: Option<HardwareInfo>,
+    /// This is to keep track of the rita client uptime for debugging purposes
+    /// In the event something whacko happens, serde will magically derive default value.
+    pub rita_uptime: Duration,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WsCustomerDetailsStruct {
+    pub id: Identity,
+    /// The user contact details, stored in exit client details but used throughout
+    /// for various reasons.
+    /// see the type definition for more details about how this type restricts values
+    pub contact_info: Option<ContactType>,
+    /// Details about this installation, including ip addresses, phone ip address and other
+    /// info to insert into a spreadsheet displayed by operator tools.
+    pub install_details: Option<InstallationDetails>,
+    /// Details about this user, including city, state, postal code and other
+    /// info to insert into a spreadsheet displayed by operator tools. Or submit
+    /// to a billing partner to ease onboarding.
+    pub billing_details: Option<BillingDetails>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WsConnectionDetailsStruct {
+    pub id: Identity,
+    /// Infomation about current exit
+    pub exit_con: Option<ExitConnection>,
+    /// This is a user set bandwidth limit value, it will cap the users download
+    /// and upload to the provided value of their choosing. Denoted in mbps
+    pub user_bandwidth_limit: Option<usize>,
+    /// Details of both the Client and Relay bandwidth usage over a given period determined
+    /// by the ops_last_seen_usage_hour in OperatorUpdateMessage. When the device's last
+    /// saved usage hour is the same as the ops last seen, we are up to date. Data sent
+    /// through here gets added to a database entry for each device.
+    pub user_bandwidth_usage: Option<UsageTrackerTransfer>,
+    /// Current client data usage in mbps computed as the last input to the usage tracker
+    /// so an average of around 5-10 seconds
+    pub client_mbps: Option<u64>,
+    /// Curent relay data usage in mbps, coputed as the last input to the usage tracker
+    /// so an average of around 5-10 seconds
+    pub relay_mbps: Option<u64>,
 }
 
 /// Something the operator may want to do to a router under their control
@@ -249,7 +259,8 @@ pub struct PaymentAndNetworkSettings {
 }
 
 /// Variants of this enum are the types of data that ops can send a router over a websocket connection,
-/// generally when responding to messages from routers or syncing with operator tools.
+/// generally when responding to messages from routers or syncing with operator tools. This struct is
+/// encrypted in OperatorWebsocketResponse::EncryptedMessage and sent to the router- not sent directly!
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OperatorWebsocketMessage {
     /// Contains all the payment and network settings to be changed from ops

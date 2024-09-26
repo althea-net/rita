@@ -5,7 +5,10 @@ use crate::operator_update::{
 use actix_async::System;
 use actix_web_actors::ws;
 use althea_types::{
-    websockets::{OperatorWebsocketResponse, RouterWebsocketMessage},
+    websockets::{
+        OperatorWebsocketResponse, RouterWebsocketMessage, WsConnectionDetailsStruct,
+        WsCustomerDetailsStruct, WsOperatorAddressStruct, WsTimeseriesDataStruct,
+    },
     Identity,
 };
 use awc::ws::Frame;
@@ -78,10 +81,10 @@ pub fn send_websocket_update() {
                                     }
                                 };
                                 let mut ops_pubkey;
-                                // we must receive the ops pubkey before we can proceed with encryption and sending- ops will send
-                                // its public WgKey down as ping response so we must first ping and get our key
+                                // we must receive the ops pubkey before we can proceed with encryption and sending! 
+                                // ops sends this on websocket open and on ping response, so if for some reason we don't receive it 
+                                // automatically after opening the connection, send a ping
                                 loop {
-                                    ws.send(ws::Message::Ping("ping".into())).await.unwrap();
                                     // check if we have received the ops pubkey
                                     if let Ok(Some(msg)) =
                                         timeout(SOCKET_CHECKER_TIMEOUT, ws.next()).await
@@ -98,6 +101,7 @@ pub fn send_websocket_update() {
                                             }
                                         }
                                     } else {
+                                        ws.send(ws::Message::Ping("ping".into())).await.unwrap();
                                         thread::sleep(Duration::from_secs(1));
                                     }
                                 }
@@ -211,7 +215,7 @@ fn handle_received_operator_message(
             // check if we got a wg key or a message
             match message {
                 Ok(message) => {
-                    info!("Received encrypted operator update message");
+                    info!("Received operator websocket message");
                     match handle_operator_update(message, our_secretkey, ops_publickey) {
                         Ok(data) => data,
                         Err(e) => {
@@ -248,12 +252,12 @@ fn get_ten_minute_update_data(
     let contact_info = get_contact_info();
     let install_details = get_install_details();
     let billing_details = get_billing_details();
-    let data = RouterWebsocketMessage::CustomerDetails {
+    let data = RouterWebsocketMessage::CustomerDetails(WsCustomerDetailsStruct {
         id,
         contact_info,
         install_details,
         billing_details,
-    };
+    });
     // encrypt the data
     let encrypted_json = data
         .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
@@ -262,7 +266,8 @@ fn get_ten_minute_update_data(
 
     let address = get_operator_address();
     let chain = get_system_chain();
-    let data = RouterWebsocketMessage::OperatorAddress { id, address, chain };
+    let data =
+        RouterWebsocketMessage::OperatorAddress(WsOperatorAddressStruct { id, address, chain });
     let encrypted_json = data
         .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
         .json();
@@ -284,14 +289,14 @@ fn get_five_minute_update_data(
     let user_bandwidth_usage = get_user_bandwidth_usage(ops_last_seen_usage_hour);
     let client_mbps = get_client_mbps();
     let relay_mbps = get_relay_mbps();
-    let data = RouterWebsocketMessage::ConnectionDetails {
+    let data = RouterWebsocketMessage::ConnectionDetails(WsConnectionDetailsStruct {
         id,
         exit_con,
         user_bandwidth_limit,
         user_bandwidth_usage,
         client_mbps,
         relay_mbps,
-    };
+    });
     let encrypted_json = data
         .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
         .json();
@@ -310,12 +315,12 @@ fn get_ten_second_update_data(
     let neighbor_info = get_neighbor_info();
     let hardware_info = get_hardware_info_update();
     let rita_uptime = get_rita_uptime();
-    let data = RouterWebsocketMessage::TimeseriesData {
+    let data = RouterWebsocketMessage::TimeseriesData(WsTimeseriesDataStruct {
         id,
         neighbor_info,
         hardware_info,
         rita_uptime,
-    };
+    });
     let encrypted_json = data
         .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
         .json();
