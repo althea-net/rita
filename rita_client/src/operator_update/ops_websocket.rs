@@ -5,10 +5,7 @@ use crate::operator_update::{
 use actix_async::System;
 use actix_web_actors::ws;
 use althea_types::{
-    websockets::{
-        encryption::encrypt_router_websocket_msg, EncryptedOpsWebsocketMessage,
-        RouterWebsocketMessage,
-    },
+    websockets::{EncryptedOpsWebsocketMessage, RouterWebsocketMessage},
     Identity,
 };
 use awc::ws::Frame;
@@ -253,17 +250,18 @@ fn get_ten_minute_update_data(
         billing_details,
     };
     // encrypt the data
-    let encrypted = encrypt_router_websocket_msg(id.wg_public_key, our_secretkey, ops_pubkey, data);
-    let serialized = serde_json::to_vec(&encrypted).unwrap();
-    messages.push(ws::Message::Binary(serialized.into()));
+    let encrypted_json = data
+        .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
+        .json();
+    messages.push(ws::Message::Binary(encrypted_json.into()));
 
     let address = get_operator_address();
     let chain = get_system_chain();
     let data = RouterWebsocketMessage::OperatorAddress { id, address, chain };
-    let encrypted = encrypt_router_websocket_msg(id.wg_public_key, our_secretkey, ops_pubkey, data);
-    let serialized = serde_json::to_vec(&encrypted).unwrap();
-    messages.push(ws::Message::Binary(serialized.into()));
-
+    let encrypted_json = data
+        .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
+        .json();
+    messages.push(ws::Message::Binary(encrypted_json.into()));
     messages
 }
 
@@ -289,10 +287,10 @@ fn get_five_minute_update_data(
         client_mbps,
         relay_mbps,
     };
-    let encrypted = encrypt_router_websocket_msg(id.wg_public_key, our_secretkey, ops_pubkey, data);
-    let serialized = serde_json::to_vec(&encrypted).unwrap();
-    messages.push(ws::Message::Binary(serialized.into()));
-
+    let encrypted_json = data
+        .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
+        .json();
+    messages.push(ws::Message::Binary(encrypted_json.into()));
     messages
 }
 
@@ -313,9 +311,10 @@ fn get_ten_second_update_data(
         hardware_info,
         rita_uptime,
     };
-    let encrypted = encrypt_router_websocket_msg(id.wg_public_key, our_secretkey, ops_pubkey, data);
-    let serialized = serde_json::to_vec(&encrypted).unwrap();
-    messages.push(ws::Message::Binary(serialized.into()));
+    let encrypted_json = data
+        .encrypt(id.wg_public_key, our_secretkey, ops_pubkey)
+        .json();
+    messages.push(ws::Message::Binary(encrypted_json.into()));
 
     messages
 }
