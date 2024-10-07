@@ -1,0 +1,35 @@
+---
+# Sets up Exit Root of Trust service on systemd systems
+
+- name: Template Exit Trust Root service file
+  template:
+    src: exit-trust-root.service.j2
+    dest: /etc/systemd/system/exit-trust-root.service
+  become: true
+
+- name: Set exit trust root to run on startup
+  systemd:
+    daemon_reload: yes
+    name: exit-trust-root
+    state: restarted
+    enabled: yes
+  become: true
+
+- name: Wait for Quick crashes
+  pause:
+    seconds: 5
+
+- name: Check if server is running
+  command: systemctl status exit-trust-root
+  ignore_errors: true
+  changed_when: false
+  register: service_exit_trust_root_status
+
+- name: Report status of server
+  fail:
+    msg: |
+      Service exit-trust-root is not running.
+      Output of `systemctl status exit-trust-root`:
+      {{ service_exit_trust_root_status.stdout }}
+      {{ service_exit_trust_root_status.stderr }}
+  when: service_exit_trust_root_status is failed
