@@ -1,0 +1,37 @@
+[package]
+name = "exit_trust_root"
+version = "0.21.5"
+edition = "2021"
+license = "Apache-2.0"
+description = "Server to provide a root of exit trust for Althea routers"
+
+[[bin]]
+name = "exit_trust_root"
+path = "src/bin.rs"
+
+[dependencies]
+althea_types = { path = "../althea_types" }
+actix-web = { version = "4.9", features = ["rustls","macros"] }
+openssl-probe = "0.1.5"
+env_logger = "0.11"
+rustls = "0.20"
+rustls-pemfile = "0.3"
+log = "0.4"
+clarity = "1.4"
+web30 = "1.4"
+crypto_box = "0.9"
+lazy_static = "1.5"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+toml = "0.5"
+rita_client_registration = { path = "../rita_client_registration" }
+# we don't call or us OpenSSL directly in this codebase, but by adding
+# this dependency with this feature we can enforce that openssl is compiled
+# in 'vendored' mode all the way down the tree. What this means is that we use
+# an openssl implementation from the crate and not from the system, simplifying
+# our build process for a lot of cross-compile situations
+openssl = { version = "0.10", features = ["vendored"] }
+
+[features]
+development = []
