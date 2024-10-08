@@ -7,9 +7,9 @@ rm ../scripts/exit_trust_root
 set -e
 # set for target cpu of target machine
 cross build --target x86_64-unknown-linux-musl -p exit_trust_root --bin exit_trust_root
-cp target/x86_64-unknown-linux-musl/exit_trust_root ../scripts
+cp ../target/x86_64-unknown-linux-musl/debug/exit_trust_root ../scripts
 popd
 
 pushd $DIR
-ansible-playbook -i hosts  deploy-exit-trust-root.yml
+ansible-playbook -i hosts  deploy-exit-root-server.yml
 popd
