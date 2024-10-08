@@ -5,6 +5,8 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
+use std::str;
+use std::str::Utf8Error;
 use std::{env, fmt};
 use std::{
     error::Error,
@@ -15,45 +17,38 @@ use std::{
     num::ParseFloatError,
     process::{Command, Output},
 };
-use std::{
-    str::Utf8Error,
-    sync::{Arc, Mutex},
-};
 
-use std::str;
-
-mod babel;
+pub mod babel;
 pub mod bridge_tools;
-mod check_cron;
-mod counter;
-mod create_wg_key;
-mod delete_tunnel;
-mod dns;
+pub mod check_cron;
+pub mod counter;
+pub mod create_wg_key;
+pub mod dns;
 pub mod exit_client_tunnel;
-mod exit_server_tunnel;
+pub mod exit_server_tunnel;
 pub mod file_io;
-mod fs_sync;
+pub mod fs_sync;
 mod get_neighbors;
 pub mod hardware_info;
-mod interface_tools;
-mod ip_addr;
+pub mod interface_tools;
+pub mod ip_addr;
 pub mod ip_neigh;
-mod ip_route;
+pub mod ip_route;
 mod iptables;
-mod is_openwrt;
-mod link_local_tools;
-mod manipulate_uci;
+pub mod is_openwrt;
+pub mod link_local_tools;
+pub mod manipulate_uci;
 mod netfilter;
 pub mod netns;
 pub mod open_tunnel;
-mod openwrt_ubus;
+pub mod openwrt_ubus;
 pub mod opkg_feeds;
-mod ping_check;
-mod set_system_password;
-mod setup_wg_if;
+pub mod ping_check;
+pub mod set_system_password;
+pub mod setup_wg_if;
 pub mod time;
-mod traffic_control;
-mod udp_socket_table;
+pub mod traffic_control;
+pub mod udp_socket_table;
 pub mod upgrade;
 pub mod wg_iface_counter;
 
@@ -71,9 +66,6 @@ use std::fmt::Result as FormatResult;
 use std::io::Error as IoError;
 use std::net::AddrParseError;
 use std::string::FromUtf8Error;
-
-type CommandFunction =
-    Box<dyn FnMut(String, Vec<String>) -> Result<Output, KernelInterfaceError> + Send>;
 
 #[derive(Clone, Debug)]
 pub enum KernelInterfaceError {
@@ -194,25 +186,6 @@ impl From<PingError> for KernelInterfaceError {
     }
 }
 
-#[cfg(test)]
-lazy_static! {
-    pub static ref KI: Box<dyn KernelInterface> = Box::new(TestCommandRunner {
-        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
-            panic!("kernel interface used before initialized");
-        })))
-    });
-}
-
-#[cfg(not(test))]
-lazy_static! {
-    pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
-}
-
-pub trait CommandRunner {
-    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, KernelInterfaceError>;
-    fn set_mock(&self, mock: CommandFunction);
-}
-
 // a quick throwaway function to print arguments arrays so that they can be copy/pasted from logs
 fn print_str_array(input: &[&str]) -> String {
     let mut output = String::new();
@@ -222,86 +195,51 @@ fn print_str_array(input: &[&str]) -> String {
     output
 }
 
-pub struct LinuxCommandRunner;
-
-impl CommandRunner for LinuxCommandRunner {
-    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, KernelInterfaceError> {
-        let start = Instant::now();
-        let output = match Command::new(program).args(args).output() {
-            Ok(o) => o,
-            Err(e) => {
-                if e.kind() == ErrorKind::NotFound {
-                    error!("The {:?} binary was not found. Please install a package that provides it. PATH={:?}", program, env::var("PATH"));
-                }
-                return Err(e.into());
+pub fn run_command(program: &str, args: &[&str]) -> Result<Output, KernelInterfaceError> {
+    let start = Instant::now();
+    let output = match Command::new(program).args(args).output() {
+        Ok(o) => o,
+        Err(e) => {
+            if e.kind() == ErrorKind::NotFound {
+                error!("The {:?} binary was not found. Please install a package that provides it. PATH={:?}", program, env::var("PATH"));
             }
-        };
+            return Err(e.into());
+        }
+    };
 
+    trace!(
+        "Command {} {} returned: {:?}",
+        program,
+        print_str_array(args),
+        output
+    );
+    if !output.status.success() {
         trace!(
-            "Command {} {} returned: {:?}",
+            "Command {} {} returned: an error {:?}",
             program,
             print_str_array(args),
             output
         );
-        if !output.status.success() {
-            trace!(
-                "Command {} {} returned: an error {:?}",
-                program,
-                print_str_array(args),
-                output
-            );
-        }
-        trace!(
-            "command completed in {}s {}ms",
-            start.elapsed().as_secs(),
-            start.elapsed().subsec_millis()
+    }
+    trace!(
+        "command completed in {}s {}ms",
+        start.elapsed().as_secs(),
+        start.elapsed().subsec_millis()
+    );
+
+    if start.elapsed().as_secs() > 5 {
+        error!(
+            "Command {} {} took more than five seconds to complete!",
+            program,
+            print_str_array(args)
         );
-
-        if start.elapsed().as_secs() > 5 {
-            error!(
-                "Command {} {} took more than five seconds to complete!",
-                program,
-                print_str_array(args)
-            );
-        } else if start.elapsed().as_secs() > 1 {
-            warn!(
-                "Command {} {} took more than one second to complete!",
-                program,
-                print_str_array(args)
-            );
-        }
-
-        Ok(output)
+    } else if start.elapsed().as_secs() > 1 {
+        warn!(
+            "Command {} {} took more than one second to complete!",
+            program,
+            print_str_array(args)
+        );
     }
 
-    fn set_mock(
-        &self,
-        _mock: Box<dyn FnMut(String, Vec<String>) -> Result<Output, KernelInterfaceError> + Send>,
-    ) {
-        unimplemented!()
-    }
+    Ok(output)
 }
-
-pub struct TestCommandRunner {
-    pub run_command: Arc<Mutex<CommandFunction>>,
-}
-
-impl CommandRunner for TestCommandRunner {
-    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, KernelInterfaceError> {
-        let mut args_owned = Vec::new();
-        for a in args {
-            args_owned.push((*a).to_string())
-        }
-
-        (*self.run_command.lock().unwrap())(program.to_string(), args_owned)
-    }
-
-    fn set_mock(&self, mock: CommandFunction) {
-        *self.run_command.lock().unwrap() = mock
-    }
-}
-
-pub trait KernelInterface: CommandRunner + Sync + Send {}
-
-impl KernelInterface for LinuxCommandRunner {}
-impl KernelInterface for TestCommandRunner {}

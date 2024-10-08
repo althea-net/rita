@@ -1,8 +1,14 @@
 //! A generalized interface for modifying networking interface assignments using UCI
-use crate::{RitaCommonError, KI};
+use crate::RitaCommonError;
 use actix_web_async::http::StatusCode;
 use actix_web_async::web::Path;
 use actix_web_async::{web::Json, HttpRequest, HttpResponse};
+use althea_kernel_interface::fs_sync::fs_sync;
+use althea_kernel_interface::manipulate_uci::{
+    del_uci_var, get_uci_var, openwrt_reset_network, openwrt_reset_wireless, set_uci_var,
+    uci_commit, uci_revert, uci_show,
+};
+use althea_kernel_interface::{is_openwrt::is_openwrt, run_command};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::net::Ipv4Addr;
@@ -63,7 +69,7 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, RitaCommonErro
     let mut retval = HashMap::new();
 
     // Wired
-    for (setting_name, value) in KI.uci_show(Some("network"))? {
+    for (setting_name, value) in uci_show(Some("network"))? {
         // Only non-loopback non-bridge interface names should get past
         if setting_name.contains("ifname") && !value.contains("backhaul") && value != "lo" {
             // it's a list and we need to handle that
@@ -108,7 +114,7 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
         s if s.contains("lte") => InterfaceMode::LTE,
         s if s.contains("backhaul") => {
             let prefix = "network.backhaul";
-            let backhaul = KI.uci_show(Some(prefix))?;
+            let backhaul = uci_show(Some(prefix))?;
             trace!("{:?}", backhaul);
             let proto = if let Some(val) = backhaul.get(&format!("{prefix}.proto")) {
                 val
@@ -221,7 +227,7 @@ fn multiset_interfaces(
     trace!("Successfully transformed ethernet mode, rebooting");
     // reboot has been moved here to avoid doing it after every interface, in theory we could do this without rebooting
     // and some attention has been paid to maintaining that possibility
-    KI.run_command("reboot", &[])?;
+    run_command("reboot", &[])?;
     Ok(())
 }
 
@@ -259,23 +265,23 @@ pub fn ethernet_transform_mode(
         InterfaceMode::Wan | InterfaceMode::StaticWan { .. } => {
             network.external_nic = None;
 
-            let ret = KI.del_uci_var("network.backhaul");
+            let ret = del_uci_var("network.backhaul");
             return_codes.push(ret);
         }
         // LTE is the same
         InterfaceMode::LTE => {
             network.external_nic = None;
 
-            let ret = KI.del_uci_var("network.lte");
+            let ret = del_uci_var("network.lte");
             return_codes.push(ret);
         }
         // LAN is a bridge and the lan bridge must always remain because things
         // like WiFi interfaces are attached to it. So we just remove the interface
         // from the list
         InterfaceMode::Lan => {
-            let list = KI.get_uci_var("network.lan.ifname")?;
+            let list = get_uci_var("network.lan.ifname")?;
             let new_list = list_remove(&list, ifname);
-            let ret = KI.set_uci_var("network.lan.ifname", &new_list);
+            let ret = set_uci_var("network.lan.ifname", &new_list);
             return_codes.push(ret);
         }
         // remove the section from the network and rita config, peer listener watches this setting
@@ -283,7 +289,7 @@ pub fn ethernet_transform_mode(
         InterfaceMode::Mesh => {
             network.peer_interfaces.remove(ifname);
 
-            let ret = KI.del_uci_var(&filtered_ifname);
+            let ret = del_uci_var(&filtered_ifname);
             return_codes.push(ret);
         }
         InterfaceMode::Unknown => unimplemented!(),
@@ -294,11 +300,11 @@ pub fn ethernet_transform_mode(
         InterfaceMode::Wan => {
             network.external_nic = Some(ifname.to_string());
 
-            let ret = KI.set_uci_var("network.backhaul", "interface");
+            let ret = set_uci_var("network.backhaul", "interface");
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
+            let ret = set_uci_var("network.backhaul.ifname", ifname);
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.backhaul.proto", "dhcp");
+            let ret = set_uci_var("network.backhaul.proto", "dhcp");
             return_codes.push(ret);
         }
         InterfaceMode::StaticWan {
@@ -308,45 +314,45 @@ pub fn ethernet_transform_mode(
         } => {
             network.external_nic = Some(ifname.to_string());
 
-            let ret = KI.set_uci_var("network.backhaul", "interface");
+            let ret = set_uci_var("network.backhaul", "interface");
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
+            let ret = set_uci_var("network.backhaul.ifname", ifname);
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.backhaul.proto", "static");
+            let ret = set_uci_var("network.backhaul.proto", "static");
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.backhaul.netmask", &format!("{netmask}"));
+            let ret = set_uci_var("network.backhaul.netmask", &format!("{netmask}"));
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.backhaul.ipaddr", &format!("{ipaddr}"));
+            let ret = set_uci_var("network.backhaul.ipaddr", &format!("{ipaddr}"));
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.backhaul.gateway", &format!("{gateway}"));
+            let ret = set_uci_var("network.backhaul.gateway", &format!("{gateway}"));
             return_codes.push(ret);
         }
         InterfaceMode::LTE => {
             network.external_nic = Some(ifname.to_string());
 
-            let ret = KI.set_uci_var("network.lte", "interface");
+            let ret = set_uci_var("network.lte", "interface");
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.lte.ifname", ifname);
+            let ret = set_uci_var("network.lte.ifname", ifname);
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.lte.proto", "dhcp");
+            let ret = set_uci_var("network.lte.proto", "dhcp");
             return_codes.push(ret);
         }
         // since we left lan mostly unmodified we just pop in the ifname
         InterfaceMode::Lan => {
             trace!("Converting interface to lan with ifname {:?}", ifname);
-            let ret = KI.get_uci_var("network.lan.ifname");
+            let ret = get_uci_var("network.lan.ifname");
             match ret {
                 Ok(list) => {
                     trace!("The existing LAN interfaces list is {:?}", list);
                     let new_list = list_add(&list, ifname);
                     trace!("Setting the new list {:?}", new_list);
-                    let ret = KI.set_uci_var("network.lan.ifname", &new_list);
+                    let ret = set_uci_var("network.lan.ifname", &new_list);
                     return_codes.push(ret);
                 }
                 Err(e) => {
                     if e.to_string().contains("Entry not found") {
                         trace!("No LAN interfaces found, setting one now");
-                        let ret = KI.set_uci_var("network.lan.ifname", ifname);
+                        let ret = set_uci_var("network.lan.ifname", ifname);
                         return_codes.push(ret);
                     } else {
                         warn!("Trying to read lan ifname returned {:?}", e);
@@ -358,11 +364,11 @@ pub fn ethernet_transform_mode(
         InterfaceMode::Mesh => {
             network.peer_interfaces.insert(ifname.to_string());
 
-            let ret = KI.set_uci_var(&filtered_ifname, "interface");
+            let ret = set_uci_var(&filtered_ifname, "interface");
             return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("{filtered_ifname}.ifname"), ifname);
+            let ret = set_uci_var(&format!("{filtered_ifname}.ifname"), ifname);
             return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("{filtered_ifname}.proto"), "static");
+            let ret = set_uci_var(&format!("{filtered_ifname}.proto"), "static");
             return_codes.push(ret);
         }
         InterfaceMode::Unknown => unimplemented!(),
@@ -377,7 +383,7 @@ pub fn ethernet_transform_mode(
     }
     let mut rita_client = settings::get_rita_client();
     if !error_occured.is_empty() {
-        let res = KI.uci_revert("network");
+        let res = uci_revert("network");
         rita_client.network = old_network_settings;
         settings::set_rita_client(rita_client);
         //bail!("Error running UCI commands! Revert attempted: {:?}", res);
@@ -394,8 +400,8 @@ pub fn ethernet_transform_mode(
         }
     }
 
-    KI.uci_commit("network")?;
-    KI.openwrt_reset_network()?;
+    uci_commit("network")?;
+    openwrt_reset_network()?;
 
     rita_client.network = network;
     settings::set_rita_client(rita_client);
@@ -407,7 +413,7 @@ pub fn ethernet_transform_mode(
 
     trace!("Transforming ethernet");
     // We edited disk contents, force global sync
-    KI.fs_sync()?;
+    fs_sync()?;
 
     Ok(())
 }
@@ -419,13 +425,13 @@ pub fn ethernet_transform_mode(
 /// to router wireless meshing'.
 
 fn wlan_toggle_get(uci_spec: &str) -> Result<bool, RitaCommonError> {
-    if !KI.is_openwrt() {
+    if !is_openwrt() {
         return Err(RitaCommonError::MiscStringError(
             "Not an OpenWRT device!".to_string(),
         ));
     }
     let bad_wireless = "Wireless config not correct";
-    let current_state = KI.uci_show(Some(uci_spec))?;
+    let current_state = uci_show(Some(uci_spec))?;
     let current_state = match current_state.get(uci_spec) {
         Some(val) => val,
         None => return Err(RitaCommonError::MiscStringError(bad_wireless.to_string())),
@@ -459,7 +465,7 @@ pub async fn wlan_mesh_get(_: HttpRequest) -> HttpResponse {
 }
 
 fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaCommonError> {
-    if !KI.is_openwrt() {
+    if !is_openwrt() {
         return Err(RitaCommonError::MiscStringError(
             "Not an OpenWRT device!".to_string(),
         ));
@@ -467,7 +473,7 @@ fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaCommonError>
     let bad_wireless = "Wireless config not correct";
     trace!("wlan toggle: uci_spec {}, enabled: {}", uci_spec, enabled,);
 
-    let current_state = KI.uci_show(Some(uci_spec))?;
+    let current_state = uci_show(Some(uci_spec))?;
     let current_state = match current_state.get(uci_spec) {
         Some(val) => val,
         None => return Err(RitaCommonError::MiscStringError(bad_wireless.to_string())),
@@ -486,13 +492,13 @@ fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaCommonError>
 
     // remember it's a 'disabled' toggle so we want to set it to zero to be 'enabled'
     let res = if enabled {
-        KI.set_uci_var(uci_spec, "0")
+        set_uci_var(uci_spec, "0")
     } else {
-        KI.set_uci_var(uci_spec, "1")
+        set_uci_var(uci_spec, "1")
     };
 
     if let Err(e) = res {
-        let res_b = KI.uci_revert("wireless");
+        let res_b = uci_revert("wireless");
         if let Err(re) = res_b {
             return Err(RitaCommonError::InterfaceToggleError {
                 main_error: vec![e],
@@ -506,13 +512,13 @@ fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaCommonError>
         }
     }
 
-    KI.uci_commit("wireless")?;
-    KI.openwrt_reset_wireless()?;
+    uci_commit("wireless")?;
+    openwrt_reset_wireless()?;
 
     // We edited disk contents, force global sync
-    KI.fs_sync()?;
+    fs_sync()?;
 
-    KI.run_command("reboot", &[])?;
+    run_command("reboot", &[])?;
 
     Ok(())
 }

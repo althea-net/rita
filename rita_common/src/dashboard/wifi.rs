@@ -1,10 +1,16 @@
 //! These endpoints are used to modify mundane wireless settings
 
 use crate::dashboard::nickname::maybe_set_nickname;
-use crate::{RitaCommonError, KI};
+use crate::RitaCommonError;
 use ::actix_web_async::http::StatusCode;
 use ::actix_web_async::web::Path;
 use ::actix_web_async::{web::Json, HttpRequest, HttpResponse};
+use althea_kernel_interface::exit_client_tunnel::create_client_nat_rules;
+use althea_kernel_interface::fs_sync::fs_sync;
+use althea_kernel_interface::manipulate_uci::{
+    get_uci_var, openwrt_reset_wireless, set_uci_var, uci_commit,
+};
+use althea_kernel_interface::openwrt_ubus::ubus_call;
 use althea_types::{
     FromStr, WifiChannel, WifiDisabled, WifiPass, WifiSecurity, WifiSsid, WifiToken,
 };
@@ -206,12 +212,12 @@ pub fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), RitaCommonError> {
     let iface_name = wifi_ssid.radio.clone();
     let ssid = wifi_ssid.ssid.clone();
     let section_name = format!("default_{iface_name}");
-    KI.set_uci_var(&format!("wireless.{section_name}.ssid"), &ssid)?;
+    set_uci_var(&format!("wireless.{section_name}.ssid"), &ssid)?;
 
-    KI.uci_commit("wireless")?;
+    uci_commit("wireless")?;
 
     // We edited disk contents, force global sync
-    KI.fs_sync()?;
+    fs_sync()?;
 
     // set the nickname with the first SSID change may fail
     // if the ssid is too long but don't block on that
@@ -231,14 +237,14 @@ pub fn reset_wifi_pass() -> Result<(), RitaCommonError> {
         set_pass(&pass)?;
     }
 
-    KI.uci_commit("wireless")?;
-    KI.openwrt_reset_wireless()?;
+    uci_commit("wireless")?;
+    openwrt_reset_wireless()?;
 
     // We edited disk contents, force global sync
-    KI.fs_sync()?;
+    fs_sync()?;
 
     // we have invalidated the old nat rules, update them
-    KI.create_client_nat_rules()?;
+    create_client_nat_rules()?;
 
     Ok(())
 }
@@ -258,16 +264,15 @@ fn set_pass(wifi_pass: &WifiPass) -> Result<(), RitaCommonError> {
     let iface_name = wifi_pass.radio.clone();
     let pass = wifi_pass.pass.clone();
     let section_name = format!("default_{iface_name}");
-    KI.set_uci_var(&format!("wireless.{section_name}.key"), &pass)?;
+    set_uci_var(&format!("wireless.{section_name}.key"), &pass)?;
 
     Ok(())
 }
 
 fn set_channel(wifi_channel: &WifiChannel) -> Result<(), RitaCommonError> {
-    let current_channel: u16 = KI
-        .get_uci_var(&format!("wireless.{}.channel", wifi_channel.radio))?
-        .parse()?;
-    let channel_width = KI.get_uci_var(&format!("wireless.{}.htmode", wifi_channel.radio))?;
+    let current_channel: u16 =
+        get_uci_var(&format!("wireless.{}.channel", wifi_channel.radio))?.parse()?;
+    let channel_width = get_uci_var(&format!("wireless.{}.htmode", wifi_channel.radio))?;
 
     if let Err(e) = validate_channel(
         current_channel,
@@ -279,7 +284,7 @@ fn set_channel(wifi_channel: &WifiChannel) -> Result<(), RitaCommonError> {
         return Err(e.into());
     }
 
-    KI.set_uci_var(
+    set_uci_var(
         &format!("wireless.{}.channel", wifi_channel.radio),
         &wifi_channel.channel.to_string(),
     )?;
@@ -294,7 +299,7 @@ fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaCommonError> {
         // think radio0, radio1
         let iface_name = wifi_security.radio.clone();
         let section_name = format!("default_{iface_name}");
-        KI.set_uci_var(
+        set_uci_var(
             &format!("wireless.{section_name}.encryption"),
             &parsed.as_config_value(),
         )?;
@@ -310,13 +315,13 @@ fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaCommonError> {
 /// Disables the wifi on the specified radio
 fn set_disabled(wifi_disabled: &WifiDisabled) -> Result<(), RitaCommonError> {
     let current_disabled: bool =
-        KI.get_uci_var(&format!("wireless.{}.disabled", wifi_disabled.radio))? == "1";
+        get_uci_var(&format!("wireless.{}.disabled", wifi_disabled.radio))? == "1";
 
     if current_disabled == wifi_disabled.disabled {
         return Ok(());
     }
 
-    KI.set_uci_var(
+    set_uci_var(
         &format!("wireless.{}.disabled", wifi_disabled.radio),
         if wifi_disabled.disabled { "1" } else { "0" },
     )?;
@@ -392,25 +397,25 @@ pub fn set_wifi_multi_internal(wifi_changes: Vec<WifiToken>) -> HttpResponse {
         };
     }
 
-    if let Err(e) = KI.uci_commit("wireless") {
+    if let Err(e) = uci_commit("wireless") {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(ErrorJsonResponse {
             error: format!("{e}"),
         });
     }
-    if let Err(e) = KI.openwrt_reset_wireless() {
+    if let Err(e) = openwrt_reset_wireless() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(ErrorJsonResponse {
             error: format!("{e}"),
         });
     }
 
     // We edited disk contents, force global sync
-    if let Err(e) = KI.fs_sync() {
+    if let Err(e) = fs_sync() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(ErrorJsonResponse {
             error: format!("{e}"),
         });
     }
     // we have invalidated the old nat rules, update them
-    if let Err(e) = KI.create_client_nat_rules() {
+    if let Err(e) = create_client_nat_rules() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(ErrorJsonResponse {
             error: format!("{e}"),
         });
@@ -521,7 +526,7 @@ pub async fn get_allowed_wifi_channels(radio: Path<String>) -> HttpResponse {
     debug!("/wifi_settings/get_channels hit with {:?}", radio);
     let radio = radio.into_inner();
 
-    let current_channel: u16 = match KI.get_uci_var(&format!("wireless.{radio}.channel")) {
+    let current_channel: u16 = match get_uci_var(&format!("wireless.{radio}.channel")) {
         Ok(uci) => match uci.parse() {
             Ok(a) => a,
             Err(e) => {
@@ -532,7 +537,7 @@ pub async fn get_allowed_wifi_channels(radio: Path<String>) -> HttpResponse {
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e}"));
         }
     };
-    let five_channel_width = match KI.get_uci_var(&format!("wireless.{radio}.htmode")) {
+    let five_channel_width = match get_uci_var(&format!("wireless.{radio}.htmode")) {
         Ok(a) => a,
         Err(e) => {
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e}"));
@@ -619,7 +624,7 @@ pub async fn get_wifi_config(_req: HttpRequest) -> HttpResponse {
 pub fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaCommonError> {
     let mut interfaces = Vec::new();
     let mut devices = HashMap::new();
-    let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")?;
+    let config = ubus_call("uci", "get", "{ \"config\": \"wireless\"}")?;
     let val: Value = serde_json::from_str(&config)?;
     let items = match val["values"].as_object() {
         Some(i) => i,

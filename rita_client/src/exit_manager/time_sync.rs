@@ -1,4 +1,4 @@
-use althea_kernel_interface::KI;
+use althea_kernel_interface::{setup_wg_if::get_last_handshake_time, time::set_local_time};
 use althea_types::{ExitIdentity, ExitSystemTime};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -42,7 +42,7 @@ pub async fn get_exit_time(exit: ExitIdentity) -> Option<SystemTime> {
 
 // try to get the latest handshake for the wg_exit tunnel
 pub fn get_latest_exit_handshake() -> Option<SystemTime> {
-    match KI.get_last_handshake_time("wg_exit") {
+    match get_last_handshake_time("wg_exit") {
         Ok(results) => results.first().map(|(_, time)| {
             info!("last exit handshake {:?}", time);
             *time
@@ -90,7 +90,7 @@ pub async fn maybe_set_local_to_exit_time(exit: ExitIdentity) {
         if let Ok(diff) = exit_time.duration_since(now) {
             if diff > MAX_DIFF_LOCAL_EXIT_TIME {
                 // if we're here, then it's time to set our time
-                if KI.set_local_time(exit_time).is_ok() {
+                if set_local_time(exit_time).is_ok() {
                     info!("Local time was reset to the exit's time: {:?}", exit_time);
                 }
             }

@@ -1,155 +1,161 @@
-use crate::{KernelInterface, KernelInterfaceError, KernelInterfaceError as Error};
+use crate::interface_tools::get_interfaces;
+use crate::{run_command, KernelInterfaceError, KernelInterfaceError as Error};
 use althea_types::WgKey;
 use std::str::from_utf8;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-impl dyn KernelInterface {
-    pub fn get_peers(&self, iface_name: &str) -> Result<Vec<WgKey>, Error> {
-        let output = self.run_command("wg", &["show", iface_name, "peers"])?;
+pub fn get_peers(iface_name: &str) -> Result<Vec<WgKey>, Error> {
+    let output = run_command("wg", &["show", iface_name, "peers"])?;
 
-        let output = from_utf8(&output.stdout)?;
+    let output = from_utf8(&output.stdout)?;
 
-        let mut peers = Vec::new();
+    let mut peers = Vec::new();
 
-        for l in output.lines() {
-            let parsed = l.parse();
-            if let Ok(val) = parsed {
-                peers.push(val);
-            } else {
-                warn!("Could not parse peer! {}", l);
+    for l in output.lines() {
+        let parsed = l.parse();
+        if let Ok(val) = parsed {
+            peers.push(val);
+        } else {
+            warn!("Could not parse peer! {}", l);
+        }
+    }
+
+    Ok(peers)
+}
+
+/// checks the existing interfaces to find an interface name that isn't in use.
+/// then calls iproute2 to set up a new interface with that name
+pub fn create_blank_wg_numbered_wg_interface() -> Result<String, Error> {
+    // this is the maximum allowed retries for when an interface is claimed to have already existed
+    // since we only setup interfaces once this can only happen if we have lost an interface or if
+    // the kernel is acting strange, either way it's better just to skip that interface and wait
+    // on a Rita restart to clean it up some day.
+    const MAX_RETRY: u8 = 5;
+
+    //call "ip links" to get a list of currently set up links
+    let links = get_interfaces()?;
+    let mut if_num = 0;
+    //loop through the output of "ip links" until we find a wg suffix that isn't taken (e.g. "wg3")
+    while links.contains(&format!("wg{if_num}")) {
+        if_num += 1;
+    }
+
+    let mut count = 0;
+    let mut interface = format!("wg{if_num}");
+    let mut res = create_blank_wg_interface(&interface);
+    while let Err(KernelInterfaceError::WgExistsError) = res {
+        if_num += 1;
+        interface = format!("wg{if_num}");
+        res = create_blank_wg_interface(&interface);
+        count += 1;
+        if count > MAX_RETRY {
+            break;
+        }
+    }
+
+    res?;
+    Ok(interface)
+}
+
+/// calls iproute2 to set up a new interface with a given name.
+pub fn create_blank_wg_interface(name: &str) -> Result<(), KernelInterfaceError> {
+    let output = run_command("ip", &["link", "add", name, "type", "wireguard"])?;
+    let stderr = String::from_utf8(output.stderr)?;
+    if !stderr.is_empty() {
+        if stderr.contains("exists") {
+            return Err(KernelInterfaceError::WgExistsError);
+        } else {
+            return Err(KernelInterfaceError::RuntimeError(format!(
+                "received error adding wg link: {stderr}"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// internal helper function for testing get_wg_exit_clients_online
+fn get_wg_exit_clients_online_internal(out: String) -> Result<u32, Error> {
+    let mut num: u32 = 0;
+    for line in out.lines() {
+        let content: Vec<&str> = line.split('\t').collect();
+        let mut itr = content.iter();
+        itr.next();
+        let timestamp = itr.next().ok_or_else(|| {
+            KernelInterfaceError::RuntimeError("Option did not contain a value.".to_string())
+        })?;
+        let d = UNIX_EPOCH + Duration::from_secs(timestamp.parse()?);
+
+        if SystemTime::now().duration_since(d)? < Duration::new(600, 0) {
+            num += 1;
+        }
+    }
+    Ok(num)
+}
+
+/// Returns the number of clients that are active on the wg_exit tunnel
+pub fn get_wg_exit_clients_online(interface: &str) -> Result<u32, Error> {
+    let output = run_command("wg", &["show", interface, "latest-handshakes"])?;
+    let out = String::from_utf8(output.stdout)?;
+    get_wg_exit_clients_online_internal(out)
+}
+
+/// Internal helper function for ci testing get_last_handshake_time
+fn get_last_active_handshake_time_internal(out: String) -> Result<Vec<(WgKey, SystemTime)>, Error> {
+    let mut timestamps = Vec::new();
+    for line in out.lines() {
+        let content: Vec<&str> = line.split('\t').collect();
+        let mut itr = content.iter();
+        let wg_key: WgKey = match itr.next() {
+            Some(val) => val.parse()?,
+            None => {
+                return Err(KernelInterfaceError::RuntimeError(
+                    "Invalid line!".to_string(),
+                ))
             }
-        }
-
-        Ok(peers)
-    }
-
-    /// checks the existing interfaces to find an interface name that isn't in use.
-    /// then calls iproute2 to set up a new interface with that name
-    pub fn create_blank_wg_numbered_wg_interface(&self) -> Result<String, Error> {
-        // this is the maximum allowed retries for when an interface is claimed to have already existed
-        // since we only setup interfaces once this can only happen if we have lost an interface or if
-        // the kernel is acting strange, either way it's better just to skip that interface and wait
-        // on a Rita restart to clean it up some day.
-        const MAX_RETRY: u8 = 5;
-
-        //call "ip links" to get a list of currently set up links
-        let links = self.get_interfaces()?;
-        let mut if_num = 0;
-        //loop through the output of "ip links" until we find a wg suffix that isn't taken (e.g. "wg3")
-        while links.contains(&format!("wg{if_num}")) {
-            if_num += 1;
-        }
-
-        let mut count = 0;
-        let mut interface = format!("wg{if_num}");
-        let mut res = self.create_blank_wg_interface(&interface);
-        while let Err(KernelInterfaceError::WgExistsError) = res {
-            if_num += 1;
-            interface = format!("wg{if_num}");
-            res = self.create_blank_wg_interface(&interface);
-            count += 1;
-            if count > MAX_RETRY {
-                break;
+        };
+        let timestamp = match itr.next() {
+            Some(val) => val.parse()?,
+            None => {
+                return Err(KernelInterfaceError::RuntimeError(
+                    "Invalid line!".to_string(),
+                ))
             }
-        }
-
-        res?;
-        Ok(interface)
+        };
+        let d = UNIX_EPOCH + Duration::from_secs(timestamp);
+        timestamps.push((wg_key, d))
     }
+    Ok(timestamps)
+}
 
-    /// calls iproute2 to set up a new interface with a given name.
-    pub fn create_blank_wg_interface(&self, name: &str) -> Result<(), KernelInterfaceError> {
-        let output = self.run_command("ip", &["link", "add", name, "type", "wireguard"])?;
-        let stderr = String::from_utf8(output.stderr)?;
-        if !stderr.is_empty() {
-            if stderr.contains("exists") {
-                return Err(KernelInterfaceError::WgExistsError);
-            } else {
-                return Err(KernelInterfaceError::RuntimeError(format!(
-                    "received error adding wg link: {stderr}"
-                )));
-            }
-        }
+/// Returns the last handshake time of every client on this tunnel.
+pub fn get_last_handshake_time(ifname: &str) -> Result<Vec<(WgKey, SystemTime)>, Error> {
+    let output = run_command("wg", &["show", ifname, "latest-handshakes"])?;
+    let out = String::from_utf8(output.stdout)?;
+    get_last_active_handshake_time_internal(out)
+}
 
-        Ok(())
+/// Returns the last handshake time of every ACTIVE client on this tunnel.
+/// An active handshake mean a wireguard tunnel that has a latest handshake value
+/// When running wg show wg_exit latest-handshake, a entries with timestamp 0 are inactive
+pub fn get_last_active_handshake_time(ifname: &str) -> Result<Vec<(WgKey, SystemTime)>, Error> {
+    let timestamps = get_last_handshake_time(ifname)?;
+    let timestamps = timestamps
+        .into_iter()
+        .filter(|(_, time)| *time != UNIX_EPOCH)
+        .collect();
+    Ok(timestamps)
+}
+
+/// Gets a list of all active wireguard interfaces on this device
+pub fn get_list_of_wireguard_interfaces() -> Result<Vec<String>, Error> {
+    let output = run_command("wg", &["show", "interfaces"])?;
+    let out = String::from_utf8(output.stdout)?;
+    let mut interfaces = Vec::new();
+    for interface in out.split_ascii_whitespace() {
+        interfaces.push(interface.to_string())
     }
-
-    /// Returns the number of clients that are active on the wg_exit tunnel
-    pub fn get_wg_exit_clients_online(&self, interface: &str) -> Result<u32, Error> {
-        let output = self.run_command("wg", &["show", interface, "latest-handshakes"])?;
-        let mut num: u32 = 0;
-        let out = String::from_utf8(output.stdout)?;
-        for line in out.lines() {
-            let content: Vec<&str> = line.split('\t').collect();
-            let mut itr = content.iter();
-            itr.next();
-            let timestamp = itr.next().ok_or_else(|| {
-                KernelInterfaceError::RuntimeError("Option did not contain a value.".to_string())
-            })?;
-            let d = UNIX_EPOCH + Duration::from_secs(timestamp.parse()?);
-
-            if SystemTime::now().duration_since(d)? < Duration::new(600, 0) {
-                num += 1;
-            }
-        }
-        Ok(num)
-    }
-
-    /// Returns the last handshake time of every client on this tunnel.
-    pub fn get_last_handshake_time(&self, ifname: &str) -> Result<Vec<(WgKey, SystemTime)>, Error> {
-        let output = self.run_command("wg", &["show", ifname, "latest-handshakes"])?;
-        let out = String::from_utf8(output.stdout)?;
-        let mut timestamps = Vec::new();
-        for line in out.lines() {
-            let content: Vec<&str> = line.split('\t').collect();
-            let mut itr = content.iter();
-            let wg_key: WgKey = match itr.next() {
-                Some(val) => val.parse()?,
-                None => {
-                    return Err(KernelInterfaceError::RuntimeError(
-                        "Invalid line!".to_string(),
-                    ))
-                }
-            };
-            let timestamp = match itr.next() {
-                Some(val) => val.parse()?,
-                None => {
-                    return Err(KernelInterfaceError::RuntimeError(
-                        "Invalid line!".to_string(),
-                    ))
-                }
-            };
-            let d = UNIX_EPOCH + Duration::from_secs(timestamp);
-            timestamps.push((wg_key, d))
-        }
-        Ok(timestamps)
-    }
-
-    /// Returns the last handshake time of every ACTIVE client on this tunnel.
-    /// An active handshake mean a wireguard tunnel that has a latest handshake value
-    /// When running wg show wg_exit latest-handshake, a entries with timestamp 0 are inactive
-    pub fn get_last_active_handshake_time(
-        &self,
-        ifname: &str,
-    ) -> Result<Vec<(WgKey, SystemTime)>, Error> {
-        let timestamps = self.get_last_handshake_time(ifname)?;
-        let timestamps = timestamps
-            .into_iter()
-            .filter(|(_, time)| *time != UNIX_EPOCH)
-            .collect();
-        Ok(timestamps)
-    }
-
-    /// Gets a list of all active wireguard interfaces on this device
-    pub fn get_list_of_wireguard_interfaces(&self) -> Result<Vec<String>, Error> {
-        let output = self.run_command("wg", &["show", "interfaces"])?;
-        let out = String::from_utf8(output.stdout)?;
-        let mut interfaces = Vec::new();
-        for interface in out.split_ascii_whitespace() {
-            interfaces.push(interface.to_string())
-        }
-        Ok(interfaces)
-    }
+    Ok(interfaces)
 }
 
 #[test]
@@ -162,63 +168,13 @@ fn test_durations() {
 
 #[test]
 fn test_get_wg_exit_clients_online() {
-    use crate::KI;
+    let stdout = format!("88gbNAZx7NoNK9hatYuDkeZOjQ8EBmJ8VBpcFhXPqHs=	{}\nW1BwNSC9ulTutCg53KIlo+z2ihkXao3sXHaBBpaCXEw=	1536936247\n9jRr6euMHu3tBIsZyqxUmjbuKVVFZCBOYApOR2pLNkQ=	0", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs());
 
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    let mut counter = 0;
-
-    let link_args = &["show", "wg_exit", "latest-handshakes"];
-    KI.set_mock(Box::new(move |program, args| {
-        assert_eq!(program, "wg");
-        counter += 1;
-
-        match counter {
-            1 => {
-                assert_eq!(args, link_args);
-                Ok(Output{
-                        stdout: format!("88gbNAZx7NoNK9hatYuDkeZOjQ8EBmJ8VBpcFhXPqHs=	{}\nW1BwNSC9ulTutCg53KIlo+z2ihkXao3sXHaBBpaCXEw=	1536936247\n9jRr6euMHu3tBIsZyqxUmjbuKVVFZCBOYApOR2pLNkQ=	0", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()).as_bytes().to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-            }
-            _ => panic!("command called too many times"),
-        }
-    }));
-
-    assert_eq!(KI.get_wg_exit_clients_online("wg_exit").unwrap(), 1);
+    assert_eq!(get_wg_exit_clients_online_internal(stdout).unwrap(), 1);
 }
 
 #[test]
 fn test_get_last_handshake_time() {
-    use crate::KI;
-
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    let mut counter = 0;
-
-    let link_args = &["show", "wg1", "latest-handshakes"];
-    KI.set_mock(Box::new(move |program, args| {
-        assert_eq!(program, "wg");
-        counter += 1;
-
-        match counter {
-            1 => {
-                assert_eq!(args, link_args);
-                Ok(Output{
-                        stdout: format!("88gbNAZx7NoNK9hatYuDkeZOjQ8EBmJ8VBpcFhXPqHs=	{}\nbGkj7Z6bX1593G0pExfzxocWKhS3Un9uifIhZP9c5iM=	1536936247\n9jRr6euMHu3tBIsZyqxUmjbuKVVFZCBOYApOR2pLNkQ=	0", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()).as_bytes().to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-            }
-            _ => panic!("command called too many times"),
-        }
-    }));
-
     let wgkey1: WgKey = "88gbNAZx7NoNK9hatYuDkeZOjQ8EBmJ8VBpcFhXPqHs="
         .parse()
         .unwrap();
@@ -228,9 +184,9 @@ fn test_get_last_handshake_time() {
     let wgkey3: WgKey = "9jRr6euMHu3tBIsZyqxUmjbuKVVFZCBOYApOR2pLNkQ="
         .parse()
         .unwrap();
+    let stdout = format!("88gbNAZx7NoNK9hatYuDkeZOjQ8EBmJ8VBpcFhXPqHs=	{}\nbGkj7Z6bX1593G0pExfzxocWKhS3Un9uifIhZP9c5iM=	1536936247\n9jRr6euMHu3tBIsZyqxUmjbuKVVFZCBOYApOR2pLNkQ=	0", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs());
 
-    let res = KI
-        .get_last_handshake_time("wg1")
+    let res = get_last_active_handshake_time_internal(stdout.to_string())
         .expect("Failed to run get_last_handshake_time!");
     assert!(res.contains(&(wgkey3, SystemTime::UNIX_EPOCH)));
     assert!(res.contains(&(

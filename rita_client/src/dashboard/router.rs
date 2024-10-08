@@ -1,7 +1,7 @@
 use crate::operator_update::updater::update_system;
 use actix_web_async::{http::StatusCode, HttpRequest, HttpResponse};
+use althea_kernel_interface::{is_openwrt::is_openwrt, run_command};
 use althea_types::UpdateType;
-use rita_common::KI;
 use std::sync::{Arc, RwLock};
 
 lazy_static! {
@@ -10,8 +10,8 @@ lazy_static! {
 }
 
 pub async fn reboot_router(_req: HttpRequest) -> HttpResponse {
-    if KI.is_openwrt() {
-        if let Err(e) = KI.run_command("reboot", &[]) {
+    if is_openwrt() {
+        if let Err(e) = run_command("reboot", &[]) {
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
                 .json(format!("Cannot run reboot: {e}"));
         }
@@ -25,7 +25,7 @@ pub async fn reboot_router(_req: HttpRequest) -> HttpResponse {
 /// the lazy static variable and use this to perform a sysupgrade. If device is not openwrt or no image
 /// link is available, do nothing
 pub async fn update_router(_req: HttpRequest) -> HttpResponse {
-    if KI.is_openwrt() {
+    if is_openwrt() {
         let reader = &*UPDATE_INSTRUCTION.read().unwrap();
         if reader.is_none() {
             return HttpResponse::Ok().json("No update instructions set, doing nothing");

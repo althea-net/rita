@@ -5,11 +5,11 @@ use crate::exit_manager::requests::exit_setup_request;
 use crate::RitaClientError;
 use actix_web_async::http::StatusCode;
 use actix_web_async::{web::Path, HttpRequest, HttpResponse};
+use althea_kernel_interface::ping_check::ping_check;
 use althea_types::{ExitIdentity, ExitState};
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::parsing::do_we_have_route;
-use rita_common::KI;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -44,13 +44,12 @@ fn is_tunnel_working(
 ) -> bool {
     match (current_exit.clone(), is_selected(exit, current_exit)) {
         (Some(_exit), true) => match exit_status.general_details() {
-            Some(details) => KI
-                .ping_check(
-                    &details.server_internal_ip,
-                    EXIT_PING_TIMEOUT,
-                    Some("wg_exit"),
-                )
-                .unwrap_or(false),
+            Some(details) => ping_check(
+                &details.server_internal_ip,
+                EXIT_PING_TIMEOUT,
+                Some("wg_exit"),
+            )
+            .unwrap_or(false),
             None => false,
         },
         (_, _) => false,
@@ -79,7 +78,7 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                         // failed pings block for one second, so we should be sure it's at least reasonable
                         // to expect the pings to work before issuing them.
                         let reachable = if have_route {
-                            KI.ping_check(&route_ip, EXIT_PING_TIMEOUT, None)?
+                            ping_check(&route_ip, EXIT_PING_TIMEOUT, None)?
                         } else {
                             false
                         };

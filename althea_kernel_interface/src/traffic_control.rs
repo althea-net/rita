@@ -4,456 +4,444 @@
 //! Rita common in contrast is a simple limitation of the neighbors tunnel, which does not do
 //! any classful categorization. As a result one uses tbf and the other uses the clsssful htb
 
+use crate::{run_command, KernelInterfaceError as Error};
 use ipnetwork::IpNetwork;
-
-use crate::KernelInterface;
-use crate::KernelInterfaceError as Error;
-
 use std::net::Ipv4Addr;
 
-impl dyn KernelInterface {
-    /// Determines if the provided interface has a configured qdisc
-    pub fn has_qdisc(&self, iface_name: &str) -> Result<bool, Error> {
-        let result = self.run_command("tc", &["qdisc", "show", "dev", iface_name])?;
+/// Determines if the provided interface has a configured qdisc
+pub fn has_qdisc(iface_name: &str) -> Result<bool, Error> {
+    let result = run_command("tc", &["qdisc", "show", "dev", iface_name])?;
 
-        if !result.status.success() {
-            let res = String::from_utf8(result.stderr)?;
-            return Err(Error::TrafficControlError(format!(
-                "Failed to check qdisc for {iface_name}! {res:?}"
-            )));
-        }
-
-        let stdout = &String::from_utf8(result.stdout)?;
-
-        trace!("has_qdisc: {} {}", stdout, !stdout.contains("noqueue"));
-        Ok(!stdout.contains("noqueue"))
+    if !result.status.success() {
+        let res = String::from_utf8(result.stderr)?;
+        return Err(Error::TrafficControlError(format!(
+            "Failed to check qdisc for {iface_name}! {res:?}"
+        )));
     }
 
-    /// Determines if the provided flow is assigned
-    pub fn has_flow(&self, ip: Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
-        let class_id = self.get_class_id(ip);
-        let result = self.run_command("tc", &["filter", "show", "dev", iface_name])?;
+    let stdout = &String::from_utf8(result.stdout)?;
 
-        if !result.status.success() {
-            let res = String::from_utf8(result.stderr)?;
-            return Err(Error::TrafficControlError(format!(
-                "Failed to check filter for {class_id}! {res:?}"
-            )));
-        }
+    trace!("has_qdisc: {} {}", stdout, !stdout.contains("noqueue"));
+    Ok(!stdout.contains("noqueue"))
+}
 
-        let stdout = &String::from_utf8(result.stdout)?;
-        Ok(stdout.contains(&format!("1:{class_id}")))
+/// Determines if the provided flow is assigned
+pub fn has_flow(ip: Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
+    let class_id = get_class_id(ip);
+    let result = run_command("tc", &["filter", "show", "dev", iface_name])?;
+
+    if !result.status.success() {
+        let res = String::from_utf8(result.stderr)?;
+        return Err(Error::TrafficControlError(format!(
+            "Failed to check filter for {class_id}! {res:?}"
+        )));
     }
 
-    /// Gets the full flows list to pass to bulk functions
-    pub fn get_flows(&self, iface_name: &str) -> Result<String, Error> {
-        let result = self.run_command("tc", &["filter", "show", "dev", iface_name])?;
+    let stdout = &String::from_utf8(result.stdout)?;
+    Ok(stdout.contains(&format!("1:{class_id}")))
+}
 
-        if !result.status.success() {
-            let res = String::from_utf8(result.stderr)?;
-            return Err(Error::TrafficControlError(format!(
-                "Failed to get flows {res:?}"
-            )));
-        }
-        Ok(String::from_utf8(result.stdout)?)
+/// Gets the full flows list to pass to bulk functions
+pub fn get_flows(iface_name: &str) -> Result<String, Error> {
+    let result = run_command("tc", &["filter", "show", "dev", iface_name])?;
+
+    if !result.status.success() {
+        let res = String::from_utf8(result.stderr)?;
+        return Err(Error::TrafficControlError(format!(
+            "Failed to get flows {res:?}"
+        )));
+    }
+    Ok(String::from_utf8(result.stdout)?)
+}
+
+/// A version of the flows check designed to be run from the raw input, more efficient
+/// in the exit setup loop than running the same command several hundred times
+pub fn has_flow_bulk(ip: Ipv4Addr, tc_out: &str) -> bool {
+    let class_id = get_class_id(ip);
+    tc_out.contains(&format!("1:{class_id}"))
+}
+
+/// Determines if the provided flow is assigned
+pub fn has_class(ip: Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
+    let class_id = get_class_id(ip);
+    let result = run_command("tc", &["class", "show", "dev", iface_name])?;
+
+    if !result.status.success() {
+        let res = String::from_utf8(result.stderr)?;
+        return Err(Error::TrafficControlError(format!(
+            "Failed to check filter for {class_id}! {res:?}"
+        )));
     }
 
-    /// A version of the flows check designed to be run from the raw input, more efficient
-    /// in the exit setup loop than running the same command several hundred times
-    pub fn has_flow_bulk(&self, ip: Ipv4Addr, tc_out: &str) -> bool {
-        let class_id = self.get_class_id(ip);
-        tc_out.contains(&format!("1:{class_id}"))
-    }
-
-    /// Determines if the provided flow is assigned
-    pub fn has_class(&self, ip: Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
-        let class_id = self.get_class_id(ip);
-        let result = self.run_command("tc", &["class", "show", "dev", iface_name])?;
-
-        if !result.status.success() {
-            let res = String::from_utf8(result.stderr)?;
-            return Err(Error::TrafficControlError(format!(
-                "Failed to check filter for {class_id}! {res:?}"
-            )));
-        }
-
-        let stdout = &String::from_utf8(result.stdout)?;
-        for line in stdout.lines() {
-            let split = line.split_ascii_whitespace();
-            for item in split {
-                if *item == format!("1:{class_id}") {
-                    return Ok(true);
-                }
+    let stdout = &String::from_utf8(result.stdout)?;
+    for line in stdout.lines() {
+        let split = line.split_ascii_whitespace();
+        for item in split {
+            if *item == format!("1:{class_id}") {
+                return Ok(true);
             }
         }
-        Ok(false)
+    }
+    Ok(false)
+}
+
+/// Determines if the provided interface has a configured qdisc
+pub fn has_limit(iface_name: &str) -> Result<bool, Error> {
+    let result = run_command("tc", &["qdisc", "show", "dev", iface_name])?;
+
+    if !result.status.success() {
+        let res = String::from_utf8(result.stderr)?;
+        return Err(Error::TrafficControlError(format!(
+            "Failed to check limit for {iface_name}! {res:?}"
+        )));
     }
 
-    /// Determines if the provided interface has a configured qdisc
-    pub fn has_limit(&self, iface_name: &str) -> Result<bool, Error> {
-        let result = self.run_command("tc", &["qdisc", "show", "dev", iface_name])?;
+    let stdout = &String::from_utf8(result.stdout)?;
+    Ok((stdout.contains("htb") || stdout.contains("tbf"))
+        && !stdout.contains("codel")
+        && !stdout.contains("cake")
+        && !stdout.contains("noqueue"))
+}
 
-        if !result.status.success() {
-            let res = String::from_utf8(result.stderr)?;
-            return Err(Error::TrafficControlError(format!(
-                "Failed to check limit for {iface_name}! {res:?}"
-            )));
-        }
+/// Determines if the provided interface has a configured qdisc
+pub fn has_cake(iface_name: &str) -> Result<bool, Error> {
+    let result = run_command("tc", &["qdisc", "show", "dev", iface_name])?;
 
-        let stdout = &String::from_utf8(result.stdout)?;
-        Ok((stdout.contains("htb") || stdout.contains("tbf"))
-            && !stdout.contains("codel")
-            && !stdout.contains("cake")
-            && !stdout.contains("noqueue"))
+    if !result.status.success() {
+        let res = String::from_utf8(result.stderr)?;
+        return Err(Error::TrafficControlError(format!(
+            "Failed to check limit for {iface_name}! {res:?}"
+        )));
     }
 
-    /// Determines if the provided interface has a configured qdisc
-    pub fn has_cake(&self, iface_name: &str) -> Result<bool, Error> {
-        let result = self.run_command("tc", &["qdisc", "show", "dev", iface_name])?;
+    let stdout = &String::from_utf8(result.stdout)?;
+    Ok((stdout.contains("codel") || stdout.contains("cake"))
+        && !stdout.contains("tbf")
+        && !stdout.contains("noqueue")
+        && !stdout.contains("htb"))
+}
 
-        if !result.status.success() {
-            let res = String::from_utf8(result.stderr)?;
-            return Err(Error::TrafficControlError(format!(
-                "Failed to check limit for {iface_name}! {res:?}"
-            )));
+/// This sets up latency protecting flow control, either cake on openwrt
+/// or fq_codel on older devices/kernels, the Cake configuration sets several advanced parameters
+/// that are not reflected if we fall back to codel
+pub fn set_codel_shaping(iface_name: &str, speed: Option<usize>) -> Result<(), Error> {
+    let operator = if has_qdisc(iface_name)? {
+        "change"
+    } else {
+        "add"
+    };
+    let mut cake_args = vec![
+        "qdisc", operator, "dev", iface_name, "root", "handle", "1:", "cake",
+    ];
+    // declared here but used only in the match to provide a longer lifetime
+    let mbit;
+
+    match speed {
+        Some(val) => {
+            mbit = format!("{val}mbit");
+            cake_args.extend(["bandwidth", &mbit])
         }
-
-        let stdout = &String::from_utf8(result.stdout)?;
-        Ok((stdout.contains("codel") || stdout.contains("cake"))
-            && !stdout.contains("tbf")
-            && !stdout.contains("noqueue")
-            && !stdout.contains("htb"))
+        None => cake_args.extend(["unlimited"]),
     }
 
-    /// This sets up latency protecting flow control, either cake on openwrt
-    /// or fq_codel on older devices/kernels, the Cake configuration sets several advanced parameters
-    /// that are not reflected if we fall back to codel
-    pub fn set_codel_shaping(&self, iface_name: &str, speed: Option<usize>) -> Result<(), Error> {
-        let operator = if self.has_qdisc(iface_name)? {
-            "change"
-        } else {
-            "add"
-        };
-        let mut cake_args = vec![
-            "qdisc", operator, "dev", iface_name, "root", "handle", "1:", "cake",
-        ];
-        // declared here but used only in the match to provide a longer lifetime
-        let mbit;
+    // cake arguments for per hop tunnels only
+    cake_args.extend([
+        // we want to use the 'internet' parameter here because the total rtt
+        // of the path from endpoint to endpoint is what this value cares about
+        // not neighbor to neighbor
+        "internet",
+        // diffserv4 allocates 50% of the connection to video streams and
+        // generally recognizes more traffic classes than the default diffserv3
+        // there's some debate by cake maintainers internally if this is a good idea
+        "diffserv4",
+    ]);
 
-        match speed {
-            Some(val) => {
-                mbit = format!("{val}mbit");
-                cake_args.extend(["bandwidth", &mbit])
-            }
-            None => cake_args.extend(["unlimited"]),
-        }
+    let output = run_command("tc", &cake_args)?;
 
-        // cake arguments for per hop tunnels only
-        cake_args.extend([
-            // we want to use the 'internet' parameter here because the total rtt
-            // of the path from endpoint to endpoint is what this value cares about
-            // not neighbor to neighbor
-            "internet",
-            // diffserv4 allocates 50% of the connection to video streams and
-            // generally recognizes more traffic classes than the default diffserv3
-            // there's some debate by cake maintainers internally if this is a good idea
-            "diffserv4",
-        ]);
-
-        let output = self.run_command("tc", &cake_args)?;
+    if !output.status.success() {
+        trace!(
+            "No support for the Cake qdisc is detected, falling back to fq_codel. Error: {}",
+            String::from_utf8(output.stderr)?
+        );
+        trace!("Command was tc {}", crate::print_str_array(&cake_args));
+        warn!("sch_cake is strongly recommended, you should install it");
+        let output = run_command(
+            "tc",
+            &[
+                "qdisc", operator, "dev", iface_name, "root", "handle", "1:", "fq_codel", "target",
+                "100ms",
+            ],
+        )?;
 
         if !output.status.success() {
+            // final fallback on FIFO this is a very old machine indeed
             trace!(
-                "No support for the Cake qdisc is detected, falling back to fq_codel. Error: {}",
+                "No support for the fq codel qdisc is detected, falling back to fifo. Error: {}",
                 String::from_utf8(output.stderr)?
             );
             trace!("Command was tc {}", crate::print_str_array(&cake_args));
-            warn!("sch_cake is strongly recommended, you should install it");
-            let output = self.run_command(
+            let output = run_command(
                 "tc",
                 &[
-                    "qdisc", operator, "dev", iface_name, "root", "handle", "1:", "fq_codel",
-                    "target", "100ms",
+                    "qdisc", operator, "dev", iface_name, "root", "handle", "1:", "fifo",
                 ],
             )?;
-
             if !output.status.success() {
-                // final fallback on FIFO this is a very old machine indeed
-                trace!(
-                "No support for the fq codel qdisc is detected, falling back to fifo. Error: {}",
-                String::from_utf8(output.stderr)?
-                );
-                trace!("Command was tc {}", crate::print_str_array(&cake_args));
-                let output = self.run_command(
+                let res = String::from_utf8(output.stderr)?;
+                error!("Cake, fq_codel and fallback FIFO have all failed!");
+                return Err(Error::TrafficControlError(format!(
+                    "Failed to create new qdisc limit! {res:?}"
+                )));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Creates a qdisc limit with the given bandwidth tuned for the correct rate
+/// this limit uses tbf which is classless and faster since we leave prioritization
+/// to the fq_codel on the ingress and egress interfaces
+pub fn set_classless_limit(iface_name: &str, bw: u32) -> Result<(), Error> {
+    if has_qdisc(iface_name)? {
+        delete_qdisc(iface_name)?;
+    }
+
+    // we need 1kbyte of burst cache per mbit of bandwidth to actually keep things
+    // moving
+    let burst = bw * 1000u32;
+    // amount of time a packet can spend in the burst cache, 40ms
+    let latency = 40u32;
+
+    let output = run_command(
+        "tc",
+        &[
+            "qdisc",
+            "add",
+            "dev",
+            iface_name,
+            "root",
+            "handle",
+            "1:",
+            "tbf",
+            "latency",
+            &format!("{latency}ms"),
+            "burst",
+            &format!("{burst}"),
+            "rate",
+            &format!("{bw}kbit"),
+        ],
+    )?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let res = String::from_utf8(output.stderr)?;
+        Err(Error::TrafficControlError(format!(
+            "Failed to create new qdisc limit! {res:?}"
+        )))
+    }
+}
+
+/// Creates the root limit on the wg_exit tunnel for the exit, under which all other classes
+/// operate
+pub fn create_root_classful_limit(iface_name: &str) -> Result<(), Error> {
+    let output = run_command(
+        "tc",
+        &[
+            "qdisc",
+            "add",
+            "dev",
+            iface_name,
+            "root",
+            "handle",
+            "1:",
+            "htb",
+            "default",
+            "0",
+            "r2q",
+            "1",
+            "direct_qlen",
+            "1000000",
+        ],
+    )?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let res = String::from_utf8(output.stderr)?;
+        Err(Error::TrafficControlError(format!(
+            "Failed to create new qdisc limit! {res:?}"
+        )))
+    }
+}
+
+pub fn delete_class(iface_name: &str, ip: Ipv4Addr) -> Result<(), Error> {
+    let class_id = get_class_id(ip);
+    match has_class(ip, iface_name) {
+        Ok(has_class) => {
+            if has_class {
+                run_command(
                     "tc",
                     &[
-                        "qdisc", operator, "dev", iface_name, "root", "handle", "1:", "fifo",
+                        "class",
+                        "del",
+                        "dev",
+                        iface_name,
+                        "parent",
+                        "1:",
+                        "classid",
+                        &format!("1:{class_id}"),
                     ],
                 )?;
-                if !output.status.success() {
-                    let res = String::from_utf8(output.stderr)?;
-                    error!("Cake, fq_codel and fallback FIFO have all failed!");
-                    return Err(Error::TrafficControlError(format!(
-                        "Failed to create new qdisc limit! {res:?}"
-                    )));
-                }
             }
+            Ok(())
         }
+        Err(e) => {
+            error!(
+                "Unable to find class for ip {:?} on {:?} with {:?}",
+                ip, iface_name, e
+            );
+            Err(e)
+        }
+    }
+}
 
+pub fn set_class_limit(
+    iface_name: &str,
+    min_bw: u32,
+    max_bw: u32,
+    ip: Ipv4Addr,
+) -> Result<(), Error> {
+    let class_id = get_class_id(ip);
+    let modifier = if has_class(ip, iface_name)? {
+        "change"
+    } else {
+        "add"
+    };
+
+    let output = run_command(
+        "tc",
+        &[
+            "class",
+            modifier,
+            "dev",
+            iface_name,
+            "parent",
+            "1:",
+            "classid",
+            &format!("1:{class_id}"),
+            "htb",
+            "rate",
+            &format!("{min_bw}kbit"),
+            "ceil",
+            &format!("{max_bw}kbit"),
+        ],
+    )?;
+
+    if !output.status.success() {
+        let res = String::from_utf8(output.stderr)?;
+        return Err(Error::TrafficControlError(format!(
+            "Failed to update qdisc class limit! {res:?}"
+        )));
+    }
+
+    Ok(())
+}
+
+/// Generates a unique traffic class id for a exit user, essentially a really dumb hashing function
+pub fn get_class_id(ip: Ipv4Addr) -> u32 {
+    let num: u32 = ip.into();
+    num % 9999 //9999 is the maximum flow id value allowed
+}
+
+/// Filters traffic from a given ipv6 address into the class that we are using
+/// to shape that traffic on the exit side, uses the last two octets of the ip
+/// to generate a class id.
+pub fn create_flow_by_ipv6(iface_name: &str, ip_net: IpNetwork, ip: Ipv4Addr) -> Result<(), Error> {
+    let class_id = get_class_id(ip);
+
+    let output = run_command(
+        "tc",
+        &[
+            "filter",
+            "add",
+            "dev",
+            iface_name,
+            "parent",
+            "1:",
+            "protocol",
+            "ipv6",
+            "u32",
+            "match",
+            "ip6",
+            "dst",
+            &ip_net.to_string(),
+            "flowid",
+            &format!("1:{class_id}"),
+        ],
+    )?;
+
+    if output.status.success() {
         Ok(())
+    } else {
+        let res = String::from_utf8(output.stderr)?;
+        Err(Error::TrafficControlError(format!(
+            "Failed to create limit by ip! {res:?}"
+        )))
     }
+}
 
-    /// Creates a qdisc limit with the given bandwidth tuned for the correct rate
-    /// this limit uses tbf which is classless and faster since we leave prioritization
-    /// to the fq_codel on the ingress and egress interfaces
-    pub fn set_classless_limit(&self, iface_name: &str, bw: u32) -> Result<(), Error> {
-        if self.has_qdisc(iface_name)? {
-            self.delete_qdisc(iface_name)?;
-        }
+/// Filters traffic from a given ipv4 address into the class that we are using
+/// to shape that traffic on the exit side, uses the last two octets of the ip
+/// to generate a class id.
+pub fn create_flow_by_ip(iface_name: &str, ip: Ipv4Addr) -> Result<(), Error> {
+    let class_id = get_class_id(ip);
 
-        // we need 1kbyte of burst cache per mbit of bandwidth to actually keep things
-        // moving
-        let burst = bw * 1000u32;
-        // amount of time a packet can spend in the burst cache, 40ms
-        let latency = 40u32;
+    let output = run_command(
+        "tc",
+        &[
+            "filter",
+            "add",
+            "dev",
+            iface_name,
+            "parent",
+            "1:",
+            "protocol",
+            "ip",
+            "u32",
+            "match",
+            "ip",
+            "dst",
+            &format!("{ip}/32"),
+            "flowid",
+            &format!("1:{class_id}"),
+        ],
+    )?;
 
-        let output = self.run_command(
-            "tc",
-            &[
-                "qdisc",
-                "add",
-                "dev",
-                iface_name,
-                "root",
-                "handle",
-                "1:",
-                "tbf",
-                "latency",
-                &format!("{latency}ms"),
-                "burst",
-                &format!("{burst}"),
-                "rate",
-                &format!("{bw}kbit"),
-            ],
-        )?;
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            let res = String::from_utf8(output.stderr)?;
-            Err(Error::TrafficControlError(format!(
-                "Failed to create new qdisc limit! {res:?}"
-            )))
-        }
-    }
-
-    /// Creates the root limit on the wg_exit tunnel for the exit, under which all other classes
-    /// operate
-    pub fn create_root_classful_limit(&self, iface_name: &str) -> Result<(), Error> {
-        let output = self.run_command(
-            "tc",
-            &[
-                "qdisc",
-                "add",
-                "dev",
-                iface_name,
-                "root",
-                "handle",
-                "1:",
-                "htb",
-                "default",
-                "0",
-                "r2q",
-                "1",
-                "direct_qlen",
-                "1000000",
-            ],
-        )?;
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            let res = String::from_utf8(output.stderr)?;
-            Err(Error::TrafficControlError(format!(
-                "Failed to create new qdisc limit! {res:?}"
-            )))
-        }
-    }
-
-    pub fn delete_class(&self, iface_name: &str, ip: Ipv4Addr) -> Result<(), Error> {
-        let class_id = self.get_class_id(ip);
-        match self.has_class(ip, iface_name) {
-            Ok(has_class) => {
-                if has_class {
-                    self.run_command(
-                        "tc",
-                        &[
-                            "class",
-                            "del",
-                            "dev",
-                            iface_name,
-                            "parent",
-                            "1:",
-                            "classid",
-                            &format!("1:{class_id}"),
-                        ],
-                    )?;
-                }
-                Ok(())
-            }
-            Err(e) => {
-                error!(
-                    "Unable to find class for ip {:?} on {:?} with {:?}",
-                    ip, iface_name, e
-                );
-                Err(e)
-            }
-        }
-    }
-
-    pub fn set_class_limit(
-        &self,
-        iface_name: &str,
-        min_bw: u32,
-        max_bw: u32,
-        ip: Ipv4Addr,
-    ) -> Result<(), Error> {
-        let class_id = self.get_class_id(ip);
-        let modifier = if self.has_class(ip, iface_name)? {
-            "change"
-        } else {
-            "add"
-        };
-
-        let output = self.run_command(
-            "tc",
-            &[
-                "class",
-                modifier,
-                "dev",
-                iface_name,
-                "parent",
-                "1:",
-                "classid",
-                &format!("1:{class_id}"),
-                "htb",
-                "rate",
-                &format!("{min_bw}kbit"),
-                "ceil",
-                &format!("{max_bw}kbit"),
-            ],
-        )?;
-
-        if !output.status.success() {
-            let res = String::from_utf8(output.stderr)?;
-            return Err(Error::TrafficControlError(format!(
-                "Failed to update qdisc class limit! {res:?}"
-            )));
-        }
-
+    if output.status.success() {
         Ok(())
+    } else {
+        let res = String::from_utf8(output.stderr)?;
+        Err(Error::TrafficControlError(format!(
+            "Failed to create limit by ip! {res:?}"
+        )))
     }
+}
 
-    /// Generates a unique traffic class id for a exit user, essentially a really dumb hashing function
-    pub fn get_class_id(&self, ip: Ipv4Addr) -> u32 {
-        let num: u32 = ip.into();
-        num % 9999 //9999 is the maximum flow id value allowed
-    }
-
-    /// Filters traffic from a given ipv6 address into the class that we are using
-    /// to shape that traffic on the exit side, uses the last two octets of the ip
-    /// to generate a class id.
-    pub fn create_flow_by_ipv6(
-        &self,
-        iface_name: &str,
-        ip_net: IpNetwork,
-        ip: Ipv4Addr,
-    ) -> Result<(), Error> {
-        let class_id = self.get_class_id(ip);
-
-        let output = self.run_command(
-            "tc",
-            &[
-                "filter",
-                "add",
-                "dev",
-                iface_name,
-                "parent",
-                "1:",
-                "protocol",
-                "ipv6",
-                "u32",
-                "match",
-                "ip6",
-                "dst",
-                &ip_net.to_string(),
-                "flowid",
-                &format!("1:{class_id}"),
-            ],
-        )?;
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            let res = String::from_utf8(output.stderr)?;
-            Err(Error::TrafficControlError(format!(
-                "Failed to create limit by ip! {res:?}"
-            )))
-        }
-    }
-
-    /// Filters traffic from a given ipv4 address into the class that we are using
-    /// to shape that traffic on the exit side, uses the last two octets of the ip
-    /// to generate a class id.
-    pub fn create_flow_by_ip(&self, iface_name: &str, ip: Ipv4Addr) -> Result<(), Error> {
-        let class_id = self.get_class_id(ip);
-
-        let output = self.run_command(
-            "tc",
-            &[
-                "filter",
-                "add",
-                "dev",
-                iface_name,
-                "parent",
-                "1:",
-                "protocol",
-                "ip",
-                "u32",
-                "match",
-                "ip",
-                "dst",
-                &format!("{ip}/32"),
-                "flowid",
-                &format!("1:{class_id}"),
-            ],
-        )?;
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            let res = String::from_utf8(output.stderr)?;
-            Err(Error::TrafficControlError(format!(
-                "Failed to create limit by ip! {res:?}"
-            )))
-        }
-    }
-
-    /// deletes the interface qdisc
-    pub fn delete_qdisc(&self, iface_name: &str) -> Result<(), Error> {
-        let output = self.run_command("tc", &["qdisc", "del", "dev", iface_name, "root"])?;
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(Error::TrafficControlError(
-                "Failed to delete qdisc limit".to_string(),
-            ))
-        }
+/// deletes the interface qdisc
+pub fn delete_qdisc(iface_name: &str) -> Result<(), Error> {
+    let output = run_command("tc", &["qdisc", "del", "dev", iface_name, "root"])?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(Error::TrafficControlError(
+            "Failed to delete qdisc limit".to_string(),
+        ))
     }
 }
 
 #[test]
 fn get_id() {
-    use crate::KI;
-    println!("{}", KI.get_class_id("172.168.4.121".parse().unwrap()));
+    println!("{}", get_class_id("172.168.4.121".parse().unwrap()));
 }

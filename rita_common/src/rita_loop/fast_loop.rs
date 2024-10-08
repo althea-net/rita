@@ -9,8 +9,9 @@ use crate::peer_listener::structs::PeerListener;
 use crate::traffic_watcher::watch;
 use crate::tunnel_manager::contact_peers::tm_contact_peers;
 use crate::tunnel_manager::tm_get_neighbors;
-use crate::KI;
 use actix_async::System as AsyncSystem;
+use althea_kernel_interface::is_openwrt::is_openwrt;
+use althea_kernel_interface::run_command;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_neighs;
 use babel_monitor::parse_routes;
@@ -124,8 +125,8 @@ pub fn start_rita_fast_loop() {
             if Instant::now() - last_restart < Duration::from_secs(60) {
                 error!("Restarting too quickly, rebooting instead!");
                 // only reboot if we are on openwrt, otherwise we are probably on a datacenter server rebooting that is a bad idea
-                if KI.is_openwrt() {
-                    let _res = KI.run_command("reboot", &[]);
+                if is_openwrt() {
+                    let _res = run_command("reboot", &[]);
                 }
             }
             last_restart = Instant::now();
@@ -188,8 +189,8 @@ pub fn peer_discovery_loop() {
             if Instant::now() - last_restart < Duration::from_secs(60) {
                 error!("Restarting too quickly, rebooting instead!");
                 // only reboot if we are on openwrt, otherwise we are probably on a datacenter server rebooting that is a bad idea
-                if KI.is_openwrt() {
-                    let _res = KI.run_command("reboot", &[]);
+                if is_openwrt() {
+                    let _res = run_command("reboot", &[]);
                 }
             }
             last_restart = Instant::now();

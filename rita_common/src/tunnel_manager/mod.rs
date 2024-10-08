@@ -18,10 +18,17 @@ use crate::tunnel_manager::error::TunnelManagerError;
 use crate::RitaCommonError;
 use crate::Shaper;
 use crate::FAST_LOOP_TIMEOUT;
-use crate::KI;
 use crate::TUNNEL_HANDSHAKE_TIMEOUT;
 use crate::TUNNEL_TIMEOUT;
+use althea_kernel_interface::interface_tools::del_interface;
+use althea_kernel_interface::netns::check_integration_test_netns;
+use althea_kernel_interface::open_tunnel::open_tunnel;
 use althea_kernel_interface::open_tunnel::TunnelOpenArgs;
+use althea_kernel_interface::setup_wg_if::create_blank_wg_numbered_wg_interface;
+use althea_kernel_interface::traffic_control::has_limit;
+use althea_kernel_interface::traffic_control::set_classless_limit;
+use althea_kernel_interface::traffic_control::set_codel_shaping;
+use althea_kernel_interface::udp_socket_table::used_ports;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
 use babel_monitor::monitor;
@@ -47,7 +54,7 @@ lazy_static! {
 
 /// Gets TunnelManager copy from the static ref, or default if no value has been set
 pub fn get_tunnel_manager() -> TunnelManager {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     TUNNEL_MANAGER
         .read()
         .unwrap()
@@ -61,7 +68,7 @@ pub fn get_tunnel_manager() -> TunnelManager {
 /// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
 /// but still hold the lock in the local thread to prevent parallel modification
 pub fn get_tunnel_manager_write_ref(input: &mut HashMap<u32, TunnelManager>) -> &mut TunnelManager {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     input.entry(netns).or_default();
     input.get_mut(&netns).unwrap()
 }
@@ -163,7 +170,7 @@ impl Tunnel {
             }
         };
         // after this step we have created a blank wg interface that we should clean up if we fail
-        let iface_name = KI.create_blank_wg_numbered_wg_interface()?;
+        let iface_name = create_blank_wg_numbered_wg_interface()?;
 
         let args = TunnelOpenArgs {
             interface: iface_name.clone(),
@@ -177,14 +184,14 @@ impl Tunnel {
             settings_default_route: &mut network.last_default_route,
         };
 
-        if let Err(e) = KI.open_tunnel(args) {
+        if let Err(e) = open_tunnel(args) {
             error!("Failed open tunnel! {:?}", e);
             // cleanup after our failed attempt
-            KI.del_interface(&iface_name)?;
+            del_interface(&iface_name)?;
             return Err(e.into());
         }
         // a failure here isn't fatal, we just won't have traffic shaping
-        if let Err(e) = KI.set_codel_shaping(&iface_name, speed_limit) {
+        if let Err(e) = set_codel_shaping(&iface_name, speed_limit) {
             error!("Failed to setup codel shaping on tunnel! {:?}", e);
         }
 
@@ -206,7 +213,7 @@ impl Tunnel {
         if let Err(e) = t.monitor() {
             error!("Failed to monitor tunnel! {:?}", e);
             // cleanup after our failed attempt
-            KI.del_interface(&t.iface_name)?;
+            del_interface(&t.iface_name)?;
             return Err(e.into());
         }
 
@@ -242,7 +249,7 @@ impl Tunnel {
         // We must wait until we have flushed the interface before deleting it
         // otherwise we will experience this error
         // https://github.com/sudomesh/bugs/issues/24
-        if let Err(e) = KI.del_interface(&tunnel.iface_name) {
+        if let Err(e) = del_interface(&tunnel.iface_name) {
             error!("Failed to delete wg interface! {:?}", e);
             return Err(e.into());
         }
@@ -351,7 +358,7 @@ impl TunnelManager {
     /// Gets a port off of the internal port list after checking that said port is free
     /// with the operating system.
     fn get_next_available_port(&self) -> Result<u16, TunnelManagerError> {
-        let udp_table = KI.used_ports()?;
+        let udp_table = used_ports()?;
         let used_ports = self.get_all_used_ports();
 
         let start = settings::get_rita_common().network.wg_start_port;
@@ -610,15 +617,15 @@ fn tunnel_bw_limit_update(tunnels: &[Tunnel]) -> Result<(), RitaCommonError> {
     for tunnel in tunnels {
         let payment_state = &tunnel.payment_state;
         let iface_name = &tunnel.iface_name;
-        let has_limit = KI.has_limit(iface_name)?;
+        let has_limit = has_limit(iface_name)?;
 
         if *payment_state == PaymentState::Overdue
             && !has_limit
             && !potential_payment_issues_detected()
         {
-            KI.set_classless_limit(iface_name, bw_per_iface)?;
+            set_classless_limit(iface_name, bw_per_iface)?;
         } else if *payment_state == PaymentState::Paid && has_limit {
-            KI.set_codel_shaping(iface_name, None)?;
+            set_codel_shaping(iface_name, None)?;
         }
     }
     Ok(())

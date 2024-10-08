@@ -1,5 +1,8 @@
-use crate::{RitaCommonError, KI};
+use crate::RitaCommonError;
 use actix_web_async::{http::StatusCode, web::Json, HttpResponse};
+use althea_kernel_interface::{
+    fs_sync::fs_sync, is_openwrt::is_openwrt, set_system_password::set_system_password,
+};
 use clarity::utils::bytes_to_hex_str;
 use settings::set_rita_common;
 use sha3::{Digest, Sha3_512};
@@ -28,13 +31,13 @@ pub async fn set_pass(router_pass: Json<RouterPassword>) -> HttpResponse {
             .json(format!("{}", RitaCommonError::SettingsError(e)));
     }
 
-    if KI.is_openwrt() {
-        if let Err(e) = KI.set_system_password(router_pass.password) {
+    if is_openwrt() {
+        if let Err(e) = set_system_password(router_pass.password) {
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e}"));
         }
 
         // We edited disk contents, force global sync
-        if let Err(e) = KI.fs_sync() {
+        if let Err(e) = fs_sync() {
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e}"));
         }
     }

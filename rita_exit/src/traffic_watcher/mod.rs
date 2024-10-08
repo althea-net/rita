@@ -12,9 +12,10 @@ use crate::rita_loop::ExitLock;
 use crate::rita_loop::EXIT_INTERFACE;
 use crate::rita_loop::LEGACY_INTERFACE;
 use crate::RitaExitError;
+use althea_kernel_interface::setup_wg_if::get_wg_exit_clients_online;
 use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
+use althea_kernel_interface::wg_iface_counter::read_wg_counters;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
-use althea_kernel_interface::KI;
 use althea_types::Identity;
 use althea_types::WgKey;
 use babel_monitor::structs::Route;
@@ -138,11 +139,11 @@ fn debts_logging(debts: &HashMap<Identity, i128>) {
     }
     info!("Total exit income of {:?} Wei this round", total_income);
 
-    match KI.get_wg_exit_clients_online(LEGACY_INTERFACE) {
+    match get_wg_exit_clients_online(LEGACY_INTERFACE) {
         Ok(users) => info!("Total of {} wg_exit users online", users),
         Err(e) => warn!("Getting clients failed with {:?}", e),
     }
-    match KI.get_wg_exit_clients_online(EXIT_INTERFACE) {
+    match get_wg_exit_clients_online(EXIT_INTERFACE) {
         Ok(users) => info!("Total of {} wg_exit_v2 users online", users),
         Err(e) => warn!("Getting clients failed with {:?}", e),
     }
@@ -180,7 +181,7 @@ pub fn watch_exit_traffic(
     let id_from_ip = ret.ip_to_id;
     let destinations = get_babel_info(routes, our_id, id_from_ip);
 
-    let counters = match KI.read_wg_counters(LEGACY_INTERFACE) {
+    let counters = match read_wg_counters(LEGACY_INTERFACE) {
         Ok(res) => res,
         Err(e) => {
             warn!(
@@ -191,7 +192,7 @@ pub fn watch_exit_traffic(
         }
     };
 
-    let new_counters = match KI.read_wg_counters(EXIT_INTERFACE) {
+    let new_counters = match read_wg_counters(EXIT_INTERFACE) {
         Ok(res) => res,
         Err(e) => {
             warn!(

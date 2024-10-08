@@ -4,7 +4,7 @@ use crate::blockchain_oracle::get_pay_thresh;
 use crate::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
-use crate::KI;
+use althea_kernel_interface::netns::check_integration_test_netns;
 use althea_types::Identity;
 use althea_types::PaymentTx;
 use num256::Uint256;
@@ -21,7 +21,7 @@ lazy_static! {
 
 /// Gets Amount owed copy from the static ref, or default if no value has been set
 pub fn get_amount_owed() -> Uint256 {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     AMOUNT_OWED
         .read()
         .unwrap()
@@ -35,7 +35,7 @@ pub fn get_amount_owed() -> Uint256 {
 /// the lock will be held until you drop the return value, this lets the caller abstract the namespace handling
 /// but still hold the lock in the local thread to prevent parallel modification
 pub fn get_amount_owed_write_ref(input: &mut HashMap<u32, Uint256>) -> &mut Uint256 {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     input.entry(netns).or_insert_with(Uint256::zero);
     input.get_mut(&netns).unwrap()
 }

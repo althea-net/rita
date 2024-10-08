@@ -1,6 +1,8 @@
 use crate::file_io::get_lines;
+use crate::is_openwrt::is_openwrt;
+use crate::manipulate_uci::get_uci_var;
+use crate::run_command;
 use crate::KernelInterfaceError as Error;
-use crate::KI;
 use althea_types::extract_wifi_station_data;
 use althea_types::extract_wifi_survey_data;
 use althea_types::ConntrackInfo;
@@ -404,10 +406,10 @@ fn get_conntrack_info() -> Option<ConntrackInfo> {
 /// Device names are in the form wlan0, wlan1 etc
 fn parse_wifi_device_names() -> Result<Vec<String>, Error> {
     // We parse /etc/config/wireless which is an openwrt config. We return an error if not openwrt
-    if KI.is_openwrt() {
+    if is_openwrt() {
         let mut ret = Vec::new();
 
-        let lines = KI.run_command("uci", &["show", "wireless"])?;
+        let lines = run_command("uci", &["show", "wireless"])?;
         let lines: Vec<&str> = from_utf8(&lines.stdout)?.lines().collect();
 
         // trying to get lines 'wireless.default_radio1.ifname='wlan1''
@@ -490,7 +492,7 @@ fn get_wifi_station_info(dev: &str) -> Vec<WifiStationData> {
 pub fn get_radio_ssid(radio: &str) -> Option<String> {
     let radio = radio.replace("wlan", "radio");
     let path = format!("wireless.default_{radio}.ssid");
-    match KI.get_uci_var(&path) {
+    match get_uci_var(&path) {
         Ok(a) => Some(a),
         Err(e) => {
             error!("Unable to get radio ssid for radio: {} with {:?}", radio, e);
@@ -506,7 +508,7 @@ pub fn get_radio_ssid(radio: &str) -> Option<String> {
 pub fn get_radio_enabled(radio: &str) -> Option<bool> {
     let radio = radio.replace("wlan", "radio");
     let path = format!("wireless.{radio}.disabled");
-    match KI.get_uci_var(&path) {
+    match get_uci_var(&path) {
         // if disabled flag is set to '0' in config, radio is enabled so we return true and vice versa
         Ok(a) => Some(a.contains('0')),
         Err(e) => {
@@ -527,7 +529,7 @@ pub fn get_radio_enabled(radio: &str) -> Option<bool> {
 pub fn get_radio_channel(radio: &str) -> Option<u16> {
     let radio = radio.replace("wlan", "radio");
     let path = format!("wireless.{radio}.channel");
-    match KI.get_uci_var(&path) {
+    match get_uci_var(&path) {
         Ok(a) => match a.parse::<u16>() {
             Ok(a) => Some(a),
             Err(e) => {

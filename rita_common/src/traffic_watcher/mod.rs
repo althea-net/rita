@@ -9,7 +9,8 @@ use crate::usage_tracker::structs::UsageType;
 use crate::usage_tracker::update_usage_data;
 use crate::usage_tracker::UpdateUsage;
 use crate::RitaCommonError;
-use crate::KI;
+use althea_kernel_interface::counter::init_counter;
+use althea_kernel_interface::counter::read_counters;
 use althea_kernel_interface::open_tunnel::is_link_local;
 use althea_kernel_interface::FilterTarget;
 use althea_types::Identity;
@@ -35,14 +36,10 @@ impl Watch {
 }
 
 pub fn init_traffic_watcher() {
-    KI.init_counter(&FilterTarget::Input)
-        .expect("Is ipset installed?");
-    KI.init_counter(&FilterTarget::Output)
-        .expect("Is ipset installed?");
-    KI.init_counter(&FilterTarget::ForwardInput)
-        .expect("Is ipset installed?");
-    KI.init_counter(&FilterTarget::ForwardOutput)
-        .expect("Is ipset installed?");
+    init_counter(&FilterTarget::Input).expect("Is ipset installed?");
+    init_counter(&FilterTarget::Output).expect("Is ipset installed?");
+    init_counter(&FilterTarget::ForwardInput).expect("Is ipset installed?");
+    init_counter(&FilterTarget::ForwardOutput).expect("Is ipset installed?");
 
     info!("Traffic Watcher started");
 }
@@ -110,7 +107,7 @@ pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32)
 pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, RitaCommonError> {
     let mut total_input_counters = HashMap::new();
     trace!("Getting input counters");
-    let input_counters = match KI.read_counters(&FilterTarget::Input) {
+    let input_counters = match read_counters(&FilterTarget::Input) {
         Ok(res) => res,
         Err(e) => {
             warn!(
@@ -122,7 +119,7 @@ pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, RitaCommon
     };
     trace!("Got input counters: {:?}", input_counters);
     trace!("Getting fwd counters");
-    let fwd_input_counters = match KI.read_counters(&FilterTarget::ForwardInput) {
+    let fwd_input_counters = match read_counters(&FilterTarget::ForwardInput) {
         Ok(res) => res,
         Err(e) => {
             warn!(
@@ -164,7 +161,7 @@ pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, RitaCommon
 pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, RitaCommonError> {
     let mut total_output_counters = HashMap::new();
     trace!("Getting ouput counters");
-    let output_counters = match KI.read_counters(&FilterTarget::Output) {
+    let output_counters = match read_counters(&FilterTarget::Output) {
         Ok(res) => res,
         Err(e) => {
             warn!(
@@ -176,7 +173,7 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, RitaCommo
     };
     trace!("Got output counters: {:?}", output_counters);
 
-    let fwd_output_counters = match KI.read_counters(&FilterTarget::ForwardOutput) {
+    let fwd_output_counters = match read_counters(&FilterTarget::ForwardOutput) {
         Ok(res) => res,
         Err(e) => {
             warn!(

@@ -10,6 +10,7 @@ use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::rita_loop::is_gateway_client;
 use crate::RitaClientError;
 use althea_kernel_interface::hardware_info::get_hardware_info;
+use althea_kernel_interface::run_command;
 use althea_types::websockets::{
     OperatorAction, OperatorWebsocketMessage, OperatorWebsocketResponse, PaymentAndNetworkSettings,
 };
@@ -29,7 +30,6 @@ use rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use rita_common::usage_tracker::structs::UsageType::{Client, Relay};
 use rita_common::usage_tracker::{get_current_hour, get_current_throughput, get_usage_data_map};
 use rita_common::DROPBEAR_AUTHORIZED_KEYS;
-use rita_common::KI;
 use serde_json::Map;
 use serde_json::Value;
 use settings::client::RitaClientSettings;
@@ -268,11 +268,11 @@ fn perform_operator_action(action: OperatorAction) {
     match action {
         OperatorAction::ResetShaper => flag_reset_shaper(),
         OperatorAction::Reboot => {
-            let _res = KI.run_command("reboot", &[]);
+            let _res = run_command("reboot", &[]);
         }
         OperatorAction::SoftReboot => {
             let args = vec!["restart"];
-            if let Err(e) = KI.run_command("/etc/init.d/rita", &args) {
+            if let Err(e) = run_command("/etc/init.d/rita", &args) {
                 error!("Unable to restart rita after opkg update: {}", e)
             }
         }
@@ -365,7 +365,7 @@ fn update_authorized_keys(
     let mut existing = HashSet::new();
     let auth_keys_file = File::open(keys_file);
     let mut write_data: Vec<String> = vec![];
-    let temp_key_file = String::from("temp_authorized_keys");
+    let temp_key_file = format!("temp_authorized_keys_{}", keys_file);
 
     info!(
         "Authorized keys updates add {} remove {} pubkeys",

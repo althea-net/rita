@@ -23,6 +23,8 @@
 
 use crate::rita_loop::is_gateway_client;
 use crate::RitaClientError;
+use althea_kernel_interface::netns::check_integration_test_netns;
+use althea_kernel_interface::wg_iface_counter::read_wg_counters;
 use althea_types::Identity;
 use babel_monitor::parsing::get_installed_route;
 use babel_monitor::structs::BabelMonitorError;
@@ -33,7 +35,6 @@ use rita_common::debt_keeper::{gateway_traffic_update, traffic_replace, traffic_
 use rita_common::usage_tracker::structs::UsageType;
 use rita_common::usage_tracker::update_usage_data;
 use rita_common::usage_tracker::UpdateUsage;
-use rita_common::KI;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -48,7 +49,7 @@ lazy_static! {
 
 /// Gets Traffic watcher copy from the static ref, or default if no value has been set
 pub fn get_traffic_watcher() -> TrafficWatcher {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     TRAFFIC_WATCHER
         .read()
         .unwrap()
@@ -64,7 +65,7 @@ pub fn get_traffic_watcher() -> TrafficWatcher {
 pub fn get_traffic_watcher_write_ref(
     input: &mut HashMap<u32, TrafficWatcher>,
 ) -> &mut TrafficWatcher {
-    let netns = KI.check_integration_test_netns();
+    let netns = check_integration_test_netns();
     input.entry(netns).or_default();
     input.get_mut(&netns).unwrap()
 }
@@ -230,7 +231,7 @@ pub fn local_traffic_calculation(
     let exit_route = find_exit_route_capped(exit.mesh_ip, routes)?;
     info!("Exit metric: {}", exit_route.metric);
 
-    let counter = match KI.read_wg_counters("wg_exit") {
+    let counter = match read_wg_counters("wg_exit") {
         Ok(res) => {
             if res.len() > 1 {
                 warn!("wg_exit client tunnel has multiple peers!");

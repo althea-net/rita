@@ -4,7 +4,8 @@
 use actix_web_async::http::StatusCode;
 use actix_web_async::HttpResponse;
 use actix_web_async::{web::Path, HttpRequest};
-use rita_common::{RitaCommonError, KI};
+use althea_kernel_interface::traffic_control::set_codel_shaping;
+use rita_common::RitaCommonError;
 
 pub async fn get_bandwidth_limit(_req: HttpRequest) -> HttpResponse {
     let val = settings::get_rita_client().network.user_bandwidth_limit;
@@ -23,7 +24,7 @@ pub async fn set_bandwidth_limit(path: Path<String>) -> HttpResponse {
     } else {
         return HttpResponse::BadRequest().finish();
     }
-    let _res = KI.set_codel_shaping("br-lan", network.user_bandwidth_limit);
+    let _res = set_codel_shaping("br-lan", network.user_bandwidth_limit);
     rita_client.network = network;
     settings::set_rita_client(rita_client);
 

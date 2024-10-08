@@ -1,5 +1,13 @@
-use super::KernelInterface;
 use crate::hardware_info::{get_kernel_version, parse_kernel_version};
+use crate::iptables::add_iptables_rule;
+use crate::link_local_tools::{get_global_device_ip_v4, get_link_local_device_ip};
+use crate::netfilter::{
+    delete_reject_rule, does_nftables_exist, init_nat_chain, insert_reject_rule,
+    set_nft_lan_fwd_rule,
+};
+use crate::run_command;
+use crate::setup_wg_if::get_peers;
+use crate::traffic_control::set_codel_shaping;
 use crate::{open_tunnel::to_wg_local, KernelInterfaceError as Error};
 use althea_types::WgKey;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -32,78 +40,62 @@ pub struct ClientExitTunnelConfig {
     pub user_specified_speed: Option<usize>,
 }
 
-impl dyn KernelInterface {
-    pub fn get_kernel_is_v4(&self) -> Result<bool, Error> {
-        let (_, system_kernel_version) = parse_kernel_version(get_kernel_version()?)?;
-        Ok(system_kernel_version.starts_with("4."))
+pub fn get_kernel_is_v4() -> Result<bool, Error> {
+    let (_, system_kernel_version) = parse_kernel_version(get_kernel_version()?)?;
+    Ok(system_kernel_version.starts_with("4."))
+}
+
+pub fn set_client_exit_tunnel_config(
+    args: ClientExitTunnelConfig,
+    local_mesh: Option<IpAddr>,
+) -> Result<(), Error> {
+    run_command(
+        "wg",
+        &[
+            "set",
+            "wg_exit",
+            "listen-port",
+            &args.listen_port.to_string(),
+            "private-key",
+            &args.private_key_path,
+            "peer",
+            &args.pubkey.to_string(),
+            "endpoint",
+            &format!("[{}]:{}", args.endpoint.ip(), args.endpoint.port()),
+            "allowed-ips",
+            "0.0.0.0/0, ::/0",
+            "persistent-keepalive",
+            "5",
+        ],
+    )?;
+
+    // we only want one peer on this link, technically that one peer is multihomed
+    // via babel, but it has the same key so it's the same 'peer' from wireguard's
+    // perspective, if we don't do this we'll end up with multiple exits on the same
+    // tunnel
+    for i in get_peers("wg_exit")? {
+        if i != args.pubkey {
+            run_command("wg", &["set", "wg_exit", "peer", &format!("{i}"), "remove"])?;
+        }
     }
 
-    pub fn set_client_exit_tunnel_config(
-        &self,
-        args: ClientExitTunnelConfig,
-        local_mesh: Option<IpAddr>,
-    ) -> Result<(), Error> {
-        self.run_command(
-            "wg",
-            &[
-                "set",
-                "wg_exit",
-                "listen-port",
-                &args.listen_port.to_string(),
-                "private-key",
-                &args.private_key_path,
-                "peer",
-                &args.pubkey.to_string(),
-                "endpoint",
-                &format!("[{}]:{}", args.endpoint.ip(), args.endpoint.port()),
-                "allowed-ips",
-                "0.0.0.0/0, ::/0",
-                "persistent-keepalive",
-                "5",
-            ],
-        )?;
+    let prev_ip: Result<Ipv4Addr, Error> = get_global_device_ip_v4("wg_exit");
 
-        // we only want one peer on this link, technically that one peer is multihomed
-        // via babel, but it has the same key so it's the same 'peer' from wireguard's
-        // perspective, if we don't do this we'll end up with multiple exits on the same
-        // tunnel
-        for i in self.get_peers("wg_exit")? {
-            if i != args.pubkey {
-                self.run_command("wg", &["set", "wg_exit", "peer", &format!("{i}"), "remove"])?;
-            }
-        }
+    match prev_ip {
+        Ok(prev_ip) => {
+            if prev_ip != args.local_ip {
+                run_command(
+                    "ip",
+                    &[
+                        "address",
+                        "delete",
+                        &format!("{}/{}", prev_ip, args.netmask),
+                        "dev",
+                        "wg_exit",
+                    ],
+                )?;
 
-        let prev_ip: Result<Ipv4Addr, Error> = self.get_global_device_ip_v4("wg_exit");
-
-        match prev_ip {
-            Ok(prev_ip) => {
-                if prev_ip != args.local_ip {
-                    self.run_command(
-                        "ip",
-                        &[
-                            "address",
-                            "delete",
-                            &format!("{}/{}", prev_ip, args.netmask),
-                            "dev",
-                            "wg_exit",
-                        ],
-                    )?;
-
-                    self.run_command(
-                        "ip",
-                        &[
-                            "address",
-                            "add",
-                            &format!("{}/{}", args.local_ip, args.netmask),
-                            "dev",
-                            "wg_exit",
-                        ],
-                    )?;
-                }
-            }
-            Err(e) => {
-                warn!("Finding wg exit's current IP returned {}", e);
-                self.run_command(
+                run_command(
                     "ip",
                     &[
                         "address",
@@ -115,181 +107,193 @@ impl dyn KernelInterface {
                 )?;
             }
         }
-
-        // If wg_exit does not have a link local addr, set one up
-        if self.get_link_local_device_ip("wg_exit").is_err() {
-            if let Some(mesh) = local_mesh {
-                if let Err(e) = self.run_command(
-                    "ip",
-                    &[
-                        "address",
-                        "add",
-                        &format!("{}/64", to_wg_local(&mesh)),
-                        "dev",
-                        "wg_exit",
-                    ],
-                ) {
-                    error!("IPV6 ERROR: Unable to set link local for wg_exit: {:?}", e);
-                }
-            } else {
-                error!("IPV6 ERRROR: No mesh ip, unable to set link local for wg_exit");
-            }
+        Err(e) => {
+            warn!("Finding wg exit's current IP returned {}", e);
+            run_command(
+                "ip",
+                &[
+                    "address",
+                    "add",
+                    &format!("{}/{}", args.local_ip, args.netmask),
+                    "dev",
+                    "wg_exit",
+                ],
+            )?;
         }
-
-        let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "mtu", "1340"])?;
-        if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!(
-                "received error adding wg link: {}",
-                String::from_utf8(output.stderr)?
-            )));
-        }
-
-        let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
-        if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!(
-                "received error setting wg interface up: {}",
-                String::from_utf8(output.stderr)?
-            )));
-        }
-
-        let _res = self.set_codel_shaping("br-lan", args.user_specified_speed);
-
-        Ok(())
     }
 
-    pub fn set_route_to_tunnel(&self, gateway: &IpAddr) -> Result<(), Error> {
-        if let Err(e) = self.run_command("ip", &["route", "del", "default"]) {
-            warn!("Failed to delete default route {:?}", e);
+    // If wg_exit does not have a link local addr, set one up
+    if get_link_local_device_ip("wg_exit").is_err() {
+        if let Some(mesh) = local_mesh {
+            if let Err(e) = run_command(
+                "ip",
+                &[
+                    "address",
+                    "add",
+                    &format!("{}/64", to_wg_local(&mesh)),
+                    "dev",
+                    "wg_exit",
+                ],
+            ) {
+                error!("IPV6 ERROR: Unable to set link local for wg_exit: {:?}", e);
+            }
+        } else {
+            error!("IPV6 ERRROR: No mesh ip, unable to set link local for wg_exit");
         }
+    }
 
-        let output = self.run_command(
-            "ip",
+    let output = run_command("ip", &["link", "set", "dev", "wg_exit", "mtu", "1340"])?;
+    if !output.stderr.is_empty() {
+        return Err(Error::RuntimeError(format!(
+            "received error adding wg link: {}",
+            String::from_utf8(output.stderr)?
+        )));
+    }
+
+    let output = run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
+    if !output.stderr.is_empty() {
+        return Err(Error::RuntimeError(format!(
+            "received error setting wg interface up: {}",
+            String::from_utf8(output.stderr)?
+        )));
+    }
+
+    let _res = set_codel_shaping("br-lan", args.user_specified_speed);
+
+    Ok(())
+}
+
+pub fn set_route_to_tunnel(gateway: &IpAddr) -> Result<(), Error> {
+    if let Err(e) = run_command("ip", &["route", "del", "default"]) {
+        warn!("Failed to delete default route {:?}", e);
+    }
+
+    let output = run_command(
+        "ip",
+        &[
+            "route",
+            "add",
+            "default",
+            "via",
+            &gateway.to_string(),
+            "dev",
+            "wg_exit",
+        ],
+    )?;
+    if !output.stderr.is_empty() {
+        return Err(Error::RuntimeError(format!(
+            "received error setting ip route: {}",
+            String::from_utf8(output.stderr)?
+        )));
+    }
+
+    Ok(())
+}
+
+pub fn set_ipv6_route_to_tunnel() -> Result<(), Error> {
+    // Remove current default route
+    if let Err(e) = run_command("ip", &["-6", "route", "del", "default"]) {
+        warn!("Failed to delete default ip6 route {:?}", e);
+    }
+    // Set new default route
+    let output = run_command("ip", &["-6", "route", "add", "default", "dev", "wg_exit"])?;
+    if !output.stderr.is_empty() {
+        error!("IPV6 ERROR: Unable to set ip -6 default route");
+        return Err(Error::RuntimeError(format!(
+            "received error setting ip -6 route: {}",
+            String::from_utf8(output.stderr)?
+        )));
+    }
+    Ok(())
+}
+
+/// Adds nat rules for lan client, these act within the structure
+/// of the openwrt rules which themselves create a few requirements
+/// (such as saying that zone-lan-forward shoul jump to the accept table)
+/// the nat rule here is very general, note the lack of restriction based
+/// on incoming interface or ip, this is intentional, as it allows
+/// the phone clients over in light_client_manager to function using these
+/// same rules. It may be advisable in the future to split them up into
+/// individual nat entires for each option
+pub fn create_client_nat_rules() -> Result<(), Error> {
+    let use_iptables = !does_nftables_exist();
+
+    if use_iptables {
+        add_iptables_rule(
+            "iptables",
             &[
-                "route",
-                "add",
-                "default",
-                "via",
-                &gateway.to_string(),
-                "dev",
+                "-t",
+                "nat",
+                "-A",
+                "POSTROUTING",
+                "-o",
                 "wg_exit",
+                "-j",
+                "MASQUERADE",
             ],
         )?;
-        if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!(
-                "received error setting ip route: {}",
-                String::from_utf8(output.stderr)?
-            )));
-        }
-
-        Ok(())
+        add_iptables_rule("iptables", &["-A", "zone_lan_forward", "-j", "ACCEPT"])?;
+    } else {
+        init_nat_chain("wg_exit")?;
+        set_nft_lan_fwd_rule()?;
     }
 
-    pub fn set_ipv6_route_to_tunnel(&self) -> Result<(), Error> {
-        // Remove current default route
-        if let Err(e) = self.run_command("ip", &["-6", "route", "del", "default"]) {
-            warn!("Failed to delete default ip6 route {:?}", e);
-        }
-        // Set new default route
-        let output =
-            self.run_command("ip", &["-6", "route", "add", "default", "dev", "wg_exit"])?;
-        if !output.stderr.is_empty() {
-            error!("IPV6 ERROR: Unable to set ip -6 default route");
-            return Err(Error::RuntimeError(format!(
-                "received error setting ip -6 route: {}",
-                String::from_utf8(output.stderr)?
-            )));
-        }
-        Ok(())
+    // Set mtu
+    if use_iptables {
+        add_iptables_rule(
+            "iptables",
+            &[
+                "-I",
+                "FORWARD",
+                "-p",
+                "tcp",
+                "--tcp-flags",
+                "SYN,RST",
+                "SYN",
+                "-j",
+                "TCPMSS",
+                "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
+            ],
+        )?;
+
+        //ipv6 support
+        add_iptables_rule(
+            "ip6tables",
+            &[
+                "-I",
+                "FORWARD",
+                "-p",
+                "tcp",
+                "--tcp-flags",
+                "SYN,RST",
+                "SYN",
+                "-j",
+                "TCPMSS",
+                "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
+            ],
+        )?;
     }
 
-    /// Adds nat rules for lan client, these act within the structure
-    /// of the openwrt rules which themselves create a few requirements
-    /// (such as saying that zone-lan-forward shoul jump to the accept table)
-    /// the nat rule here is very general, note the lack of restriction based
-    /// on incoming interface or ip, this is intentional, as it allows
-    /// the phone clients over in light_client_manager to function using these
-    /// same rules. It may be advisable in the future to split them up into
-    /// individual nat entires for each option
-    pub fn create_client_nat_rules(&self) -> Result<(), Error> {
-        let use_iptables = !self.does_nftables_exist();
+    Ok(())
+}
 
-        if use_iptables {
-            self.add_iptables_rule(
-                "iptables",
-                &[
-                    "-t",
-                    "nat",
-                    "-A",
-                    "POSTROUTING",
-                    "-o",
-                    "wg_exit",
-                    "-j",
-                    "MASQUERADE",
-                ],
-            )?;
-            self.add_iptables_rule("iptables", &["-A", "zone_lan_forward", "-j", "ACCEPT"])?;
-        } else {
-            self.init_nat_chain("wg_exit")?;
-            self.set_nft_lan_fwd_rule()?;
-        }
-
-        // Set mtu
-        if use_iptables {
-            self.add_iptables_rule(
-                "iptables",
-                &[
-                    "-I",
-                    "FORWARD",
-                    "-p",
-                    "tcp",
-                    "--tcp-flags",
-                    "SYN,RST",
-                    "SYN",
-                    "-j",
-                    "TCPMSS",
-                    "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
-                ],
-            )?;
-
-            //ipv6 support
-            self.add_iptables_rule(
-                "ip6tables",
-                &[
-                    "-I",
-                    "FORWARD",
-                    "-p",
-                    "tcp",
-                    "--tcp-flags",
-                    "SYN,RST",
-                    "SYN",
-                    "-j",
-                    "TCPMSS",
-                    "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
-                ],
-            )?;
-        }
-
-        Ok(())
+/// blocks the client nat by inserting a blocker in the start of the special lan forwarding
+/// table created by openwrt.
+pub fn block_client_nat() -> Result<(), Error> {
+    if !does_nftables_exist() {
+        add_iptables_rule("iptables", &["-I", "zone_lan_forward", "-j", "REJECT"])?;
+    } else {
+        insert_reject_rule()?;
     }
+    Ok(())
+}
 
-    /// blocks the client nat by inserting a blocker in the start of the special lan forwarding
-    /// table created by openwrt.
-    pub fn block_client_nat(&self) -> Result<(), Error> {
-        if !self.does_nftables_exist() {
-            self.add_iptables_rule("iptables", &["-I", "zone_lan_forward", "-j", "REJECT"])?;
-        } else {
-            self.insert_reject_rule()?;
-        }
-        Ok(())
+/// Removes the block created by block_client_nat() will fail if not run after that command
+pub fn restore_client_nat() -> Result<(), Error> {
+    if !does_nftables_exist() {
+        add_iptables_rule("iptables", &["-D", "zone_lan_forward", "-j", "REJECT"])?;
+    } else {
+        delete_reject_rule()?;
     }
-
-    /// Removes the block created by block_client_nat() will fail if not run after that command
-    pub fn restore_client_nat(&self) -> Result<(), Error> {
-        if !self.does_nftables_exist() {
-            self.add_iptables_rule("iptables", &["-D", "zone_lan_forward", "-j", "REJECT"])?;
-        } else {
-            self.delete_reject_rule()?;
-        }
-        Ok(())
-    }
+    Ok(())
 }

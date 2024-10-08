@@ -8,13 +8,6 @@ extern crate lazy_static;
 extern crate serde_derive;
 extern crate arrayvec;
 
-use althea_kernel_interface::KernelInterface;
-
-use althea_kernel_interface::LinuxCommandRunner;
-
-lazy_static! {
-    pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
-}
 pub static DROPBEAR_CONFIG: &str = "/etc/config/dropbear";
 pub static DROPBEAR_AUTHORIZED_KEYS: &str = "/etc/dropbear/authorized_keys";
 

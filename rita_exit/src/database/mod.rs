@@ -14,6 +14,16 @@ use crate::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::rita_loop::LEGACY_INTERFACE;
 use crate::IpAssignmentMap;
 use crate::RitaExitError;
+use althea_kernel_interface::exit_server_tunnel::set_exit_wg_config;
+use althea_kernel_interface::exit_server_tunnel::setup_individual_client_routes;
+use althea_kernel_interface::exit_server_tunnel::teardown_individual_client_routes;
+use althea_kernel_interface::setup_wg_if::get_last_active_handshake_time;
+use althea_kernel_interface::traffic_control::create_flow_by_ip;
+use althea_kernel_interface::traffic_control::create_flow_by_ipv6;
+use althea_kernel_interface::traffic_control::delete_class;
+use althea_kernel_interface::traffic_control::has_class;
+use althea_kernel_interface::traffic_control::has_flow;
+use althea_kernel_interface::traffic_control::set_class_limit;
 use althea_kernel_interface::ExitClient;
 use althea_types::regions::Regions;
 use althea_types::Identity;
@@ -25,7 +35,6 @@ use rita_client_registration::ExitSignupReturn;
 use rita_common::blockchain_oracle::calculate_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
-use rita_common::KI;
 use settings::get_rita_exit;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -366,7 +375,7 @@ pub fn setup_clients(
     {
         info!("Setting up configs for wg_exit and wg_exit_v2");
         // setup all the tunnels
-        let exit_status = KI.set_exit_wg_config(
+        let exit_status = set_exit_wg_config(
             &wg_clients,
             settings::get_rita_exit().exit_network.wg_tunnel_port,
             &settings::get_rita_exit().network.wg_private_key_path,
@@ -386,7 +395,7 @@ pub fn setup_clients(
         }
 
         // Setup new tunnels
-        let exit_status_new = KI.set_exit_wg_config(
+        let exit_status_new = set_exit_wg_config(
             &wg_clients,
             settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
             &settings::get_rita_exit().network.wg_private_key_path,
@@ -419,16 +428,16 @@ pub fn setup_clients(
     // 2.) From these timestamps, determine if client is wg exit v1 or v2
     // 3.) Compare this to our datastore of previous clients we set up routes for
     // 4.) Set up routes for v2 or v1 based on this
-    let new_wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> = KI
-        .get_last_active_handshake_time(EXIT_INTERFACE)
-        .expect("There should be a new wg_exit interface")
-        .into_iter()
-        .collect();
-    let wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> = KI
-        .get_last_active_handshake_time(LEGACY_INTERFACE)
-        .expect("There should be a wg_exit interface")
-        .into_iter()
-        .collect();
+    let new_wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> =
+        get_last_active_handshake_time(EXIT_INTERFACE)
+            .expect("There should be a new wg_exit interface")
+            .into_iter()
+            .collect();
+    let wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> =
+        get_last_active_handshake_time(LEGACY_INTERFACE)
+            .expect("There should be a wg_exit interface")
+            .into_iter()
+            .collect();
 
     let client_list_for_setup: Vec<Identity> = key_to_client_map
         .clone()
@@ -464,7 +473,7 @@ pub fn setup_clients(
     // all traffic will go over wg_exit_v2
     for c_key in changed_clients_return.new_v1 {
         if let Some(c) = key_to_client_map.get(&c_key) {
-            KI.setup_individual_client_routes(
+            setup_individual_client_routes(
                 match get_client_internal_ip(
                     *c,
                     get_rita_exit().exit_network.netmask,
@@ -486,7 +495,7 @@ pub fn setup_clients(
     }
     for c_key in changed_clients_return.new_v2 {
         if let Some(c) = key_to_client_map.get(&c_key) {
-            KI.teardown_individual_client_routes(
+            teardown_individual_client_routes(
                 match get_client_internal_ip(
                     *c,
                     get_rita_exit().exit_network.netmask,
@@ -641,8 +650,8 @@ pub fn enforce_exit_clients(
                             // setup flows this allows us to classify traffic we then limit the class, we delete the class as part of unenforcment but it's difficult to delete the flows
                             // so a user who has been enforced and unenforced while the exit has been online may already have them setup
                             let flow_setup_required = match (
-                                KI.has_flow(ip, EXIT_INTERFACE),
-                                KI.has_flow(ip, LEGACY_INTERFACE),
+                                has_flow(ip, EXIT_INTERFACE),
+                                has_flow(ip, LEGACY_INTERFACE),
                             ) {
                                 (Ok(true), Ok(true))
                                 | (Ok(true), Ok(false))
@@ -661,10 +670,10 @@ pub fn enforce_exit_clients(
                             };
                             if flow_setup_required {
                                 // create ipv4 and ipv6 flows, which are used to classify traffic, we can then limit the class specifically
-                                if let Err(e) = KI.create_flow_by_ip(LEGACY_INTERFACE, ip) {
+                                if let Err(e) = create_flow_by_ip(LEGACY_INTERFACE, ip) {
                                     error!("Failed to setup flow for wg_exit {:?}", e);
                                 }
-                                if let Err(e) = KI.create_flow_by_ip(EXIT_INTERFACE, ip) {
+                                if let Err(e) = create_flow_by_ip(EXIT_INTERFACE, ip) {
                                     error!("Failed to setup flow for wg_exit_v2 {:?}", e);
                                 }
                                 // gets the client ipv6 flow for this exit specifically
@@ -677,7 +686,7 @@ pub fn enforce_exit_clients(
                                 );
                                 if let Ok(Some(client_ipv6)) = client_ipv6 {
                                     if let Err(e) =
-                                        KI.create_flow_by_ipv6(EXIT_INTERFACE, client_ipv6, ip)
+                                        create_flow_by_ipv6(EXIT_INTERFACE, client_ipv6, ip)
                                     {
                                         error!("Failed to setup ipv6 flow for wg_exit_v2 {:?}", e);
                                     }
@@ -688,7 +697,7 @@ pub fn enforce_exit_clients(
                                 )
                             }
 
-                            if let Err(e) = KI.set_class_limit(
+                            if let Err(e) = set_class_limit(
                                 LEGACY_INTERFACE,
                                 free_tier_limit,
                                 free_tier_limit,
@@ -696,7 +705,7 @@ pub fn enforce_exit_clients(
                             ) {
                                 error!("Unable to setup enforcement class on wg_exit: {:?}", e);
                             }
-                            if let Err(e) = KI.set_class_limit(
+                            if let Err(e) = set_class_limit(
                                 EXIT_INTERFACE,
                                 free_tier_limit,
                                 free_tier_limit,
@@ -706,8 +715,8 @@ pub fn enforce_exit_clients(
                             }
                         } else {
                             let action_required = match (
-                                KI.has_class(ip, LEGACY_INTERFACE),
-                                KI.has_class(ip, EXIT_INTERFACE),
+                                has_class(ip, LEGACY_INTERFACE),
+                                has_class(ip, EXIT_INTERFACE),
                             ) {
                                 (Ok(a), Ok(b)) => a | b,
                                 (Ok(a), Err(_)) => a,
@@ -721,11 +730,11 @@ pub fn enforce_exit_clients(
                                 // Delete exisiting enforcement class, users who are not enforced are unclassifed becuase
                                 // leaving the class in place reduces their speeds.
                                 info!("Deleting enforcement classes for {}", client.public_key);
-                                if let Err(e) = KI.delete_class(LEGACY_INTERFACE, ip) {
+                                if let Err(e) = delete_class(LEGACY_INTERFACE, ip) {
                                     error!("Unable to delete class on wg_exit, is {} still enforced when they shouldnt be? {:?}", ip, e);
                                 }
 
-                                if let Err(e) = KI.delete_class(EXIT_INTERFACE, ip) {
+                                if let Err(e) = delete_class(EXIT_INTERFACE, ip) {
                                     error!("Unable to delete class on wg_exit_v2, is {} still enforced when they shouldnt be? {:?}", ip, e);
                                 }
                             }

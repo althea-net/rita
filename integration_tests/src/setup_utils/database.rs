@@ -1,4 +1,4 @@
-use althea_kernel_interface::KI;
+use althea_kernel_interface::run_command;
 use diesel::{Connection, PgConnection};
 use log::warn;
 use std::io::Write;
@@ -51,18 +51,17 @@ pub fn start_postgres() {
     // only init and launch if postgres has not already been started
     if !Path::new(&postgres_pid_path).exists() {
         // initialize the db datadir
-        let res = KI
-            .run_command(
-                "sudo",
-                &[
-                    "-u",
-                    POSTGRES_USER,
-                    initdb_bin,
-                    "-D",
-                    POSTGRES_DATABASE_LOCATION,
-                ],
-            )
-            .unwrap();
+        let res = run_command(
+            "sudo",
+            &[
+                "-u",
+                POSTGRES_USER,
+                initdb_bin,
+                "-D",
+                POSTGRES_DATABASE_LOCATION,
+            ],
+        )
+        .unwrap();
         if !res.status.success() {
             panic!("Failed to init postgres {:?}", res);
         }
@@ -84,18 +83,17 @@ pub fn start_postgres() {
     // start postgres in it's own thread, we kill it every time we startup
     // so it's spawned in this context
     thread::spawn(move || {
-        let res = KI
-            .run_command(
-                "sudo",
-                &[
-                    "-u",
-                    POSTGRES_USER,
-                    postgres_bin,
-                    "-D",
-                    POSTGRES_DATABASE_LOCATION,
-                ],
-            )
-            .unwrap();
+        let res = run_command(
+            "sudo",
+            &[
+                "-u",
+                POSTGRES_USER,
+                postgres_bin,
+                "-D",
+                POSTGRES_DATABASE_LOCATION,
+            ],
+        )
+        .unwrap();
         panic!("Postgres has crashed {:?}", res);
     });
 
@@ -110,9 +108,8 @@ pub fn start_postgres() {
         }
 
         // reset database contents for every run, this is in the loop becuase it too must wait until the db has started
-        KI.run_command("psql", &["-c", "drop database test;", "-U", POSTGRES_USER])
-            .unwrap();
-        KI.run_command(
+        run_command("psql", &["-c", "drop database test;", "-U", POSTGRES_USER]).unwrap();
+        run_command(
             "psql",
             &["-c", "create database test;", "-U", POSTGRES_USER],
         )

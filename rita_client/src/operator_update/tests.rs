@@ -59,7 +59,7 @@ mod test {
         let key_file: &str = "authorized_keys";
         let operator_key = touch_temp_file(key_file);
 
-        let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
+        update_authorized_keys(added_keys.clone(), removed_keys, key_file).unwrap();
         let result = parse_keys(key_file);
         assert_eq!(result.len(), 2);
         assert!(result.contains(&added_keys[0]));
@@ -77,7 +77,7 @@ mod test {
 
         let operator_key = touch_temp_file(key_file);
 
-        let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
+        update_authorized_keys(added_keys.clone(), removed_keys, key_file).unwrap();
         let result = parse_keys(key_file);
         assert!(result.contains(&added_keys[0]));
         assert!(result.contains(&added_keys[1]));
@@ -97,7 +97,7 @@ mod test {
 
         let operator_key = touch_temp_file(key_file);
 
-        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
+        update_authorized_keys(added_keys, removed_keys, key_file).unwrap();
         let result = parse_keys(key_file);
         assert!(result.contains(&operator_key.to_string()));
 
@@ -112,7 +112,7 @@ mod test {
 
         let operator_key = touch_temp_file(key_file);
         let removed_keys = vec![String::from(operator_key)];
-        let _update = update_authorized_keys(added_keys, removed_keys.clone(), key_file);
+        update_authorized_keys(added_keys, removed_keys.clone(), key_file).unwrap();
 
         let result = parse_keys(key_file);
         for item in result {
@@ -128,7 +128,7 @@ mod test {
         ];
         let removed_keys: Vec<String> = vec![];
         let key_file: &str = "create_keys_file";
-        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
+        update_authorized_keys(added_keys, removed_keys, key_file).unwrap();
         assert!(Path::new(key_file).exists());
     }
     #[test]

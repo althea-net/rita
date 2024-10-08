@@ -8,7 +8,7 @@ use crate::{
 };
 use actix_rt::time::sleep;
 use actix_rt::System;
-use althea_kernel_interface::KI;
+use althea_kernel_interface::run_command;
 use althea_proto::cosmos_sdk_proto::cosmos::gov::v1beta1::VoteOption;
 use althea_proto::{
     canto::erc20::v1::RegisterCoinProposal,
@@ -239,12 +239,11 @@ fn test_reach(from: Namespace, to: Namespace) -> bool {
         from.get_name(),
         to.get_name()
     );
-    let output = KI
-        .run_command(
-            "ip",
-            &["netns", "exec", &from.get_name(), "ping6", &ip, "-c", "1"],
-        )
-        .expect(&errormsg);
+    let output = run_command(
+        "ip",
+        &["netns", "exec", &from.get_name(), "ping6", &ip, "-c", "1"],
+    )
+    .expect(&errormsg);
     let output = from_utf8(&output.stdout).expect("could not get output for ping6!");
     trace!("ping output: {output:?} end");
     output.contains("1 packets transmitted, 1 received, 0% packet loss")
@@ -315,20 +314,19 @@ pub fn test_all_internet_connectivity(namespaces: NamespaceInfo) {
     for ns in namespaces.names {
         let start = Instant::now();
         loop {
-            let out = KI
-                .run_command(
-                    "ip",
-                    &[
-                        "netns",
-                        "exec",
-                        &ns.get_name(),
-                        "ping",
-                        &NODE_IP.to_string(),
-                        "-c",
-                        "1",
-                    ],
-                )
-                .unwrap();
+            let out = run_command(
+                "ip",
+                &[
+                    "netns",
+                    "exec",
+                    &ns.get_name(),
+                    "ping",
+                    &NODE_IP.to_string(),
+                    "-c",
+                    "1",
+                ],
+            )
+            .unwrap();
             if String::from_utf8(out.stdout)
                 .unwrap()
                 .contains("1 received")
@@ -554,14 +552,13 @@ pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
     thread::spawn(move || {
         info!("In new thread about to start iperf server");
         let output = if let Some(ns) = to {
-            KI.run_command(
+            run_command(
                 "ip",
                 &["netns", "exec", &ns.get_name(), "iperf3", "-s", "-1"],
             )
             .expect("Could not setup iperf server")
         } else {
-            KI.run_command("iperf3", &["-s", "-1"])
-                .expect("Could not setup iperf server")
+            run_command("iperf3", &["-s", "-1"]).expect("Could not setup iperf server")
         };
 
         let stderr = from_utf8(&output.stderr).expect("Why is this failing");
@@ -580,21 +577,20 @@ pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
     info!("Going to setup client");
     let ticker = Instant::now();
     loop {
-        let output = KI
-            .run_command(
-                "ip",
-                &[
-                    "netns",
-                    "exec",
-                    &from.get_name(),
-                    "iperf3",
-                    "-c",
-                    &ip,
-                    "-n",
-                    &data,
-                ],
-            )
-            .expect("Could not setup iperf client");
+        let output = run_command(
+            "ip",
+            &[
+                "netns",
+                "exec",
+                &from.get_name(),
+                "iperf3",
+                "-c",
+                &ip,
+                "-n",
+                &data,
+            ],
+        )
+        .expect("Could not setup iperf client");
 
         let stderr = from_utf8(&output.stderr).expect("Why is this failing");
         let std_output = from_utf8(&output.stdout).expect("could not get output for client setup!");

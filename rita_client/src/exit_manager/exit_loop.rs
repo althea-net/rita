@@ -12,10 +12,12 @@ use crate::exit_manager::utils::{
 use crate::heartbeat::get_exit_registration_state;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
+use althea_kernel_interface::ip_addr::setup_ipv6_slaac as setup_ipv6_slaac_ki;
+use althea_kernel_interface::ip_route::get_default_route;
+use althea_kernel_interface::run_command;
 use althea_types::{ExitDetails, ExitListV2};
 use althea_types::{ExitIdentity, ExitState};
 use rita_common::blockchain_oracle::low_balance;
-use rita_common::KI;
 use std::net::IpAddr;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -67,7 +69,7 @@ pub fn start_exit_manager_loop() {
             );
             if Instant::now() - last_restart < Duration::from_secs(60) {
                 error!("Restarting too quickly, rebooting instead!");
-                let _res = KI.run_command("reboot", &[]);
+                let _res = run_command("reboot", &[]);
             }
             last_restart = Instant::now();
         }
@@ -171,7 +173,7 @@ fn setup_exit_tunnel(
     );
     let signed_up_for_exit = registration_state.our_details();
 
-    let default_route = match KI.get_default_route() {
+    let default_route = match get_default_route() {
         Ok(a) => a,
         Err(e) => {
             error!("Failed to get default route: {:?}", e);
@@ -322,6 +324,6 @@ fn setup_ipv6_slaac() {
     trace!("Setting up ipv6 for slaac");
     if let Some(ipv6_sub) = get_client_pub_ipv6() {
         trace!("setting up slaac with {:?}", ipv6_sub);
-        KI.setup_ipv6_slaac(ipv6_sub)
+        setup_ipv6_slaac_ki(ipv6_sub)
     }
 }

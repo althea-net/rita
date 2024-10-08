@@ -1,4 +1,6 @@
-use crate::{DefaultRoute, KernelInterface, KernelInterfaceError};
+use crate::ip_route::manual_peers_route;
+use crate::link_local_tools::get_device_name;
+use crate::{run_command, DefaultRoute, KernelInterfaceError};
 use althea_types::WgKey;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::Path;
@@ -56,229 +58,101 @@ pub struct TunnelOpenArgs<'a> {
     pub settings_default_route: &'a mut Option<DefaultRoute>,
 }
 
-impl dyn KernelInterface {
-    pub fn open_tunnel(&self, args: TunnelOpenArgs) -> Result<(), KernelInterfaceError> {
-        let (setup_gateway_routes, socket_connect_str) = match args.endpoint {
-            SocketAddr::V4(sockv4) => (
-                // if the ipv4 address is not private we are connecting to an exit
-                // and instead we are connecting to a local peer over ipv4
-                !sockv4.ip().is_private(),
-                format!("{}:{}", sockv4.ip(), sockv4.port()),
-            ),
-            SocketAddr::V6(sockv6) => {
-                let is_link_local = is_link_local(IpAddr::V6(*sockv6.ip()));
-                if is_link_local {
-                    // if the ipv6 address is link local we need to add the interface name
-                    // to the endpoint
-                    let interface_name = self.get_device_name((*sockv6.ip()).into())?;
-                    (
-                        false,
-                        format!("[{}%{}]:{}", sockv6.ip(), interface_name, sockv6.port()),
-                    )
-                } else {
-                    // ipv6 is not link local, it's over the internet
-                    (true, format!("[{}]:{}", sockv6.ip(), sockv6.port()))
-                }
+pub fn open_tunnel(args: TunnelOpenArgs) -> Result<(), KernelInterfaceError> {
+    let (setup_gateway_routes, socket_connect_str) = match args.endpoint {
+        SocketAddr::V4(sockv4) => (
+            // if the ipv4 address is not private we are connecting to an exit
+            // and instead we are connecting to a local peer over ipv4
+            !sockv4.ip().is_private(),
+            format!("{}:{}", sockv4.ip(), sockv4.port()),
+        ),
+        SocketAddr::V6(sockv6) => {
+            let is_link_local = is_link_local(IpAddr::V6(*sockv6.ip()));
+            if is_link_local {
+                // if the ipv6 address is link local we need to add the interface name
+                // to the endpoint
+                let interface_name = get_device_name((*sockv6.ip()).into())?;
+                (
+                    false,
+                    format!("[{}%{}]:{}", sockv6.ip(), interface_name, sockv6.port()),
+                )
+            } else {
+                // ipv6 is not link local, it's over the internet
+                (true, format!("[{}]:{}", sockv6.ip(), sockv6.port()))
             }
-        };
-
-        let allowed_addresses = "::/0".to_string();
-
-        trace!("socket connect string: {}", socket_connect_str);
-        let output = self.run_command(
-            "wg",
-            &[
-                "set",
-                &args.interface,
-                "listen-port",
-                &format!("{}", args.port),
-                "private-key",
-                args.private_key_path.to_str().unwrap(),
-                "peer",
-                &format!("{}", args.remote_pub_key),
-                "endpoint",
-                &socket_connect_str,
-                "allowed-ips",
-                &allowed_addresses,
-                "persistent-keepalive",
-                "5",
-            ],
-        )?;
-        if !output.stderr.is_empty() {
-            return Err(KernelInterfaceError::RuntimeError(format!(
-                "received error from wg command: {}",
-                String::from_utf8(output.stderr)?
-            )));
         }
-        let _output = self.run_command(
-            "ip",
-            &[
-                "address",
-                "add",
-                &args.own_ip.to_string(),
-                "dev",
-                &args.interface,
-            ],
-        )?;
+    };
 
-        // Add second ip to tunnel used only by exits currently
-        if let Some(ip) = args.own_ip_v2 {
-            let _output = self.run_command(
-                "ip",
-                &["address", "add", &ip.to_string(), "dev", &args.interface],
-            )?;
-        }
+    let allowed_addresses = "::/0".to_string();
 
-        // add ipv6 link local slacc address manually, this is required for peer discovery
-        self.run_command(
-            "ip",
-            &[
-                "address",
-                "add",
-                &format!("{}/64", to_wg_local(&args.own_ip)),
-                "dev",
-                &args.interface,
-            ],
-        )?;
-
-        if setup_gateway_routes {
-            self.manual_peers_route(&args.endpoint.ip(), args.settings_default_route)?;
-        }
-
-        let output = self.run_command("ip", &["link", "set", "dev", &args.interface, "up"])?;
-        if !output.stderr.is_empty() {
-            return Err(KernelInterfaceError::RuntimeError(format!(
-                "received error setting wg interface {:?} up: {}",
-                args,
-                String::from_utf8(output.stderr)?
-            )));
-        }
-        Ok(())
+    trace!("socket connect string: {}", socket_connect_str);
+    let output = run_command(
+        "wg",
+        &[
+            "set",
+            &args.interface,
+            "listen-port",
+            &format!("{}", args.port),
+            "private-key",
+            args.private_key_path.to_str().unwrap(),
+            "peer",
+            &format!("{}", args.remote_pub_key),
+            "endpoint",
+            &socket_connect_str,
+            "allowed-ips",
+            &allowed_addresses,
+            "persistent-keepalive",
+            "5",
+        ],
+    )?;
+    if !output.stderr.is_empty() {
+        return Err(KernelInterfaceError::RuntimeError(format!(
+            "received error from wg command: {}",
+            String::from_utf8(output.stderr)?
+        )));
     }
-}
+    let _output = run_command(
+        "ip",
+        &[
+            "address",
+            "add",
+            &args.own_ip.to_string(),
+            "dev",
+            &args.interface,
+        ],
+    )?;
 
-#[test]
-fn test_open_tunnel_linux() {
-    use crate::KI;
+    // Add second ip to tunnel used only by exits currently
+    if let Some(ip) = args.own_ip_v2 {
+        let _output = run_command(
+            "ip",
+            &["address", "add", &ip.to_string(), "dev", &args.interface],
+        )?;
+    }
 
-    use crate::ip_route::DefaultRoute;
-    use std::net::SocketAddrV6;
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
+    // add ipv6 link local slacc address manually, this is required for peer discovery
+    run_command(
+        "ip",
+        &[
+            "address",
+            "add",
+            &format!("{}/64", to_wg_local(&args.own_ip)),
+            "dev",
+            &args.interface,
+        ],
+    )?;
 
-    let interface = String::from("wg1");
-    let endpoint_link_local_ip = Ipv6Addr::new(0xfe80, 0, 0, 0x12, 0x34, 0x56, 0x78, 0x90);
-    let own_mesh_ip = "fd00::1".parse::<IpAddr>().unwrap();
-    let endpoint = SocketAddr::V6(SocketAddrV6::new(endpoint_link_local_ip, 8088, 0, 123));
-    let remote_pub_key = "x8AcR9wI4t97aowYFlis077BDBk9SLdq6khMiixuTsQ="
-        .parse()
-        .unwrap();
-    let private_key_path = Path::new("private_key");
+    if setup_gateway_routes {
+        manual_peers_route(&args.endpoint.ip(), args.settings_default_route)?;
+    }
 
-    let wg_args = &[
-        "set",
-        "wg1",
-        "listen-port",
-        "8088",
-        "private-key",
-        "private_key",
-        "peer",
-        "x8AcR9wI4t97aowYFlis077BDBk9SLdq6khMiixuTsQ=",
-        "endpoint",
-        "[fe80::12:34:56:78:90%eth2]:8088",
-        "allowed-ips",
-        "::/0",
-        "persistent-keepalive",
-        "5",
-    ];
-
-    let mut counter = 0;
-
-    KI.set_mock(Box::new(move |program, args| {
-        counter += 1;
-        match counter {
-            1 => {
-                //get interfaces
-                assert_eq!(program, "ip");
-                assert_eq!(args, &["neigh"]);
-
-                Ok(Output {
-                    stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
-10.0.0.2 dev eth0  FAILED
-10.0.1.2 dev eth0 lladdr 00:00:00:aa:00:05 REACHABLE
-2001::2 dev eth0 lladdr 00:00:00:aa:00:56 REACHABLE
-fe80:0:0:12:34:56:78:90 dev eth2 lladdr 76:59:8e:98:00:81 STALE
-fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
-2001::2 dev eth0  FAILED"
-                        .to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
-            }
-            2 => {
-                // setup wg interface
-                assert_eq!(program, "wg");
-                assert_eq!(args, wg_args);
-                Ok(Output {
-                    stdout: b"".to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
-            }
-            3 => {
-                // add global ip
-                assert_eq!(program, "ip");
-                assert_eq!(args, ["address", "add", "fd00::1", "dev", "wg1"]);
-                Ok(Output {
-                    stdout: b"".to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
-            }
-            4 => {
-                // add link local ip
-                assert_eq!(program, "ip");
-                assert_eq!(args, ["address", "add", "fe80::1/64", "dev", "wg1"]);
-                Ok(Output {
-                    stdout: b"".to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
-            }
-            5 => {
-                // bring if up
-                assert_eq!(program, "ip");
-                assert_eq!(args, ["link", "set", "dev", "wg1", "up"]);
-                Ok(Output {
-                    stdout: b"".to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
-            }
-            _ => unimplemented!(),
-        }
-    }));
-
-    let def_route = DefaultRoute {
-        via: "192.168.8.1".parse().unwrap(),
-        nic: "wifiinterface".to_string(),
-        proto: Some("dhcp".to_string()),
-        metric: Some(600),
-        src: None,
-    };
-
-    let args = TunnelOpenArgs {
-        interface,
-        port: 8088,
-        endpoint,
-        remote_pub_key,
-        private_key_path,
-        own_ip: own_mesh_ip,
-        own_ip_v2: None,
-        external_nic: None,
-        settings_default_route: &mut Some(def_route),
-    };
-
-    KI.open_tunnel(args).unwrap();
+    let output = run_command("ip", &["link", "set", "dev", &args.interface, "up"])?;
+    if !output.stderr.is_empty() {
+        return Err(KernelInterfaceError::RuntimeError(format!(
+            "received error setting wg interface {:?} up: {}",
+            args,
+            String::from_utf8(output.stderr)?
+        )));
+    }
+    Ok(())
 }
