@@ -16,6 +16,7 @@ use rita_common::rita_loop::{
     start_core_rita_endpoints, start_rita_common_loops,
     write_to_disk::{save_to_disk_loop, SettingsOnDisk},
 };
+use rita_exit::rita_loop::start_rita_exit_list_endpoint;
 use rita_exit::{
     dashboard::start_rita_exit_dashboard,
     operator_update::update_loop::start_operator_update_loop,
@@ -259,6 +260,7 @@ pub fn spawn_rita_exit(
         let workers = 4;
         start_core_rita_endpoints(workers as usize);
         start_rita_exit_endpoints(workers as usize);
+        start_rita_exit_list_endpoint(workers as usize);
         start_rita_exit_dashboard(Arc::new(RwLock::new(None)));
 
         // this one blocks

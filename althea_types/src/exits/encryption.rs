@@ -1,8 +1,6 @@
 //! this file contains utility functions for the exit communcaiton which requires encrypting/decrypting requests
 //! to secure them as the pass over the babel network
-use crate::exits::EncryptedExitList;
-use crate::exits::ExitList;
-use crate::exits::ExitListV2;
+use crate::SignedExitServerList;
 use crate::WgKey;
 use crypto_box::aead::Aead;
 use crypto_box::aead::AeadCore;
@@ -15,6 +13,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 
 use super::EncryptedExitClientIdentity;
+use super::EncryptedExitServerList;
 use super::EncryptedExitState;
 use super::ExitClientIdentity;
 use super::ExitState;
@@ -138,37 +137,6 @@ pub fn decrypt_exit_state(
     Ok(decrypted_exit_state)
 }
 
-pub fn decrypt_exit_list(
-    our_secretkey: &SecretKey,
-    exit_list: EncryptedExitList,
-    exit_pubkey: &PublicKey,
-) -> Result<ExitListV2, ExitEncryptionError> {
-    let ciphertext = exit_list.exit_list;
-    let nonce = exit_list.nonce;
-
-    let b = SalsaBox::new(exit_pubkey, our_secretkey);
-
-    let ret: ExitListV2 = match b.decrypt(nonce.as_ref().into(), ciphertext.as_ref()) {
-        Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
-            Ok(json_string) => match serde_json::from_str(&json_string) {
-                Ok(ip_list) => ip_list,
-                Err(e) => {
-                    return Err(ExitEncryptionError::SerdeError { e: e.to_string() });
-                }
-            },
-            Err(e) => {
-                return Err(ExitEncryptionError::Utf8Error { e: e.to_string() });
-            }
-        },
-        Err(_) => {
-            return Err(ExitEncryptionError::ExitListDecryptionError {
-                e: "Could not decrypt exit list".to_string(),
-            });
-        }
-    };
-    Ok(ret)
-}
-
 pub fn encrypt_setup_return(
     ret: ExitState,
     our_secretkey: &SecretKey,
@@ -186,37 +154,56 @@ pub fn encrypt_setup_return(
     }
 }
 
-pub fn encrypt_exit_list(
-    ret: &ExitList,
-    our_secretkey: &SecretKey,
-    their_pubkey: &PublicKey,
-) -> EncryptedExitList {
-    let plaintext = serde_json::to_string(&ret)
-        .expect("Failed to serialize ExitList!")
-        .into_bytes();
-    let nonce = SalsaBox::generate_nonce(&mut OsRng);
-    let b = SalsaBox::new(their_pubkey, our_secretkey);
-    let ciphertext = b.encrypt(&nonce, plaintext.as_ref()).unwrap();
-    EncryptedExitList {
-        nonce: nonce.into(),
-        exit_list: ciphertext,
+impl EncryptedExitServerList {
+    pub fn decrypt(
+        &self,
+        our_secretkey: &SecretKey,
+    ) -> Result<SignedExitServerList, ExitEncryptionError> {
+        let ciphertext = self.encrypted_exit_server_list.clone();
+        let nonce = self.nonce;
+
+        let b = SalsaBox::new(&self.pubkey.into(), our_secretkey);
+
+        let ret: SignedExitServerList = match b.decrypt(nonce.as_ref().into(), ciphertext.as_ref())
+        {
+            Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
+                Ok(json_string) => match serde_json::from_str(&json_string) {
+                    Ok(exit_list) => exit_list,
+                    Err(e) => {
+                        return Err(ExitEncryptionError::SerdeError { e: e.to_string() });
+                    }
+                },
+                Err(e) => {
+                    return Err(ExitEncryptionError::Utf8Error { e: e.to_string() });
+                }
+            },
+            Err(_) => {
+                return Err(ExitEncryptionError::ExitListDecryptionError {
+                    e: "Could not decrypt exit list".to_string(),
+                });
+            }
+        };
+        Ok(ret)
     }
 }
 
-pub fn encrypt_exit_list_v2(
-    ret: &ExitListV2,
-    our_secretkey: &SecretKey,
-    their_pubkey: &PublicKey,
-) -> EncryptedExitList {
-    let plaintext = serde_json::to_string(&ret)
-        .expect("Failed to serialize ExitList!")
-        .into_bytes();
-    let nonce = SalsaBox::generate_nonce(&mut OsRng);
-    let b = SalsaBox::new(their_pubkey, our_secretkey);
-    let ciphertext = b.encrypt(&nonce, plaintext.as_ref()).unwrap();
-    EncryptedExitList {
-        nonce: nonce.into(),
-        exit_list: ciphertext,
+impl SignedExitServerList {
+    pub fn encrypt(
+        &self,
+        our_secretkey: &SecretKey,
+        their_pubkey: &PublicKey,
+    ) -> EncryptedExitServerList {
+        let plaintext = serde_json::to_string(&self)
+            .expect("Failed to serialize ExitServerList!")
+            .into_bytes();
+        let nonce = SalsaBox::generate_nonce(&mut OsRng);
+        let b = SalsaBox::new(their_pubkey, our_secretkey);
+        let ciphertext = b.encrypt(&nonce, plaintext.as_ref()).unwrap();
+        EncryptedExitServerList {
+            pubkey: WgKey::from(*their_pubkey.as_bytes()),
+            nonce: nonce.into(),
+            encrypted_exit_server_list: ciphertext,
+        }
     }
 }
 
@@ -293,7 +280,6 @@ mod tests {
 
         Ok(decrypted_id)
     }
-
 
     #[test]
     fn test_encrypt_decrypt_exit_client_id() {
@@ -402,21 +388,5 @@ mod tests {
             decrypt_exit_state(&our_seckey, encrypted_state, &exit_pubkey).unwrap();
 
         assert_eq!(state, decrypted_state);
-    }
-
-    #[test]
-    fn test_encrypt_decrypt_exit_list_v2() {
-        let (_, our_seckey) = gen_keypair();
-        let (exit_pubkey, _) = gen_keypair();
-        let list_v2 = ExitListV2 {
-            exit_list: Vec::new(),
-        };
-
-        let encrypted_list_v2 = encrypt_exit_list_v2(&list_v2, &our_seckey, &exit_pubkey);
-
-        let decrypted_list_v2 =
-            decrypt_exit_list(&our_seckey, encrypted_list_v2, &exit_pubkey).unwrap();
-
-        assert_eq!(list_v2, decrypted_list_v2);
     }
 }
