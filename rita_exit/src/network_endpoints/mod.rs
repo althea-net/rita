@@ -5,25 +5,23 @@ use crate::database::{client_status, signup_client};
 
 use crate::RitaExitError;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
-use althea_types::exit_identity_to_id;
-use althea_types::regions::Regions;
-use althea_types::ExitListV2;
+use althea_types::EncryptedExitServerList;
 use althea_types::Identity;
-use althea_types::{
-    decrypt_exit_client_id, encrypt_exit_list, encrypt_exit_list_v2, encrypt_setup_return,
-};
+use althea_types::SignedExitServerList;
+use althea_types::WgKey;
+use althea_types::{decrypt_exit_client_id, encrypt_setup_return};
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };
-use althea_types::{ExitList, WgKey};
-use crypto_box::SecretKey;
+use clarity::Address;
+use crypto_box::{PublicKey, SecretKey};
 use num256::Int256;
-use rita_client_registration::client_db::get_exits_list;
+use reqwest::ClientBuilder;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::rita_loop::get_web3_server;
+use serde_json::json;
 use settings::get_rita_exit;
-use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::time::SystemTime;
@@ -31,6 +29,9 @@ use web30::client::Web3;
 
 // Timeout to contact Althea contract and query info about a user
 pub const CLIENT_STATUS_TIMEOUT: Duration = Duration::from_secs(20);
+
+// IP serving exit lists from the root server
+pub const EXIT_LIST_IP: &str = "10.10.10.10";
 
 /// helper function for returning from secure_setup_request()
 
@@ -189,6 +190,8 @@ pub async fn get_exit_timestamp_http(_req: HttpRequest) -> HttpResponse {
     })
 }
 
+// todo somewhere between get exit list and get list v2 is where we get the new hard coded exit list.....
+// exits must have a hardcoded ip server to host calls for the exit list endpoint! this cant go on the old server
 /// This function takes a list of exit ips in the cluster from the exit registration smart
 /// contract, and returns a list of exit ips that are in the same region and currency as the client
 /// if this exit fits the region and currenty requirements it will always return a list containing itself
@@ -197,113 +200,66 @@ pub async fn get_exit_timestamp_http(_req: HttpRequest) -> HttpResponse {
 pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
     let exit_settings = get_rita_exit();
     let our_secretkey: WgKey = exit_settings.network.wg_private_key.unwrap();
-    let our_secretkey = our_secretkey.into();
+    let our_secretkey: SecretKey = our_secretkey.into();
+    let our_pubkey: PublicKey = our_secretkey.public_key();
 
-    let their_nacl_pubkey = request.pubkey.into();
+    let their_nacl_pubkey = &request.pubkey.into();
 
-    let contact = Web3::new(&get_web3_server(), CLIENT_STATUS_TIMEOUT);
     let rita_exit = get_rita_exit();
-    let our_id = rita_exit.get_identity().unwrap();
-    let our_addr = rita_exit
-        .payment
-        .eth_private_key
-        .expect("Why do we not have a private key?")
-        .to_address();
     let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
 
-    let ret: ExitList = ExitList {
-        exit_list: match get_exits_list(&contact, our_addr, contract_addr).await {
-            Ok(a) => {
-                let exit_regions = rita_exit.exit_network.allowed_countries;
-
-                // only one payment type can be accepted for now, but this structure allows for
-                // multiple payment types in the future
-                let mut accepted_payments = HashSet::new();
-                accepted_payments.insert(exit_settings.payment.system_chain);
-
-                if exit_regions.is_empty() || accepted_payments.is_empty() {
-                    error!("Exit list not configured correctly. Please set up exit regions and accepted payment types in config");
-                    return HttpResponse::InternalServerError().finish();
-                }
-                let mut ret = vec![];
-                for exit in a {
-                    // Remove Exits that dont have proper regions defined
-                    let mut exit_allowed_regions = exit.allowed_regions.clone();
-                    if exit_allowed_regions.remove(&Regions::UnkownRegion) {
-                        warn!("Found an uknown region in exit! {:?}", exit);
-                    }
-
-                    if exit_allowed_regions.is_empty() || exit.payment_types.is_empty() {
-                        error!(
-                            "Invalid configured exit, no allowed regions or payments setup! {:?}",
-                            exit
-                        );
-                        continue;
-                    }
-                    if !exit_allowed_regions.is_disjoint(&exit_regions)
-                        && !exit.payment_types.is_disjoint(&accepted_payments)
-                    {
-                        ret.push(exit_identity_to_id(exit))
-                    }
-                }
-                ret.push(our_id); // add ourselves to the list
-                ret
-            }
+    // we are receiving an EncryptedExitServerList from the root server- we need to a. decrypt it and b. reencrypt it
+    // with the client's key so that they can verify it came from the root server.
+    let ret: SignedExitServerList = match get_exit_list_from_root(contract_addr, our_pubkey).await {
+        Some(a) => match a.decrypt(&our_secretkey.clone()) {
+            Ok(a) => a,
             Err(e) => {
-                error!(
-                    "Unable to retreive the exit list with {}, returning empty list",
+                let e = format!(
+                    "Failed to decrypt signed exit list from root server with {:?}",
                     e
                 );
-                vec![]
+                return HttpResponse::InternalServerError().json(e);
             }
         },
-        wg_exit_listen_port: settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
+        None => {
+            return HttpResponse::InternalServerError()
+                .json("Failed to get exit list from root server");
+        }
     };
 
-    let exit_list = encrypt_exit_list(&ret, &their_nacl_pubkey, &our_secretkey);
+    let exit_list = ret.encrypt(&our_secretkey, their_nacl_pubkey);
     HttpResponse::Ok().json(exit_list)
 }
 
-/// Exit list v2, for newer router that do the fitering (region and payment type) themselves, this endpoint
-/// returns the entire list
-pub async fn get_exit_list_v2(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
-    let exit_settings = get_rita_exit();
-    let our_secretkey: WgKey = match exit_settings.network.wg_private_key {
-        Some(a) => a,
-        None => {
-            error!("This exit doesnt have a network wg key?");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
-    let our_secretkey = our_secretkey.into();
-
-    let their_nacl_pubkey = request.pubkey.into();
-
-    let contact = Web3::new(&get_web3_server(), CLIENT_STATUS_TIMEOUT);
-    let rita_exit = get_rita_exit();
-    let our_addr = rita_exit
-        .payment
-        .eth_private_key
-        .expect("Why do we not have a private key?")
-        .to_address();
-    let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
-
-    let mut ret: ExitListV2 = ExitListV2 {
-        exit_list: match get_exits_list(&contact, our_addr, contract_addr).await {
-            Ok(a) => a,
+async fn get_exit_list_from_root(
+    contract_addr: Address,
+    pubkey: PublicKey,
+) -> Option<EncryptedExitServerList> {
+    let request_url = format!("https://{}/{}", EXIT_LIST_IP, contract_addr);
+    let json_body = json!({
+        "pubkey": pubkey.to_bytes(),
+    });
+    let timeout = Duration::new(15, 0);
+    let client = ClientBuilder::new().timeout(timeout).build().unwrap();
+    let response = client
+        .head(request_url)
+        .json(&json_body)
+        .send()
+        .await
+        .expect("Could not receive data from exit root server");
+    if response.status().is_success() {
+        info!("Received an exit list");
+        match response.json().await {
+            Ok(a) => Some(a),
             Err(e) => {
-                error!(
-                    "Unable to retreive the exit list with {}, returning empty list",
-                    e
-                );
-                vec![]
+                error!("Failed to parse exit list from root server {:?}", e);
+                None
             }
-        },
-    };
-    ret.exit_list.push(exit_settings.get_exit_identity()); // add ourselves to the list
-
-    let exit_list = encrypt_exit_list_v2(&ret, &their_nacl_pubkey, &our_secretkey);
-    HttpResponse::Ok().json(exit_list)
+        }
+    } else {
+        error!("Failed to get exit list from root server");
+        None
+    }
 }
 
 /// Used by clients to get their debt from the exits. While it is in theory possible for the

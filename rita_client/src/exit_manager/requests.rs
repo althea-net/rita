@@ -208,6 +208,7 @@ pub async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
 }
 
 /// Hits the exit_list endpoint for a given exit.
+/// todo this is where we ask the exit for a new list (and do we have to decrypt it?)
 pub async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> {
     let current_exit = match settings::get_rita_client()
         .exit_client
