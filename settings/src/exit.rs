@@ -19,6 +19,8 @@ pub struct ExitNetworkSettings {
     /// This is the port which the exit registration happens over, and should only be accessible
     /// over the mesh
     pub exit_hello_port: u16,
+    /// This is the port which exit lists are served over
+    pub exit_list_port: u16,
     /// This is the port which the exit tunnel listens on
     pub wg_tunnel_port: u16,
     pub wg_v2_tunnel_port: u16,
@@ -77,6 +79,7 @@ impl ExitNetworkSettings {
                 .parse()
                 .unwrap(),
             allowed_countries: HashSet::new(),
+            exit_list_port: 5555,
         }
     }
 }

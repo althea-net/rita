@@ -340,13 +340,34 @@ pub fn start_rita_exit_endpoints(workers: usize) {
                     .route("/secure_status", web::post().to(secure_status_request))
                     .route("/client_debt", web::post().to(get_client_debt))
                     .route("/time", web::get().to(get_exit_timestamp_http))
-                    .route("/exit_list", web::post().to(get_exit_list))
-                    .route("/exit_list_v2", web::post().to(get_exit_list_v2))
             })
             .workers(workers)
             .bind(format!(
                 "[::0]:{}",
                 settings::get_rita_exit().exit_network.exit_hello_port
+            ))
+            .unwrap()
+            .shutdown_timeout(0)
+            .run()
+            .await;
+        });
+    });
+}
+
+// the exit list gets its own server on hardcoded IP so that clients go to the nearest
+pub fn start_rita_exit_list_endpoint(workers: usize) {
+    thread::spawn(move || {
+        let runner = AsyncSystem::new();
+        runner.block_on(async move {
+            let _res = HttpServer::new(|| {
+                App::new()
+                    .route("/exit_list", web::post().to(get_exit_list))
+            })
+            .workers(workers)
+            .bind(format!(
+                "{}:{}",
+                EXIT_LIST_IP,
+                settings::get_rita_exit().exit_network.exit_list_port
             ))
             .unwrap()
             .shutdown_timeout(0)

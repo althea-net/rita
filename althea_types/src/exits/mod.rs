@@ -1,7 +1,6 @@
 use crate::default_system_chain;
 use crate::wg_key::WgKey;
 use crate::{exits::identity::ExitIdentity, Identity, SystemChain};
-use crypto_box::PublicKey;
 use ipnetwork::IpNetwork;
 use serde::Deserialize;
 use serde::Serialize;
@@ -103,33 +102,11 @@ pub struct EncryptedExitState {
     pub encrypted_exit_state: Vec<u8>,
 }
 
-/// Wrapper for secure box containing a list of ips
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct EncryptedExitList {
-    pub nonce: [u8; 24],
-    pub exit_list: Vec<u8>,
-}
-
-/// Struct returned when hitting exit_list endpoint TODO remote deprecated
-#[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct ExitList {
-    pub exit_list: Vec<Identity>,
-    // All exits in a cluster listen on same port
-    pub wg_exit_listen_port: u16,
-}
-
-/// Struct returned when hitting exit_list_V2 endpoint TODO remote deprecated
-#[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct ExitListV2 {
-    /// A list of exits currently active on this contract
-    pub exit_list: Vec<ExitIdentity>,
-}
-
-impl ExitListV2 {
-    pub fn into_identities(self) -> Vec<Identity> {
-        self.exit_list.into_iter().map(|exit| exit.into()).collect()
-    }
-}
+// impl ExitList {
+//     pub fn into_identities(self) -> Vec<Identity> {
+//         self.exit_list.into_iter().map(|exit| exit.into()).collect()
+//     }
+// }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ExitVerifMode {

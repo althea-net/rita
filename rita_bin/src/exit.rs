@@ -17,6 +17,7 @@ use althea_types::Identity;
 use clarity::Address;
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
+use rita_exit::rita_loop::start_rita_exit_list_endpoint;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -159,6 +160,7 @@ async fn main() {
     let workers = settings.workers;
     start_core_rita_endpoints(workers as usize);
     start_rita_exit_endpoints(workers as usize);
+    start_rita_exit_list_endpoint(workers as usize);
 
     start_rita_common_loops();
     start_operator_update_loop();

@@ -6,7 +6,6 @@ use config::{load_config, CONFIG};
 use crypto_box::aead::{Aead, AeadCore, OsRng};
 use crypto_box::{PublicKey, SalsaBox, SecretKey};
 use env_logger::Env;
-use lazy_static::lazy_static;
 use log::info;
 use rita_client_registration::client_db::get_exits_list;
 use rustls::ServerConfig;
@@ -33,27 +32,22 @@ pub const DOMAIN: &str = if cfg!(test) || DEVELOPMENT {
 /// The backend RPC port for the info server fucntions implemented in this repo
 const SERVER_PORT: u16 = 9000;
 
-lazy_static! {
-    static ref EXIT_CONTRACT_CACHE: Arc<RwLock<HashMap<Address, ExitContractSignatureCacheValue>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-}
-
 /// This endpoint retrieves and signs the data from any specified exit contract,
 /// allowing this server to serve as a root of trust for several different exit contracts.
 #[get("/{exit_contract}")]
 async fn return_exit_contract_data(
     exit_contract: web::Path<Address>,
     pubkey: web::Data<[u8; 32]>,
+    cache: web::Data<Arc<RwLock<HashMap<Address, ExitContractSignatureCacheValue>>>>,
 ) -> impl Responder {
     let contract = exit_contract.into_inner();
-    let cache = EXIT_CONTRACT_CACHE.read().unwrap().clone();
-    match cache.get(&contract) {
+    match cache.read().unwrap().get(&contract) {
         Some(cache) => {
             // return an encrypted exit server list based on the given key
             HttpResponse::Ok().json(cache.to_encrypted_exit_server_list((*pubkey.get_ref()).into()))
         }
         None => {
-            match retrieve_exit_server_list(contract).await {
+            match retrieve_exit_server_list(contract, cache.get_ref().clone()).await {
                 Ok(cache_value) => {
                     // encrypt and return
                     return HttpResponse::Ok().json(
@@ -72,6 +66,7 @@ async fn return_exit_contract_data(
 
 async fn retrieve_exit_server_list(
     exit_contract: Address,
+    cache: Arc<RwLock<HashMap<Address, ExitContractSignatureCacheValue>>>,
 ) -> Result<ExitContractSignatureCacheValue, Web3Error> {
     const WEB3_TIMEOUT: Duration = Duration::from_secs(10);
     let exits = get_exits_list(
@@ -94,7 +89,7 @@ async fn retrieve_exit_server_list(
                 nonce: nonce.into(),
             };
             // add this new exit to the cache
-            EXIT_CONTRACT_CACHE
+            cache
                 .write()
                 .unwrap()
                 .insert(exit_contract, cache_value.clone());
@@ -138,19 +133,18 @@ const SIGNATURE_UPDATE_SLEEP: Duration = Duration::from_secs(300);
 /// In order to improve scalability this loop grabs and signs an updated list of exits from each exit contract
 /// that has previously been requested from this server every 5 minutes. This allows the server to return instantly
 /// on the next request from the client without having to perform rpc query 1-1 with requests.
-fn signature_update_loop() {
+fn signature_update_loop(cache: Arc<RwLock<HashMap<Address, ExitContractSignatureCacheValue>>>) {
     thread::spawn(move || loop {
         let runner = System::new();
-        runner.block_on(async move {
-            let cache = EXIT_CONTRACT_CACHE.read().unwrap().clone();
-            for (exit_contract, _value) in cache.iter() {
+        runner.block_on(async {
+            let cache_iter = cache.read().unwrap().clone();
+            for (exit_contract, _value) in cache_iter.iter() {
                 // get the latest exit list from the contract
-                match retrieve_exit_server_list(*exit_contract).await {
+                match retrieve_exit_server_list(*exit_contract, cache.clone()).await {
                     // grab the cache here so we don't lock it while awaiting for every single contract
                     Ok(cache_value) => {
-                        let mut cache = EXIT_CONTRACT_CACHE.write().unwrap();
                         // update the cache
-                        cache.insert(*exit_contract, cache_value);
+                        cache.write().unwrap().insert(*exit_contract, cache_value);
                     }
                     Err(e) => {
                         info!("Failed to get exit list from contract {:?}", e);
@@ -171,8 +165,10 @@ async fn main() -> std::io::Result<()> {
     // lazy static variable after this
     load_config();
 
-    signature_update_loop();
-    let web_data = web::Data::new(EXIT_CONTRACT_CACHE.read().unwrap().clone());
+    let exit_contract_data_cache: Arc<RwLock<HashMap<Address, ExitContractSignatureCacheValue>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+    signature_update_loop(exit_contract_data_cache.clone());
+    let web_data = web::Data::new(exit_contract_data_cache.clone());
 
     let server = HttpServer::new(move || {
         App::new()
