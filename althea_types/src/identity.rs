@@ -194,7 +194,8 @@ impl Identity {
                         "Cant eth address with byte chunks {byte_chunks:?}"
                     )));
                 }
-                &a[12..]},
+                &a[12..]
+            }
             None => {
                 return Err(AltheaTypesError::BadEthAbiInput(format!(
                     "Cant eth address with byte chunks {byte_chunks:?}"
