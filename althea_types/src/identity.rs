@@ -188,7 +188,13 @@ impl Identity {
         // 3rd entry is the eth address
         index += 1;
         let eth_address: Address = match Address::from_slice(match byte_chunks.get(index) {
-            Some(a) => &a[12..],
+            Some(a) => {
+                if a.len() < 32 {
+                    return Err(AltheaTypesError::BadEthAbiInput(format!(
+                        "Cant eth address with byte chunks {byte_chunks:?}"
+                    )));
+                }
+                &a[12..]},
             None => {
                 return Err(AltheaTypesError::BadEthAbiInput(format!(
                     "Cant eth address with byte chunks {byte_chunks:?}"
