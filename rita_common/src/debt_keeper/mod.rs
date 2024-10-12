@@ -820,6 +820,7 @@ mod tests {
 
     use super::*;
     use rand::Rng;
+    use serial_test::serial;
     use settings::client::RitaClientSettings;
 
     fn get_test_identity() -> Identity {
@@ -855,6 +856,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_single_suspend() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut client = settings::get_rita_client();
@@ -874,6 +876,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_single_overpay() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut client = settings::get_rita_client();
@@ -894,6 +897,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_single_pay() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
@@ -921,6 +925,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_single_pay_limited() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
@@ -944,6 +949,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_single_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut client = settings::get_rita_client();
@@ -969,6 +975,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multi_pay() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
@@ -994,6 +1001,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multi_pay_lmited() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
@@ -1019,6 +1027,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multi_fail() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut client = settings::get_rita_client();
@@ -1042,6 +1051,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multi_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut client = settings::get_rita_client();
@@ -1071,6 +1081,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_credit_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
@@ -1109,6 +1120,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_credit_reopen_limited() {
         let mut common = settings::get_rita_common();
         common.payment.payment_threshold = 10.into();
@@ -1149,6 +1161,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_payment_fail() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
@@ -1245,6 +1258,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_payment_fail_limited() {
         settings::set_rita_client(RitaClientSettings::default());
 
@@ -1343,6 +1357,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_debts_saving() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut test_they_owe = NodeDebtData::new();
@@ -1394,6 +1409,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_saving_debts_to_file() {
         let mut debt_data: DebtData = HashMap::new();
         let id = Identity {
@@ -1481,6 +1497,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_normalize_payment_amount() {
         // this is $6 in a 6 decimal of precision token where 1 unit = $1
         let start_amount = Uint256::from(6_000_000u64);

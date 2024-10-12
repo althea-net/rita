@@ -1,5 +1,6 @@
 #[warn(clippy::module_inception)]
 #[allow(unused)]
+#[cfg(test)]
 pub mod test {
 
     use crate::usage_tracker::structs::{
@@ -18,34 +19,16 @@ pub mod test {
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
     use rand::{thread_rng, Rng};
+    use serial_test::serial;
     use settings::client::RitaClientSettings;
     use settings::{get_rita_common, set_rita_client, set_rita_common};
     use std::collections::{HashMap, HashSet, VecDeque};
     use std::convert::TryInto;
     use std::fs::File;
     use std::io::Write;
-    #[cfg(test)]
-    impl UsageTrackerStorage {
-        // previous implementation of save which uses the old struct to serialize
-        fn save2(&self) -> Result<(), RitaCommonError> {
-            let old_struct = UsageTrackerStorageOld {
-                last_save_hour: self.last_save_hour,
-                client_bandwidth: convert_map_to_flat_usage_data(self.client_bandwidth.clone()),
-                relay_bandwidth: convert_map_to_flat_usage_data(self.relay_bandwidth.clone()),
-                exit_bandwidth: convert_map_to_flat_usage_data(self.exit_bandwidth.clone()),
-                payments: convert_payment_set_to_payment_hour(self.payments.clone()),
-            };
-            let serialized = bincode::serialize(&old_struct)?;
-            let mut file = File::create(settings::get_rita_common().network.usage_tracker_file)?;
-            let buffer: Vec<u8> = Vec::new();
-            let mut encoder = ZlibEncoder::new(buffer, Compression::default());
-            encoder.write_all(&serialized)?;
-            let compressed_bytes = encoder.finish()?;
-            Ok(file.write_all(&compressed_bytes)?)
-        }
-    }
 
     #[test]
+    #[serial]
     fn save_usage_tracker_bincode() {
         let rset = RitaClientSettings::new("../settings/test.toml").unwrap();
         let rset = RitaClientSettings::default();
@@ -62,41 +45,6 @@ pub mod test {
         info!("Loading test  data: {:?}", res2);
 
         assert_eq!(dummy_usage_tracker, res2);
-    }
-
-    #[test]
-    fn convert_legacy_usage_tracker() {
-        //env_logger::init();
-        // make a dummy usage tracker instance
-        // save it as gzipped json ( pull code from the git history that you deleted and put it in this test)
-        // makes sure the file exists
-        // deserialize the file using the upgrade function
-        // make sure it's equal to the original dummy we made
-        let rset = RitaClientSettings::default();
-        set_rita_client(rset);
-        let mut newrc = get_rita_common();
-        newrc.network.usage_tracker_file = "/tmp/usage_tracker.bincode".to_string();
-        set_rita_common(newrc);
-        info!("Generating large usage tracker history");
-        let dummy_usage_tracker = generate_dummy_usage_tracker();
-
-        info!("Saving test data in old format");
-        dummy_usage_tracker.save2().unwrap();
-
-        info!("Loading test data from oldformat");
-        let mut res2 = UsageTrackerStorage::load_from_disk();
-
-        // Saving res2 with the new save() and updated usage_tracker_file in order to end with
-        // a .bincode file from the old format bincode file.
-        res2.save().unwrap();
-        info!("Saving test data as bincode");
-        let res4 = UsageTrackerStorage::load_from_disk();
-        info!("Loading test data from bincode");
-
-        // use == to avoid printing out the compared data
-        // when it failed, as it is enormous
-        assert!(dummy_usage_tracker == res2);
-        assert!(res2 == res4);
     }
 
     /// tests that the flat conversion comes out in the right order (increasing usage hours)

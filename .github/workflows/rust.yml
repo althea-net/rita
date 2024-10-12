@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
       - name: Run Rita and Rita Exit tests
-        run: RUST_TEST_THREADS=1 cargo test --verbose --all
+        run: cargo test --verbose --all
   rustfmt:
     needs: check
     runs-on: ubuntu-latest

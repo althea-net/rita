@@ -10,7 +10,7 @@ cargo clippy --all --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
 
 # test rita only on many architectures
-CROSS_TEST_ARGS="--verbose --all -- --test-threads=1"
+CROSS_TEST_ARGS="--verbose --all --"
 cross test --target x86_64-unknown-linux-musl $CROSS_TEST_ARGS
 cross test --target mips-unknown-linux-gnu $CROSS_TEST_ARGS
 cross test --target mipsel-unknown-linux-gnu $CROSS_TEST_ARGS

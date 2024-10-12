@@ -900,6 +900,7 @@ mod tests {
     use althea_types::identity::random_identity;
     use num256::Int256;
     use num_traits::Num;
+    use serial_test::serial;
     use settings::client::RitaClientSettings;
 
     fn generate_fake_payment(from_id: Identity) -> ToValidate {
@@ -933,6 +934,7 @@ mod tests {
     /// tests the remove behaivor of payment validator, ensuring that transactions
     /// are successfully removed, and that they are moved to the correct list
     #[test]
+    #[serial]
     fn test_remove() {
         let mut validator = PaymentValidator::new();
         let our_id = random_identity();
