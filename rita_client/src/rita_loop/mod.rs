@@ -322,9 +322,9 @@ fn manage_babeld_logs() {
 /// the exit local dns server and also modificing /etc/config/dhcp to ensure we advertise the althea router itself (192.168.10.1)
 /// as a dns resolver
 pub fn update_dns_conf() {
+    let exit_internal_ip: IpAddr = Ipv4Addr::from([172, 168, 0, 254]).into();
     let resolv_path = "/etc/resolv.conf";
-    let updated_config = "nameserver 172.168.0.254\nnameserver 1.0.0.1\nnameserver 8.8.8.8\nnameserver 74.82.42.42\nnameserver 149.112.112.10\nnameserver 64.6.65.6"
-        .to_string();
+    let updated_config = format!("nameserver {}\nnameserver 1.0.0.1\nnameserver 8.8.8.8\nnameserver 74.82.42.42\nnameserver 149.112.112.10\nnameserver 64.6.65.6", exit_internal_ip);
     // read line by line instead
     match File::open(resolv_path) {
         Ok(file) => {
@@ -332,8 +332,8 @@ pub fn update_dns_conf() {
             let mut found = false;
             for line in reader.lines() {
                 let s = line.unwrap_or("".to_string());
-                if s.trim() == "nameserver 172.168.0.254" {
-                    info!("Found nameserver 172.168.0.254, no update to resolv.conf");
+                if s.trim() == format!("nameserver {}", exit_internal_ip) {
+                    info!("Found nameserver {exit_internal_ip}, no update to resolv.conf");
                     found = true;
                 }
             }
@@ -360,28 +360,23 @@ pub fn update_dns_conf() {
         // not every device will take this dns server and use it, but many do, and some use it exclusively so it has to be correct
 
         const DHCP_DNS_LIST_KEY: &str = "dhcp.@dnsmasq[0].server";
-        const LAN_IP_KEY: &str = "network.lan.ipaddr";
 
         // this config value is the list of servers dnsmasq uses for resolving client requests
         // if it does not start with the exit internal nameserver add it. An empty value is acceptable
         // since dnsmasq simply uses resolv.conf servers which we update above in that case.
-        match (
-            parse_list_to_ip(KI.get_uci_var(DHCP_DNS_LIST_KEY)),
-            maybe_parse_ip(KI.get_uci_var(LAN_IP_KEY)),
-        ) {
-            (Ok(dns_server_list), Ok(router_internal_ip)) => {
+        match parse_list_to_ip(KI.get_uci_var(DHCP_DNS_LIST_KEY)) {
+            Ok(dns_server_list) => {
                 // an empty list uses the system resolver, this is acceptable since we just set the system resolver to
                 // point at the exit internal ip above
-                if let Some(first_server_list_entry) = dns_server_list.get(0) {
-                    if *first_server_list_entry != router_internal_ip {
+                if let Some(first_server_list_entry) = dns_server_list.first() {
+                    if *first_server_list_entry != exit_internal_ip {
                         let mut dns_server_list = dns_server_list;
-                        dns_server_list.insert(0, router_internal_ip);
+                        dns_server_list.insert(0, exit_internal_ip);
                         overwrite_dns_server_and_restart_dhcp(DHCP_DNS_LIST_KEY, dns_server_list)
                     }
                 }
             }
-            (Err(e), _) => error!("Failed to get dns server list? {:?}", e),
-            (_, Err(e)) => error!("Failed to get router internal ip {:?}", e),
+            Err(e) => error!("Failed to get dns server list? {:?}", e),
         }
 
         // check to make sure DHCP is using the correct resolv.conf file
