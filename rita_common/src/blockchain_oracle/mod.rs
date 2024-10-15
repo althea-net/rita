@@ -274,8 +274,10 @@ pub fn low_balance() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_update_blockchain_info() {
         let runner = actix_async::System::new();
         let contact = Contact::new(

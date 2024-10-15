@@ -6,6 +6,7 @@ use auto_bridge::{encode_relaytokens, get_relay_message_hash};
 use clarity::Address;
 use clarity::PrivateKey;
 use num256::Uint256;
+use serial_test::serial;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -15,6 +16,7 @@ const TIMEOUT: Duration = Duration::from_secs(600);
 /// We call the function with the 'Withdraw' struct and check if the information is being updated correctly. This is necessary
 /// that the correct information about the withdrawal is being processed.
 #[test]
+#[serial]
 fn test_xdai_setup_withdraw() {
     let pk = PrivateKey::from_str(&format!(
         "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",

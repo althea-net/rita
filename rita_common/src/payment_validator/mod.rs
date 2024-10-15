@@ -1013,6 +1013,7 @@ mod tests {
     #[ignore]
     #[test]
     #[should_panic]
+    #[serial]
     fn test_double_remove() {
         let mut validator = PaymentValidator::new();
         let our_id = random_identity();
@@ -1026,6 +1027,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     /// Attempts to insert a duplicate tx into the to_validate list
     fn test_duplicate_tx() {
         // check that we can't put duplicates in add_to_validation_queue
@@ -1045,6 +1047,7 @@ mod tests {
 
     // ensures that payment validator crashes when presented with an invalid state
     #[test]
+    #[serial]
     fn test_invalid_payment_validator_state() {
         let mut validator = PaymentValidator::new();
         let our_id = random_identity();
