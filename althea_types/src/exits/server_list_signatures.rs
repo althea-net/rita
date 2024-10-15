@@ -20,6 +20,16 @@ pub struct ExitServerList {
     pub created: SystemTime,
 }
 
+impl Default for ExitServerList {
+    fn default() -> Self {
+        ExitServerList {
+            contract: Address::default(),
+            exit_list: Vec::new(),
+            created: SystemTime::now(),
+        }
+    }
+}
+
 impl ExitServerList {
     /// Returns the ExitServerList as an Ethereum ABI token
     pub fn encode_to_eth_abi_token(&self) -> AbiToken {

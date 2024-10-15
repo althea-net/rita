@@ -16,7 +16,7 @@ use althea_kernel_interface::{
 use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
 use althea_types::ExitIdentity;
-use althea_types::ExitListV2;
+use althea_types::ExitServerList;
 use althea_types::ExitState;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
@@ -83,7 +83,7 @@ pub fn remove_nat() {
 /// TODO this is a temporary solution, instead we need to move to the new universal endpoint
 /// design where each exit hosts a multihomed ip endpoint returning a signed list of bootstrapping
 /// exits rather than each exit hosting a list of exits
-pub fn merge_exit_lists(mut list: ExitListV2) -> ExitListV2 {
+pub fn merge_exit_lists(mut list: ExitServerList) -> ExitServerList {
     let mut rita_client = settings::get_rita_client();
     let mut exits = rita_client.exit_client.bootstrapping_exits;
 

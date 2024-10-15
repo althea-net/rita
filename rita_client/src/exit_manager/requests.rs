@@ -3,12 +3,13 @@ use super::DEFAULT_WG_LISTEN_PORT;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use actix_web_async::Result;
-use althea_types::decrypt_exit_list;
 use althea_types::decrypt_exit_state;
 use althea_types::encrypt_exit_client_id;
-use althea_types::ExitListV2;
+use althea_types::SignedExitServerList;
 use althea_types::WgKey;
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState};
+use settings::exit::EXIT_LIST_IP;
+use settings::exit::EXIT_LIST_PORT;
 use settings::set_rita_client;
 use std::net::{IpAddr, SocketAddr};
 
@@ -208,8 +209,7 @@ pub async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
 }
 
 /// Hits the exit_list endpoint for a given exit.
-/// todo this is where we ask the exit for a new list (and do we have to decrypt it?)
-pub async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> {
+pub async fn get_exit_list(exit: IpAddr) -> Result<SignedExitServerList, RitaClientError> {
     let current_exit = match settings::get_rita_client()
         .exit_client
         .bootstrapping_exits
@@ -243,12 +243,8 @@ pub async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> 
         reg_details,
     };
 
-    let exit_server = current_exit.wg_key;
-
-    let endpoint = format!(
-        "http://[{}]:{}/exit_list_v2",
-        exit_server, current_exit.registration_port
-    );
+    // todo formatting for the exit list endpoint
+    let endpoint = format!("http://{}:{}/exit_list", EXIT_LIST_IP, EXIT_LIST_PORT);
     let settings = settings::get_rita_client();
     let our_pubkey = settings.network.wg_public_key.unwrap();
     let our_privkey = settings.network.wg_private_key.unwrap();
@@ -261,8 +257,8 @@ pub async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> 
         .timeout(CLIENT_LOOP_TIMEOUT)
         .send_json(&ident)
         .await;
-    let mut response = match response {
-        Ok(a) => a,
+    let response = match response {
+        Ok(mut response) => response.json().await,
         Err(awc::error::SendRequestError::Timeout) => {
             // Did not get a response, is it a rogue exit or some netork error?
             return Err(RitaClientError::SendRequestError(
@@ -272,10 +268,23 @@ pub async fn get_exit_list(exit: IpAddr) -> Result<ExitListV2, RitaClientError> 
         Err(e) => return Err(RitaClientError::SendRequestError(e.to_string())),
     };
 
-    let value = response.json().await?;
+    let list: SignedExitServerList = match response {
+        Ok(a) => a,
+        Err(e) => {
+            return Err(RitaClientError::MiscStringError(format!(
+                "Failed to get exit list from exit {:?}",
+                e
+            )));
+        }
+    };
 
-    match decrypt_exit_list(&our_privkey.into(), value, &exit_pubkey.into()) {
-        Err(e) => Err(e.into()),
-        Ok(a) => Ok(a),
+    //verify the signature on the list
+    let key = list.data.contract;
+    let sig = list.clone().signature;
+    match list.data.verify(key, sig) {
+        true => Ok(list),
+        false => Err(RitaClientError::MiscStringError(
+            "Failed to verify exit list signature!".to_owned(),
+        )),
     }
 }
