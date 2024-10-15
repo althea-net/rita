@@ -7,7 +7,6 @@ use super::namespaces::NodeType;
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::Identity;
 use clarity::Address;
-use ipnetwork::IpNetwork;
 use ipnetwork::Ipv6Network;
 use log::info;
 use nix::sched::{setns, CloneFlags};
@@ -21,6 +20,7 @@ use rita_exit::{
     operator_update::update_loop::start_operator_update_loop,
     rita_loop::{start_rita_exit_endpoints, start_rita_exit_loop},
 };
+use settings::exit::ExitIpv6RoutingSettings;
 use settings::set_flag_config;
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
 use std::{
@@ -227,9 +227,11 @@ pub fn spawn_rita_exit(
             id.try_into().unwrap(),
         )));
 
-        resettings.exit_network.subnet = Some(IpNetwork::V6(
-            Ipv6Network::new(instance.subnet, 40).unwrap(),
-        ));
+        resettings.exit_network.ipv6_routing = Some(ExitIpv6RoutingSettings {
+            subnet: Ipv6Network::new(instance.subnet, 40).unwrap(),
+            client_subnet_size: 64,
+            static_assignments: vec![],
+        });
         resettings.exit_network.registered_users_contract_addr = db_addr;
         resettings.network.wg_private_key = Some(instance.wg_priv_key);
         resettings.network.wg_public_key = Some(instance.exit_id.wg_public_key);
