@@ -12,7 +12,7 @@ use crate::exit_manager::utils::{
 use crate::heartbeat::get_exit_registration_state;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
-use althea_types::{ExitDetails, ExitListV2};
+use althea_types::{ExitDetails, ExitServerList};
 use althea_types::{ExitIdentity, ExitState};
 use rita_common::blockchain_oracle::low_balance;
 use rita_common::KI;
@@ -136,14 +136,11 @@ async fn handle_exit_switching(
     let exit_list = match get_exit_list(current_exit_id).await {
         Ok(a) => {
             info!("Received an exit list: {:?}", a);
-            a
+            a.data
         }
         Err(e) => {
             error!("Exit_Switcher: Unable to get exit list: {:?}", e);
-
-            ExitListV2 {
-                exit_list: Vec::new(),
-            }
+            ExitServerList::default()
         }
     };
 
