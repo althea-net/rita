@@ -278,15 +278,21 @@ pub fn validate_internal_ip(
 pub fn to_exit_client(client: Identity) -> Result<ExitClient, Box<RitaExitError>> {
     let internet_ipv6 = get_client_ipv6(
         client,
-        settings::get_rita_exit().exit_network.subnet,
+        settings::get_rita_exit().exit_network.get_ipv6_subnet_alt(),
         settings::get_rita_exit()
             .get_client_subnet_size()
             .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
     )?;
     let internal_ip = get_client_internal_ip(
         client,
-        settings::get_rita_exit().exit_network.netmask,
-        settings::get_rita_exit().exit_network.own_internal_ip,
+        settings::get_rita_exit()
+            .exit_network
+            .internal_ipv4
+            .prefix(),
+        settings::get_rita_exit()
+            .exit_network
+            .internal_ipv4
+            .internal_ip(),
     )?;
 
     Ok(ExitClient {
