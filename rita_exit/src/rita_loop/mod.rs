@@ -291,8 +291,8 @@ fn setup_exit_wg_tunnel() {
 
     let exit_settings = settings::get_rita_exit();
 
-    let local_ip = exit_settings.exit_network.own_internal_ip.into();
-    let netmask = exit_settings.exit_network.netmask;
+    let local_ip = exit_settings.exit_network.internal_ipv4.internal_ip();
+    let netmask = exit_settings.exit_network.internal_ipv4.prefix();
     let mesh_ip = exit_settings
         .network
         .mesh_ip
@@ -300,8 +300,8 @@ fn setup_exit_wg_tunnel() {
     let enforcement_enabled = exit_settings.exit_network.enable_enforcement;
     let external_v6 = exit_settings
         .exit_network
-        .subnet
-        .map(|ipv6_subnet| (ipv6_subnet.ip(), ipv6_subnet.prefix()));
+        .ipv6_routing
+        .map(|a| a.spit_ip_prefix());
 
     // Setup legacy wg_exit
     one_time_exit_setup(None, None, mesh_ip, LEGACY_INTERFACE, enforcement_enabled)
@@ -309,7 +309,7 @@ fn setup_exit_wg_tunnel() {
 
     // Setup wg_exit_v2. Local address added is same as that used by wg_exit
     one_time_exit_setup(
-        Some((local_ip, netmask)),
+        Some((local_ip.into(), netmask)),
         external_v6,
         mesh_ip,
         EXIT_INTERFACE,

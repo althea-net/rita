@@ -73,11 +73,15 @@ pub const CLIENT_REGISTER_TIMEOUT: Duration = Duration::from_secs(5);
 pub fn get_exit_info() -> ExitDetails {
     let exit_settings = get_rita_exit();
     ExitDetails {
-        server_internal_ip: exit_settings.exit_network.own_internal_ip.into(),
+        server_internal_ip: exit_settings
+            .exit_network
+            .internal_ipv4
+            .internal_ip()
+            .into(),
         wg_exit_port: exit_settings.exit_network.wg_tunnel_port,
         exit_price: exit_settings.exit_network.exit_price,
         exit_currency: exit_settings.payment.system_chain,
-        netmask: exit_settings.exit_network.netmask,
+        netmask: exit_settings.exit_network.internal_ipv4.prefix(),
         description: exit_settings.description,
         verif_mode: ExitVerifMode::Phone,
     }
@@ -236,6 +240,8 @@ pub async fn client_status(
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
     let exit = get_rita_exit();
     let exit_network = exit.exit_network.clone();
+    let own_internal_ip = exit_network.internal_ipv4.internal_ip();
+    let internal_netmask = exit_network.internal_ipv4.prefix();
 
     match get_registered_client_using_wgkey(
         client.global.wg_public_key,
@@ -248,14 +254,11 @@ pub async fn client_status(
         Ok(their_record) => {
             trace!("record exists, updating");
 
-            let current_ip: IpAddr = get_client_internal_ip(
-                their_record,
-                exit_network.netmask,
-                exit_network.own_internal_ip,
-            )?;
+            let current_ip: IpAddr =
+                get_client_internal_ip(their_record, internal_netmask, own_internal_ip)?;
             let current_internet_ipv6 = get_client_ipv6(
                 their_record,
-                exit_network.subnet,
+                exit_network.get_ipv6_subnet_alt(),
                 exit.get_client_subnet_size()
                     .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
             )?;
@@ -494,7 +497,8 @@ pub fn setup_clients(
         .collect();
 
     let exit_settings = settings::get_rita_exit();
-    let internal_ip_v4 = exit_settings.exit_network.own_internal_ip;
+    let internal_ip_v4 = exit_settings.exit_network.internal_ipv4.internal_ip();
+    let internal_netmask = exit_settings.exit_network.internal_ipv4.prefix();
 
     // Get all new clients that need rule setup for wg_exit_v2 and wg_exit respectively
     let changed_clients_return = find_changed_clients(
@@ -514,11 +518,7 @@ pub fn setup_clients(
     for c_key in changed_clients_return.new_v1 {
         if let Some(c) = key_to_client_map.get(&c_key) {
             setup_individual_client_routes(
-                match get_client_internal_ip(
-                    *c,
-                    get_rita_exit().exit_network.netmask,
-                    get_rita_exit().exit_network.own_internal_ip,
-                ) {
+                match get_client_internal_ip(*c, internal_netmask, internal_ip_v4) {
                     Ok(a) => a,
                     Err(e) => {
                         error!(
@@ -536,11 +536,7 @@ pub fn setup_clients(
     for c_key in changed_clients_return.new_v2 {
         if let Some(c) = key_to_client_map.get(&c_key) {
             teardown_individual_client_routes(
-                match get_client_internal_ip(
-                    *c,
-                    get_rita_exit().exit_network.netmask,
-                    get_rita_exit().exit_network.own_internal_ip,
-                ) {
+                match get_client_internal_ip(*c, internal_netmask, internal_ip_v4) {
                     Ok(a) => a,
                     Err(e) => {
                         error!(
@@ -719,7 +715,7 @@ pub fn enforce_exit_clients(
                                 // gets the client ipv6 flow for this exit specifically
                                 let client_ipv6 = get_client_ipv6(
                                     debt_entry.identity,
-                                    settings::get_rita_exit().exit_network.subnet,
+                                    settings::get_rita_exit().exit_network.get_ipv6_subnet_alt(),
                                     settings::get_rita_exit()
                                         .get_client_subnet_size()
                                         .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),

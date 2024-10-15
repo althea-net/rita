@@ -27,7 +27,6 @@ use exit_trust_root::endpoints::submit_registration_code;
 use exit_trust_root::register_client_batch_loop::register_client_batch_loop;
 use exit_trust_root::signature_update_loop;
 use futures::join;
-use ipnetwork::IpNetwork;
 use ipnetwork::Ipv6Network;
 use log::info;
 use nix::sched::{setns, CloneFlags};
@@ -42,6 +41,7 @@ use rita_exit::{
     operator_update::update_loop::start_operator_update_loop,
     rita_loop::{start_rita_exit_endpoints, start_rita_exit_loop},
 };
+use settings::exit::ExitIpv6RoutingSettings;
 use settings::exit::EXIT_LIST_IP;
 use settings::set_flag_config;
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
@@ -255,9 +255,11 @@ pub fn spawn_rita_exit(
         )));
         resettings.network.alternate_mesh_ips = vec![EXIT_LIST_IP.into()];
 
-        resettings.exit_network.subnet = Some(IpNetwork::V6(
-            Ipv6Network::new(instance.subnet, 40).unwrap(),
-        ));
+        resettings.exit_network.ipv6_routing = Some(ExitIpv6RoutingSettings {
+            subnet: Ipv6Network::new(instance.subnet, 40).unwrap(),
+            client_subnet_size: 64,
+            static_assignments: vec![],
+        });
         resettings.exit_network.registered_users_contract_addr = db_addr;
         resettings.network.wg_private_key = Some(instance.wg_priv_key);
         resettings.network.wg_public_key = Some(instance.exit_id.wg_public_key);

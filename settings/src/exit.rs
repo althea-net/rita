@@ -6,9 +6,9 @@ use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_exit, SettingsError};
 use althea_types::{regions::Regions, ExitIdentity, Identity};
 use clarity::Address;
-use ipnetwork::IpNetwork;
+use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
 use std::collections::HashSet;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 
 pub const APP_NAME: &str = "rita_exit";
@@ -21,6 +21,80 @@ pub const EXIT_LIST_IP: Ipv6Addr = Ipv6Addr::new(
 );
 /// This is the port which exit lists are served over
 pub const EXIT_LIST_PORT: u16 = 5566;
+/// Represents a static ipv4 assignment for a client
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct ClientIpv4StaticAssignment {
+    pub client_id: Identity,
+    pub client_external_ip: Ipv4Addr,
+}
+
+/// Represents a static ipv6 assignment for a client
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct ClientIpv6StaticAssignment {
+    pub client_id: Identity,
+    pub client_subnet: Ipv6Network,
+}
+
+/// This enum describes the different ways we can route ipv4 traffic out of the exit
+/// and assign addresses to clients
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub enum ExitIpv4RoutingSettings {
+    /// The default and simplest option, all clients are NAT'd out of the exit's own IP
+    NAT,
+    /// A provided subnet of ipv4 addresses is split between clients as evenly as possible
+    /// the exits own ip is used only for management traffic and the exit's own traffic
+    /// IP's from this range can be assigned to specific clients. In that case traffic for other
+    /// customers will be distributed as evenly as possible over the remaining addresses
+    CGNAT {
+        subnet: Ipv4Network,
+        static_assignments: Vec<ClientIpv4StaticAssignment>,
+    },
+    /// A provided subnet of ipv4 addresses is assigned one by one to clients as they connect. With an optional
+    /// list of static assignments for clients that will always be assigned the same IP. Use this option with caution
+    /// if the subnet is too small and too many clients connect there will be no more addresses to assign. Once that happens
+    /// the exit will stop accepting new connections until a client disconnects. Be mindful, in cases where a client can not
+    /// find another exit to connect to they will be unable to access the internet.
+    FLAT {
+        subnet: Ipv4Network,
+        static_assignments: Vec<ClientIpv4StaticAssignment>,
+    },
+}
+
+/// This struct describes the settings for ipv6 routing out of the exit and assignment to clients
+/// the only knob here is the subnet size, which is the size of the subnet assigned to each client
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct ExitIpv6RoutingSettings {
+    pub subnet: Ipv6Network,
+    pub client_subnet_size: u8,
+    pub static_assignments: Vec<ClientIpv6StaticAssignment>,
+}
+
+impl ExitIpv6RoutingSettings {
+    pub fn spit_ip_prefix(&self) -> (IpAddr, u8) {
+        (self.subnet.ip().into(), self.subnet.prefix())
+    }
+}
+
+/// The settings for the exit's internal ipv4 network, this is the internal subnet that the exit uses to
+/// NAT traffic. If this subnet is to small for the number of active users the exit will run out of addresses
+/// to assign to clients and will stop accepting new connections. Note "active" in this context means users we
+/// have seen since the last exit restart. By default the internal ip of the exit will be the first ip in this
+/// subnet, and the exit will assign the rest of the addresses to clients
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct ExitInternalIpv4Settings {
+    pub internal_subnet: Ipv4Network,
+}
+
+impl ExitInternalIpv4Settings {
+    pub fn internal_ip(&self) -> Ipv4Addr {
+        self.internal_subnet.ip()
+    }
+
+    pub fn prefix(&self) -> u8 {
+        self.internal_subnet.prefix()
+    }
+}
+
 /// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitNetworkSettings {
@@ -32,14 +106,15 @@ pub struct ExitNetworkSettings {
     pub wg_v2_tunnel_port: u16,
     /// Price in wei per byte which is charged to traffic both coming in and out over the internet
     pub exit_price: u64,
-    /// This is the exit's own ip/gateway ip in the exit wireguard tunnel
-    pub own_internal_ip: Ipv4Addr,
-    /// The netmask, in bits to mask out, for the exit tunnel
-    pub netmask: u8,
-    /// The subnet we use to assign to client routers for ipv6
-    pub subnet: Option<IpNetwork>,
-    /// The specified client subnet, else use /56
-    pub client_subnet_size: Option<u8>,
+    /// Settings controlling the exits external ipv4 network and how traffic is routed there
+    #[serde(default = "default_ipv4_routing")]
+    pub ipv4_routing: ExitIpv4RoutingSettings,
+    /// Settings controlling the internal subnet used for NAT And CGNAT
+    #[serde(default = "default_internal_ipv4")]
+    pub internal_ipv4: ExitInternalIpv4Settings,
+    /// Settings controlled the exits external ipv6 network and how traffic is routed there
+    /// None if no ipv6 is available
+    pub ipv6_routing: Option<ExitIpv6RoutingSettings>,
     /// api credentials for Maxmind geoip
     pub geoip_api_user: Option<String>,
     pub geoip_api_key: Option<String>,
@@ -56,12 +131,32 @@ pub struct ExitNetworkSettings {
     pub allowed_countries: HashSet<Regions>,
 }
 
+impl ExitNetworkSettings {
+    pub fn get_ipv6_subnet(&self) -> Option<Ipv6Network> {
+        self.ipv6_routing.as_ref().map(|x| x.subnet)
+    }
+
+    pub fn get_ipv6_subnet_alt(&self) -> Option<IpNetwork> {
+        self.ipv6_routing.as_ref().map(|x| x.subnet.into())
+    }
+}
+
 fn default_allowed_countries() -> HashSet<Regions> {
     HashSet::new()
 }
 
 fn enable_enforcement_default() -> bool {
     true
+}
+
+fn default_ipv4_routing() -> ExitIpv4RoutingSettings {
+    ExitIpv4RoutingSettings::NAT
+}
+
+fn default_internal_ipv4() -> ExitInternalIpv4Settings {
+    ExitInternalIpv4Settings {
+        internal_subnet: Ipv4Network::new(Ipv4Addr::new(172, 16, 255, 254), 12).unwrap(),
+    }
 }
 
 impl ExitNetworkSettings {
@@ -74,10 +169,6 @@ impl ExitNetworkSettings {
             wg_tunnel_port: 59999,
             wg_v2_tunnel_port: 59998,
             exit_price: 10,
-            own_internal_ip: "172.16.255.254".parse().unwrap(),
-            netmask: 12,
-            subnet: Some(IpNetwork::V6("ff01::0/128".parse().unwrap())),
-            client_subnet_size: None,
             geoip_api_user: None,
             geoip_api_key: None,
             enable_enforcement: true,
@@ -85,6 +176,11 @@ impl ExitNetworkSettings {
                 .parse()
                 .unwrap(),
             allowed_countries: HashSet::new(),
+            ipv4_routing: ExitIpv4RoutingSettings::NAT,
+            internal_ipv4: ExitInternalIpv4Settings {
+                internal_subnet: Ipv4Network::new(Ipv4Addr::new(172, 16, 255, 254), 12).unwrap(),
+            },
+            ipv6_routing: None,
         }
     }
 }
@@ -173,7 +269,10 @@ impl RitaExitSettingsStruct {
     }
 
     pub fn get_client_subnet_size(&self) -> Option<u8> {
-        self.exit_network.client_subnet_size
+        self.exit_network
+            .ipv6_routing
+            .as_ref()
+            .map(|x| x.client_subnet_size)
     }
 
     pub fn get_all(&self) -> Result<serde_json::Value, SettingsError> {
