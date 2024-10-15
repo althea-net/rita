@@ -26,6 +26,7 @@ use babel_monitor::{open_babel_stream, parse_routes};
 use rita_client_registration::client_db::get_all_regsitered_clients;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
+use settings::exit::{EXIT_LIST_IP, EXIT_LIST_PORT};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -359,20 +360,14 @@ pub fn start_rita_exit_list_endpoint(workers: usize) {
     thread::spawn(move || {
         let runner = AsyncSystem::new();
         runner.block_on(async move {
-            let _res = HttpServer::new(|| {
-                App::new()
-                    .route("/exit_list", web::post().to(get_exit_list))
-            })
-            .workers(workers)
-            .bind(format!(
-                "{}:{}",
-                EXIT_LIST_IP,
-                settings::get_rita_exit().exit_network.exit_list_port
-            ))
-            .unwrap()
-            .shutdown_timeout(0)
-            .run()
-            .await;
+            let _res =
+                HttpServer::new(|| App::new().route("/exit_list", web::post().to(get_exit_list)))
+                    .workers(workers)
+                    .bind(format!("{}:{}", EXIT_LIST_IP, EXIT_LIST_PORT,))
+                    .unwrap()
+                    .shutdown_timeout(0)
+                    .run()
+                    .await;
         });
     });
 }

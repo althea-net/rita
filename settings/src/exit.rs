@@ -13,14 +13,16 @@ use std::path::{Path, PathBuf};
 
 pub const APP_NAME: &str = "rita_exit";
 
+// IP serving exit lists from the root server
+pub const EXIT_LIST_IP: &str = "10.10.10.10";
+/// This is the port which exit lists are served over
+pub const EXIT_LIST_PORT: u16 = 5566;
 /// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitNetworkSettings {
     /// This is the port which the exit registration happens over, and should only be accessible
     /// over the mesh
     pub exit_hello_port: u16,
-    /// This is the port which exit lists are served over
-    pub exit_list_port: u16,
     /// This is the port which the exit tunnel listens on
     pub wg_tunnel_port: u16,
     pub wg_v2_tunnel_port: u16,
@@ -79,7 +81,6 @@ impl ExitNetworkSettings {
                 .parse()
                 .unwrap(),
             allowed_countries: HashSet::new(),
-            exit_list_port: 5555,
         }
     }
 }

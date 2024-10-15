@@ -1,10 +1,8 @@
 use actix_web::rt::System;
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
-use althea_types::{EncryptedExitServerList, ExitServerList, SignedExitServerList};
+use althea_types::{ExitServerList, SignedExitServerList};
 use clarity::Address;
 use config::{load_config, CONFIG};
-use crypto_box::aead::{Aead, AeadCore, OsRng};
-use crypto_box::{PublicKey, SalsaBox, SecretKey};
 use env_logger::Env;
 use log::info;
 use rita_client_registration::client_db::get_exits_list;
@@ -19,8 +17,6 @@ use web30::jsonrpc::error::Web3Error;
 
 pub mod config;
 pub mod tls;
-
-const RPC_SERVER: &str = "https://althea.gravitychain.io";
 
 pub const DEVELOPMENT: bool = cfg!(feature = "development");
 const SSL: bool = !DEVELOPMENT;
@@ -37,37 +33,35 @@ const SERVER_PORT: u16 = 9000;
 #[get("/{exit_contract}")]
 async fn return_exit_contract_data(
     exit_contract: web::Path<Address>,
-    pubkey: web::Data<[u8; 32]>,
-    cache: web::Data<Arc<RwLock<HashMap<Address, ExitContractSignatureCacheValue>>>>,
+    cache: web::Data<Arc<RwLock<HashMap<Address, SignedExitServerList>>>>,
 ) -> impl Responder {
     let contract = exit_contract.into_inner();
-    match cache.read().unwrap().get(&contract) {
-        Some(cache) => {
-            // return an encrypted exit server list based on the given key
-            HttpResponse::Ok().json(cache.to_encrypted_exit_server_list((*pubkey.get_ref()).into()))
+    let cached_list = {
+        let cache_read = cache.read().unwrap();
+        cache_read.get(&contract).cloned()
+    };
+
+    match cached_list {
+        Some(list) => {
+            // return a signed exit server list based on the given key
+            HttpResponse::Ok().json(list)
         }
-        None => {
-            match retrieve_exit_server_list(contract, cache.get_ref().clone()).await {
-                Ok(cache_value) => {
-                    // encrypt and return
-                    return HttpResponse::Ok().json(
-                        cache_value.to_encrypted_exit_server_list((*pubkey.get_ref()).into()),
-                    );
-                }
-                Err(e) => {
-                    info!("Failed to get exit list from contract {:?}", e);
-                    HttpResponse::InternalServerError()
-                        .json("Failed to get exit list from contract")
-                }
+        None => match retrieve_exit_server_list(contract, cache.get_ref().clone()).await {
+            Ok(list) => {
+                HttpResponse::Ok().json(list)
             }
-        }
+            Err(e) => {
+                info!("Failed to get exit list from contract {:?}", e);
+                HttpResponse::InternalServerError().json("Failed to get exit list from contract")
+            }
+        },
     }
 }
 
 async fn retrieve_exit_server_list(
     exit_contract: Address,
-    cache: Arc<RwLock<HashMap<Address, ExitContractSignatureCacheValue>>>,
-) -> Result<ExitContractSignatureCacheValue, Web3Error> {
+    cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>>,
+) -> Result<SignedExitServerList, Web3Error> {
     const WEB3_TIMEOUT: Duration = Duration::from_secs(10);
     let exits = get_exits_list(
         &Web3::new("https://dai.althea.net", WEB3_TIMEOUT),
@@ -83,12 +77,9 @@ async fn retrieve_exit_server_list(
                 exit_list: exits,
                 created: std::time::SystemTime::now(),
             };
-            let nonce = SalsaBox::generate_nonce(&mut OsRng);
-            let cache_value = ExitContractSignatureCacheValue {
-                exit_list: exit_list.sign(CONFIG.clarity_private_key),
-                nonce: nonce.into(),
-            };
-            // add this new exit to the cache
+            let cache_value = exit_list.sign(CONFIG.clarity_private_key);
+            
+            // add this new exit list to the cache
             cache
                 .write()
                 .unwrap()
@@ -102,38 +93,13 @@ async fn retrieve_exit_server_list(
     }
 }
 
-/// Cache struct for the exit contract signature data
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-struct ExitContractSignatureCacheValue {
-    exit_list: SignedExitServerList,
-    nonce: [u8; 24],
-}
-
-impl ExitContractSignatureCacheValue {
-    fn to_encrypted_exit_server_list(&self, their_pubkey: PublicKey) -> EncryptedExitServerList {
-        // we already have a signed list- now to encrypt it given the nonce & our... keys...
-        let plaintext = serde_json::to_string(&self.exit_list.data)
-            .expect("Failed to serialize ExitServerList")
-            .into_bytes();
-        // using the clarity private key as the Crypto_box SecretKey
-        let our_secretkey = SecretKey::from(CONFIG.clarity_private_key.to_bytes());
-        let b = SalsaBox::new(&their_pubkey, &our_secretkey);
-        let ciphertext = b.encrypt((&self.nonce).into(), plaintext.as_ref()).unwrap();
-        EncryptedExitServerList {
-            pubkey: CONFIG.wg_private_key,
-            nonce: self.nonce,
-            encrypted_exit_server_list: ciphertext,
-        }
-    }
-}
-
 // five minutes
 const SIGNATURE_UPDATE_SLEEP: Duration = Duration::from_secs(300);
 
 /// In order to improve scalability this loop grabs and signs an updated list of exits from each exit contract
 /// that has previously been requested from this server every 5 minutes. This allows the server to return instantly
 /// on the next request from the client without having to perform rpc query 1-1 with requests.
-fn signature_update_loop(cache: Arc<RwLock<HashMap<Address, ExitContractSignatureCacheValue>>>) {
+fn signature_update_loop(cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>>) {
     thread::spawn(move || loop {
         let runner = System::new();
         runner.block_on(async {
@@ -165,7 +131,7 @@ async fn main() -> std::io::Result<()> {
     // lazy static variable after this
     load_config();
 
-    let exit_contract_data_cache: Arc<RwLock<HashMap<Address, ExitContractSignatureCacheValue>>> =
+    let exit_contract_data_cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>> =
         Arc::new(RwLock::new(HashMap::new()));
     signature_update_loop(exit_contract_data_cache.clone());
     let web_data = web::Data::new(exit_contract_data_cache.clone());

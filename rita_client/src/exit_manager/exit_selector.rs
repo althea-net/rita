@@ -5,7 +5,7 @@
 use super::exit_loop::EXIT_LOOP_SPEED;
 use super::utils::get_babel_routes;
 use crate::RitaClientError;
-use althea_types::{ExitIdentity, ExitListV2};
+use althea_types::{ExitIdentity, ExitServerList};
 use std::cmp::{max, min};
 use std::time::Instant;
 use std::{collections::HashMap, net::IpAddr, time::Duration};
@@ -15,7 +15,7 @@ use std::{collections::HashMap, net::IpAddr, time::Duration};
 /// quality and sets it as the currently selected exit in the exit manager
 pub fn select_best_exit(
     switcher_state: &mut ExitSwitcherState,
-    exit_list: ExitListV2,
+    exit_list: ExitServerList,
     babel_port: u16,
 ) {
     let current_exit = switcher_state.currently_selected.clone();
@@ -205,7 +205,7 @@ pub const MAX_QUALITY_SAMPLE_AGE: Duration = Duration::from_secs(900);
 /// we can't reach that exit / it is down
 pub fn get_and_merge_routes_for_exit_list(
     quality_history: &mut HashMap<ExitIdentity, Vec<ExitQualitySample>>,
-    exit_list: ExitListV2,
+    exit_list: ExitServerList,
     babel_port: u16,
 ) -> Result<(), RitaClientError> {
     let routes = get_babel_routes(babel_port)?;
@@ -272,9 +272,10 @@ fn exit_is_valid_for_us(exit: ExitIdentity) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use althea_types::{ExitIdentity, ExitListV2};
+    use althea_types::{ExitIdentity, ExitServerList};
+    use clarity::Address;
     use std::collections::HashSet;
-    use std::time::{Duration, Instant};
+    use std::time::{Duration, Instant, SystemTime};
 
     /// generates a random identity, never use in production, your money will be stolen
     pub fn random_exit_identity() -> ExitIdentity {
@@ -311,8 +312,10 @@ mod tests {
             quality_history: HashMap::new(),
         };
 
-        let exit_list = ExitListV2 {
+        let exit_list = ExitServerList {
             exit_list: vec![random_exit_identity(), random_exit_identity()],
+            contract: Address::default(),
+            created: SystemTime::now(),
         };
 
         // Simulate route qualities
@@ -408,8 +411,10 @@ mod tests {
             quality_history: HashMap::new(),
         };
 
-        let exit_list = ExitListV2 {
+        let exit_list = ExitServerList {
             exit_list: vec![random_exit_identity(), random_exit_identity()],
+            contract: Address::default(),
+            created: SystemTime::now(),
         };
 
         // Simulate route qualities

@@ -5,7 +5,6 @@ use crate::database::{client_status, signup_client};
 
 use crate::RitaExitError;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
-use althea_types::EncryptedExitServerList;
 use althea_types::Identity;
 use althea_types::SignedExitServerList;
 use althea_types::WgKey;
@@ -14,13 +13,13 @@ use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };
 use clarity::Address;
-use crypto_box::{PublicKey, SecretKey};
+use crypto_box::SecretKey;
 use num256::Int256;
 use reqwest::ClientBuilder;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::rita_loop::get_web3_server;
-use serde_json::json;
+use settings::exit::EXIT_LIST_IP;
 use settings::get_rita_exit;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -29,9 +28,6 @@ use web30::client::Web3;
 
 // Timeout to contact Althea contract and query info about a user
 pub const CLIENT_STATUS_TIMEOUT: Duration = Duration::from_secs(20);
-
-// IP serving exit lists from the root server
-pub const EXIT_LIST_IP: &str = "10.10.10.10";
 
 /// helper function for returning from secure_setup_request()
 
@@ -190,60 +186,35 @@ pub async fn get_exit_timestamp_http(_req: HttpRequest) -> HttpResponse {
     })
 }
 
-// todo somewhere between get exit list and get list v2 is where we get the new hard coded exit list.....
-// exits must have a hardcoded ip server to host calls for the exit list endpoint! this cant go on the old server
 /// This function takes a list of exit ips in the cluster from the exit registration smart
 /// contract, and returns a list of exit ips that are in the same region and currency as the client
-/// if this exit fits the region and currenty requirements it will always return a list containing itself
-/// even if this exit is not in the smart contract. If a client is speaking with this exit then the exit
-/// data is in the config and this is considered to be a key exchange in and of itself.
-pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
-    let exit_settings = get_rita_exit();
-    let our_secretkey: WgKey = exit_settings.network.wg_private_key.unwrap();
-    let our_secretkey: SecretKey = our_secretkey.into();
-    let our_pubkey: PublicKey = our_secretkey.public_key();
-
-    let their_nacl_pubkey = &request.pubkey.into();
-
+/// This exit may not be included in the list returned by the smart contract! If this is the case it must
+/// first be added to the root of trust server, and clients will know to choose a different exit.
+pub async fn get_exit_list() -> HttpResponse {
     let rita_exit = get_rita_exit();
     let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
 
-    // we are receiving an EncryptedExitServerList from the root server- we need to a. decrypt it and b. reencrypt it
-    // with the client's key so that they can verify it came from the root server.
-    let ret: SignedExitServerList = match get_exit_list_from_root(contract_addr, our_pubkey).await {
-        Some(a) => match a.decrypt(&our_secretkey.clone()) {
-            Ok(a) => a,
-            Err(e) => {
-                let e = format!(
-                    "Failed to decrypt signed exit list from root server with {:?}",
-                    e
-                );
-                return HttpResponse::InternalServerError().json(e);
+    // we are receiving a SignedExitServerList from the root server.
+    let signed_list: SignedExitServerList =
+        match get_exit_list_from_root(contract_addr).await {
+            Some(a) => a,
+            None => {
+                return HttpResponse::InternalServerError()
+                    .json("Failed to get exit list from root server");
             }
-        },
-        None => {
-            return HttpResponse::InternalServerError()
-                .json("Failed to get exit list from root server");
-        }
-    };
+        };
 
-    let exit_list = ret.encrypt(&our_secretkey, their_nacl_pubkey);
-    HttpResponse::Ok().json(exit_list)
+    HttpResponse::Ok().json(signed_list)
 }
 
 async fn get_exit_list_from_root(
     contract_addr: Address,
-    pubkey: PublicKey,
-) -> Option<EncryptedExitServerList> {
+) -> Option<SignedExitServerList> {
     let request_url = format!("https://{}/{}", EXIT_LIST_IP, contract_addr);
-    let json_body = json!({
-        "pubkey": pubkey.to_bytes(),
-    });
     let timeout = Duration::new(15, 0);
     let client = ClientBuilder::new().timeout(timeout).build().unwrap();
     let response = client
         .head(request_url)
-        .json(&json_body)
         .send()
         .await
         .expect("Could not receive data from exit root server");

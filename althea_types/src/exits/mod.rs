@@ -137,11 +137,3 @@ pub struct ExitClientDetails {
     pub client_internal_ip: IpAddr,
     pub internet_ipv6_subnet: Option<IpNetwork>,
 }
-
-/// Wrapper for secure box containing a Signed Exit Server List
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct EncryptedExitServerList {
-    pub pubkey: WgKey,
-    pub nonce: [u8; 24],
-    pub encrypted_exit_server_list: Vec<u8>,
-}

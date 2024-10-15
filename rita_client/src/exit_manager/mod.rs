@@ -23,7 +23,7 @@ pub mod time_sync;
 pub mod utils;
 
 use althea_types::ExitIdentity;
-use althea_types::ExitListV2;
+use althea_types::ExitServerList;
 use althea_types::ExitState;
 use exit_selector::ExitSwitcherState;
 use std::collections::HashMap;
@@ -46,7 +46,7 @@ pub struct LastExitStates {
 pub struct ExitManager {
     pub nat_setup: bool,
     /// Every tick we query an exit endpoint to get a list of exits in that cluster. We use this list for exit switching
-    pub exit_list: ExitListV2,
+    pub exit_list: ExitServerList,
     /// Store last exit here, when we see an exit change, we reset wg tunnels
     pub last_exit_state: Option<LastExitStates>,
     pub last_status_request: Option<Instant>,
@@ -57,7 +57,7 @@ impl ExitManager {
     pub fn new(currently_selected: ExitIdentity) -> ExitManager {
         ExitManager {
             nat_setup: false,
-            exit_list: ExitListV2::default(),
+            exit_list: ExitServerList::default(),
             last_exit_state: None,
             last_status_request: None,
             exit_switcher_state: ExitSwitcherState {

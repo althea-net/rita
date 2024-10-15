@@ -15,7 +15,8 @@ use actix_async::System as AsyncSystem;
 use althea_kernel_interface::ip_addr::setup_ipv6_slaac as setup_ipv6_slaac_ki;
 use althea_kernel_interface::ip_route::get_default_route;
 use althea_kernel_interface::run_command;
-use althea_types::{ExitDetails, ExitListV2};
+use althea_types::ExitDetails;
+use althea_types::ExitServerList;
 use althea_types::{ExitIdentity, ExitState};
 use rita_common::blockchain_oracle::low_balance;
 use std::net::IpAddr;
@@ -138,14 +139,11 @@ async fn handle_exit_switching(
     let exit_list = match get_exit_list(current_exit_id).await {
         Ok(a) => {
             info!("Received an exit list: {:?}", a);
-            a
+            a.data
         }
         Err(e) => {
             error!("Exit_Switcher: Unable to get exit list: {:?}", e);
-
-            ExitListV2 {
-                exit_list: Vec::new(),
-            }
+            ExitServerList::default()
         }
     };
 
