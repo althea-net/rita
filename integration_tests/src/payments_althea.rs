@@ -1,7 +1,7 @@
 use crate::five_nodes::five_node_config;
 use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
-use crate::setup_utils::rita::thread_spawner;
+use crate::setup_utils::rita::{spawn_exit_root, thread_spawner};
 use crate::utils::{
     add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_althea_grpc,
     get_default_settings, populate_routers_eth, print_althea_balances,
@@ -51,12 +51,16 @@ pub async fn run_althea_payments_test_scenario() {
     info!("Starting registration server");
     start_registration_server(db_addr).await;
 
-    let (mut client_settings, mut exit_settings) = get_default_settings(namespaces.clone());
+    let (mut client_settings, mut exit_settings, exit_root_addr) =
+        get_default_settings(namespaces.clone());
 
     namespaces.validate();
 
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
+
+    info!("Starting root server!");
+    spawn_exit_root();
 
     // Modify configs to use Althea chain
     let (client_settings, exit_settings) =
@@ -70,7 +74,7 @@ pub async fn run_althea_payments_test_scenario() {
     // Add exits to the contract exit list so clients get the propers exits they can migrate to
     add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
 
-    populate_routers_eth(rita_identities.clone()).await;
+    populate_routers_eth(rita_identities.clone(), exit_root_addr).await;
 
     // Test for network convergence
     test_reach_all(namespaces.clone());

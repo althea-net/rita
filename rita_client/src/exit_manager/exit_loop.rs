@@ -14,12 +14,12 @@ use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
 use althea_kernel_interface::ip_addr::setup_ipv6_slaac as setup_ipv6_slaac_ki;
 use althea_kernel_interface::ip_route::get_default_route;
+use althea_kernel_interface::netns::get_namespace;
 use althea_kernel_interface::run_command;
 use althea_types::ExitDetails;
 use althea_types::ExitServerList;
 use althea_types::{ExitIdentity, ExitState};
 use rita_common::blockchain_oracle::low_balance;
-use std::net::IpAddr;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -99,7 +99,7 @@ async fn exit_manager_loop(em_state: &mut ExitManager, babel_port: u16) {
             info!("We have details for the selected exit!");
             // TODO setup exit using old selected exit the first run, of the loop, right now we force a wait
             // for this request to complete before we get things setup, we can store the ExitIdentity somewhere
-            handle_exit_switching(em_state, current_exit_ip, babel_port).await;
+            handle_exit_switching(em_state, babel_port).await;
 
             setup_exit_tunnel(
                 em_state.exit_switcher_state.currently_selected.clone(),
@@ -129,16 +129,13 @@ async fn exit_manager_loop(em_state: &mut ExitManager, babel_port: u16) {
 }
 
 /// This function handles deciding if we need to switch exits, the new selected exit is returned. If no exit is selected, the current exit is returned.
-async fn handle_exit_switching(
-    em_state: &mut ExitManager,
-    current_exit_id: IpAddr,
-    babel_port: u16,
-) {
+async fn handle_exit_switching(em_state: &mut ExitManager, babel_port: u16) {
     // Get cluster exit list. This is saved locally and updated every tick depending on what exit we connect to.
     // When it is empty, it means an exit we connected to went down, and we use the list from memory to connect to a new instance
-    let exit_list = match get_exit_list(current_exit_id).await {
+    let exit_list = match get_exit_list().await {
         Ok(a) => {
-            info!("Received an exit list: {:?}", a);
+            let ns: String = get_namespace().unwrap();
+            error!("ns {:?} Received an exit list: {:?}", ns, a);
             a.data
         }
         Err(e) => {

@@ -21,7 +21,7 @@ use althea_types::{
 };
 use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
-use clarity::{Address, Transaction, Uint256};
+use clarity::{Address, PrivateKey as ClarityPrivkey, Transaction, Uint256};
 use deep_space::{Address as AltheaAddress, Coin, Contact, CosmosPrivateKey, PrivateKey};
 use futures::future::join_all;
 use ipnetwork::IpNetwork;
@@ -379,12 +379,17 @@ pub const EXIT_ROOT_IP: IpAddr =
     IpAddr::V6(Ipv6Addr::new(0xfd00, 200, 199, 198, 197, 196, 195, 194));
 // this masks public ipv6 ips in the test env and is being used to test assignment
 pub const EXIT_SUBNET: Ipv6Addr = Ipv6Addr::new(0xfbad, 200, 0, 0, 0, 0, 0, 0);
+pub const EXIT_ROOT_SERVER_URL: &str = "http://10.0.0.1:4050";
 
 /// Gets the default client and exit settings
 pub fn get_default_settings(
     namespaces: NamespaceInfo,
-) -> (RitaClientSettings, RitaExitSettingsStruct) {
+) -> (RitaClientSettings, RitaExitSettingsStruct, Address) {
     let mut exit_servers = HashMap::new();
+    // generate keys for the exit root server
+    let exit_root_privkey = ClarityPrivkey::from_bytes([1u8; 32]).unwrap();
+    let exit_root_addr = exit_root_privkey.to_address();
+    info!("Exit root address is {:?}", exit_root_addr);
     let exit = RitaExitSettingsStruct {
         client_registration_url: "https://7.7.7.1:40400/register_router".to_string(),
         workers: 2,
@@ -397,6 +402,8 @@ pub fn get_default_settings(
         allowed_countries: HashSet::new(),
         log: LoggingSettings::default(),
         operator: ExitOperatorSettings::default(),
+        allowed_exit_list_signatures: vec![exit_root_addr],
+        exit_root_url: EXIT_ROOT_SERVER_URL.to_owned(),
     };
     let client = RitaClientSettings::default();
 
@@ -435,17 +442,20 @@ pub fn get_default_settings(
         }
         .into(),
     );
+    // todo bootstrapping exits should be removed to test the exit root server?
     client
         .exit_client
         .bootstrapping_exits
         .clone_from(&exit_servers);
+    client.exit_client.allowed_exit_list_signatures = vec![exit_root_addr];
+
     // first node is passed through to the host machine for testing second node is used
     // for testnet queries
     exit.payment.althea_grpc_list = vec![get_althea_grpc()];
     exit.payment.eth_node_list = vec![get_eth_node()];
     client.payment.althea_grpc_list = vec![get_althea_grpc()];
     client.payment.eth_node_list = vec![get_eth_node()];
-    (client, exit)
+    (client, exit, exit_root_addr)
 }
 
 pub fn althea_system_chain_client(settings: RitaClientSettings) -> RitaClientSettings {
@@ -1130,7 +1140,7 @@ pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
     }
 }
 
-pub async fn populate_routers_eth(rita_identities: InstanceData) {
+pub async fn populate_routers_eth(rita_identities: InstanceData, exit_root_addr: Address) {
     // Exits need to have funds to request a registered client list, which is needed for proper setup
     info!("Topup exits with funds");
     let web3 = Web3::new(&get_eth_node(), WEB3_TIMEOUT);
@@ -1141,8 +1151,9 @@ pub async fn populate_routers_eth(rita_identities: InstanceData) {
     for e in rita_identities.exit_identities {
         to_top_up.push(e.eth_address)
     }
+    to_top_up.push(exit_root_addr);
 
-    info!("Sending 50 eth to all routers");
+    info!("Sending 50 eth to all routers and exit root server");
     send_eth_bulk((ONE_ETH * 50).into(), &to_top_up, &web3).await;
 }
 

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::DEVELOPMENT;
 
+
 ///Struct containing settings for Exit root server
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigStruct {
@@ -39,7 +40,10 @@ impl ConfigStruct {
 pub fn load_config() -> ConfigStruct {
     // change the config name based on our development status
     let file_name = if DEVELOPMENT || cfg!(test) {
-        "config.toml"
+        return ConfigStruct {
+            clarity_private_key: PrivateKey::from_bytes([1u8; 32]).unwrap(),
+            wg_private_key: WgKey::from([2; 32]),
+        }
     } else {
         "/etc/exit_root_server.toml"
     };

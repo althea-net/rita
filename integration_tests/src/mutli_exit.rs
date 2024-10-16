@@ -6,7 +6,7 @@ use crate::{
     registration_server::start_registration_server,
     setup_utils::{
         namespaces::{setup_ns, Namespace, NamespaceInfo, NodeType, PriceId, RouteHop},
-        rita::thread_spawner,
+        rita::{spawn_exit_root, thread_spawner},
     },
     utils::{
         add_exits_contract_exit_list, deploy_contracts, get_default_settings, get_node_id_from_ip,
@@ -44,11 +44,15 @@ pub async fn run_multi_exit_test() {
     info!("Starting registration server");
     start_registration_server(db_addr).await;
 
-    let (rita_client_settings, rita_exit_settings) = get_default_settings(namespaces.clone());
+    let (rita_client_settings, rita_exit_settings, exit_root_addr) =
+        get_default_settings(namespaces.clone());
 
     namespaces.validate();
 
     let res = setup_ns(namespaces.clone());
+
+    info!("Starting root server!");
+    spawn_exit_root();
 
     let rita_identities = thread_spawner(
         namespaces.clone(),
@@ -62,7 +66,7 @@ pub async fn run_multi_exit_test() {
     // Add exits to the contract exit list so clients get the propers exits they can migrate to
     add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
 
-    populate_routers_eth(rita_identities).await;
+    populate_routers_eth(rita_identities, exit_root_addr).await;
 
     // Test for network convergence
     test_reach_all(namespaces.clone());
