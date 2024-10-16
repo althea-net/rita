@@ -19,7 +19,6 @@ use reqwest::ClientBuilder;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::rita_loop::get_web3_server;
-use settings::exit::EXIT_LIST_IP;
 use settings::get_rita_exit;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -207,14 +206,22 @@ pub async fn get_exit_list() -> HttpResponse {
     HttpResponse::Ok().json(signed_list)
 }
 
+// todo this is copied over from exit root server, deduplicate
+pub const EXIT_ROOT_DOMAIN: &str = if cfg!(test) || cfg!(feature = "dev_env") {
+    "localhost"
+} else {
+    "exitroot.althea.net"
+};
+
 async fn get_exit_list_from_root(
     contract_addr: Address,
 ) -> Option<SignedExitServerList> {
-    let request_url = format!("https://{}/{}", EXIT_LIST_IP, contract_addr);
+    let request_url = format!("https://{}/{}", EXIT_ROOT_DOMAIN, contract_addr);
     let timeout = Duration::new(15, 0);
     let client = ClientBuilder::new().timeout(timeout).build().unwrap();
+    info!("Requesting exit list from {}", request_url);
     let response = client
-        .head(request_url)
+        .get(request_url)
         .send()
         .await
         .expect("Could not receive data from exit root server");

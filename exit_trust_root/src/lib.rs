@@ -19,13 +19,14 @@ pub mod config;
 pub mod tls;
 
 const RPC_SERVER: &str = "https://dai.althea.net";
+const WEB3_TIMEOUT: Duration = Duration::from_secs(10);
 
 // five minutes
 const SIGNATURE_UPDATE_SLEEP: Duration = Duration::from_secs(300);
 
 pub const DEVELOPMENT: bool = cfg!(feature = "development");
 const SSL: bool = !DEVELOPMENT;
-pub const DOMAIN: &str = if cfg!(test) || DEVELOPMENT {
+pub const EXIT_ROOT_DOMAIN: &str = if cfg!(test) || DEVELOPMENT {
     "localhost"
 } else {
     "exitroot.althea.net"
@@ -40,7 +41,7 @@ async fn return_exit_contract_data(
     exit_contract: web::Path<Address>,
     cache: web::Data<Arc<RwLock<HashMap<Address, SignedExitServerList>>>>,
 ) -> impl Responder {
-    let contract = exit_contract.into_inner();
+    let contract: Address = exit_contract.into_inner();
     let cached_list = {
         let cache_read = cache.read().unwrap();
         cache_read.get(&contract).cloned()
@@ -65,8 +66,7 @@ async fn retrieve_exit_server_list(
     exit_contract: Address,
     cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>>,
 ) -> Result<SignedExitServerList, Web3Error> {
-    const WEB3_TIMEOUT: Duration = Duration::from_secs(10);
-    let exits = match DEVELOPMENT|| cfg!(test) {
+    let exits = match DEVELOPMENT || cfg!(test) {
         true => {
             let node_ip = IpAddr::V4(Ipv4Addr::new(7, 7, 7, 1));
             let web3_url = format!("http://{}:8545", node_ip);
@@ -76,7 +76,7 @@ async fn retrieve_exit_server_list(
                 exit_contract,
             )
             .await
-        },
+        }
         false => {
             get_exits_list(
                 &Web3::new(RPC_SERVER, WEB3_TIMEOUT),
@@ -84,9 +84,9 @@ async fn retrieve_exit_server_list(
                 exit_contract,
             )
             .await
-        },
+        }
     };
-    
+
     match exits {
         Ok(exits) => {
             info!("Got exit list from contract");
@@ -124,12 +124,13 @@ pub fn start_exit_trust_root_server() {
                     .service(return_exit_contract_data)
                     .app_data(web_data.clone())
             });
+            info!("Starting exit trust root server on {:?}", EXIT_ROOT_DOMAIN);
             let server = if SSL {
                 let cert_chain =
-                    load_certs(&format!("/etc/letsencrypt/live/{}/fullchain.pem", DOMAIN));
+                    load_certs(&format!("/etc/letsencrypt/live/{}/fullchain.pem", EXIT_ROOT_DOMAIN));
                 let keys = load_rustls_private_key(&format!(
                     "/etc/letsencrypt/live/{}/privkey.pem",
-                    DOMAIN
+                    EXIT_ROOT_DOMAIN
                 ));
                 let config = ServerConfig::builder()
                     .with_safe_defaults()
@@ -139,10 +140,10 @@ pub fn start_exit_trust_root_server() {
 
                 info!("Binding to SSL");
                 server
-                    .bind_rustls(format!("{}:{}", DOMAIN, SERVER_PORT), config.clone())
+                    .bind_rustls(format!("{}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT), config.clone())
                     .unwrap()
             } else {
-                server.bind(format!("{}:{}", DOMAIN, SERVER_PORT)).unwrap()
+                server.bind(format!("{}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT)).unwrap()
             };
 
             let _ = server.run().await;

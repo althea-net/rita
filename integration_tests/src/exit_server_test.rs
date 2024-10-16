@@ -74,7 +74,7 @@ pub async fn run_exit_server_test() {
     info!("Registering routers to the exit");
     register_all_namespaces_to_exit(namespaces.clone()).await;
 
-    thread::sleep(Duration::from_secs(10));
+    thread::sleep(Duration::from_secs(100));
 
     test_all_internet_connectivity(namespaces.clone());
 

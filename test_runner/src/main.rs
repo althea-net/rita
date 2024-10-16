@@ -1,6 +1,7 @@
 use integration_tests::contract_test::run_altheadb_contract_test;
 use integration_tests::db_migration_test::run_db_migration_test;
 use integration_tests::debts::run_debts_test;
+use integration_tests::exit_server_test::run_exit_server_test;
 /// Binary crate for actually running the integration tests
 use integration_tests::five_nodes::run_five_node_test_scenario;
 use integration_tests::mutli_exit::run_multi_exit_test;
@@ -28,6 +29,8 @@ async fn main() {
     env_logger::Builder::default()
         .filter(None, log::LevelFilter::Error)
         .filter(Some("integration_tests"), log::LevelFilter::Info)
+        .filter(Some("rita_exit"), log::LevelFilter::Info)
+        .filter(Some("exit_trust_root"), log::LevelFilter::Info)
         .init();
     set_sigterm();
 
@@ -50,6 +53,8 @@ async fn main() {
             run_altheadb_contract_test().await
         } else if test_type == "MIGRATION_TEST" {
             run_db_migration_test().await
+        } else if test_type == "EXIT_ROOT_TEST" {
+            run_exit_server_test().await
         } else {
             panic!("Error unknown test type {}!", test_type);
         }

@@ -17,7 +17,8 @@ use althea_proto::{
     },
 };
 use althea_types::{
-    regions::Regions, ContactType, Denom, ExitIdentity, Identity, SystemChain, WgKey,
+    regions::Regions, ContactType, Denom, ExitIdentity, Identity, SignedExitServerList,
+    SystemChain, WgKey,
 };
 use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
@@ -32,6 +33,7 @@ use nix::{
     sys::stat::Mode,
 };
 use phonenumber::PhoneNumber;
+use rita_client::rita_loop::CLIENT_LOOP_TIMEOUT;
 use rita_client_registration::client_db::{add_exit_admin, add_exits_to_registration_list};
 use rita_common::{
     debt_keeper::GetDebtsResult,
@@ -39,7 +41,7 @@ use rita_common::{
 };
 use settings::{
     client::RitaClientSettings,
-    exit::{ExitNetworkSettings, RitaExitSettingsStruct},
+    exit::{ExitNetworkSettings, RitaExitSettingsStruct, EXIT_LIST_IP, EXIT_LIST_PORT},
     localization::LocalizationSettings,
     logging::LoggingSettings,
     network::NetworkSettings,
@@ -47,7 +49,13 @@ use settings::{
     payment::PaymentSettings,
 };
 use std::{
-    collections::{HashMap, HashSet}, net::Ipv6Addr, process::Command, str::from_utf8, sync::{Arc, RwLock}, thread, time::{Duration, Instant}
+    collections::{HashMap, HashSet},
+    net::Ipv6Addr,
+    process::Command,
+    str::from_utf8,
+    sync::{Arc, RwLock},
+    thread,
+    time::{Duration, Instant},
 };
 use std::{
     fs::File,
@@ -471,6 +479,69 @@ pub fn althea_system_chain_exit(settings: RitaExitSettingsStruct) -> RitaExitSet
     settings.payment.althea_l1_payment_denom = denom.clone();
     settings.payment.althea_l1_accepted_denoms = vec![denom];
     settings
+}
+
+// Calls the get_exit_list function within the provided namespace
+pub async fn get_exit_list(namespace_name: String) -> SignedExitServerList {
+    // thread safe lock that allows us to pass data between the router thread and this thread
+    // one copy of the reference is sent into the closure and the other is kept in this scope.
+    let response: Arc<RwLock<Option<SignedExitServerList>>> = Arc::new(RwLock::new(None));
+    let response_local = response.clone();
+    let namespace_local = namespace_name.clone();
+
+    let _ = thread::spawn(move || {
+        // set the host of this thread to the ns
+        let nsfd = get_nsfd(namespace_name);
+        setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
+        let runner = System::new();
+        runner.block_on(async move {
+            // Hits the exit_list endpoint for a given exit.
+            let endpoint = format!("http://{}:{}/exit_list", EXIT_LIST_IP, EXIT_LIST_PORT);
+
+            let client = awc::Client::default();
+            let req = client
+                .post(&endpoint)
+                .timeout(CLIENT_LOOP_TIMEOUT)
+                .send()
+                .await;
+            let req = match req {
+                Ok(mut req) => req.json().await,
+                Err(awc::error::SendRequestError::Timeout) =>
+                // Did not get a response, is it a rogue exit or some network error?
+                {
+                    panic!("No response from exit!")
+                }
+
+                Err(e) => panic!("Send request error: {:?}", e),
+            };
+
+            let list: SignedExitServerList = match req {
+                Ok(a) => a,
+                Err(e) => panic!("Failed to get exit list from exit {:?}", e),
+            };
+
+            //verify the signature on the list
+            let key = list.data.contract;
+            let sig = list.clone().signature;
+            match list.data.verify(key, sig) {
+                true => *response.write().unwrap() = Some(list),
+                false => panic!("Failed to verify exit list signature!"),
+            }
+        })
+    });
+
+    // wait for the child thread to finish performing it's query
+    const TIMEOUT: Duration = Duration::from_secs(30);
+    let start = Instant::now();
+    while response_local.read().unwrap().is_none() {
+        info!("Waiting for a rpc response from {}", namespace_local);
+        sleep(Duration::from_millis(100)).await;
+        if Instant::now() - start > TIMEOUT {
+            panic!("Timeout waiting for response from {}", namespace_local);
+        }
+    }
+    let list = response_local.read().unwrap().clone().unwrap();
+    list
 }
 
 // Calls the register to exit rpc function within the provided namespace
@@ -1106,6 +1177,18 @@ pub async fn validate_debt_entry(
     info!("Recieved Debt values {:?}", res);
     let debts = res.get(&from_node).unwrap()[0].clone();
     assert!(func(debts));
+}
+
+pub async fn get_exit_list_for_namespaces(namespaces: NamespaceInfo) -> Vec<SignedExitServerList> {
+    let mut lists = Vec::new();
+    for r in namespaces.names.clone() {
+        if let NodeType::Client { exit_name: _ } = r.node_type.clone() {
+            let res = get_exit_list(r.get_name()).await;
+            lists.push(res.clone());
+            info!("{} got an exit list of {:?}", r.get_name(), res);
+        }
+    }
+    lists
 }
 
 pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
