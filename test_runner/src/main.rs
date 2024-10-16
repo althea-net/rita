@@ -28,6 +28,8 @@ async fn main() {
     env_logger::Builder::default()
         .filter(None, log::LevelFilter::Error)
         .filter(Some("integration_tests"), log::LevelFilter::Info)
+        .filter(Some("rita_exit"), log::LevelFilter::Info)
+        .filter(Some("exit_trust_root"), log::LevelFilter::Info)
         .init();
     set_sigterm();
 

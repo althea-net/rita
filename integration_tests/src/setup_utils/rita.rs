@@ -4,9 +4,17 @@ use super::babel::spawn_babel;
 use super::namespaces::get_nsfd;
 use super::namespaces::NamespaceInfo;
 use super::namespaces::NodeType;
+use actix_web::rt::System;
+use actix_web::web;
+use actix_web::App;
+use actix_web::HttpServer;
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::Identity;
+use althea_types::SignedExitServerList;
 use clarity::Address;
+use exit_trust_root;
+use exit_trust_root::return_exit_contract_data;
+use exit_trust_root::signature_update_loop;
 use ipnetwork::IpNetwork;
 use ipnetwork::Ipv6Network;
 use log::info;
@@ -24,6 +32,9 @@ use rita_exit::{
 };
 use settings::set_flag_config;
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
+use std::time::Instant;
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
@@ -274,4 +285,43 @@ pub fn spawn_rita_exit(
     }
     let val = router_identity_ref_local.read().unwrap().unwrap();
     val
+}
+
+/// Spawns the exit root server and waits for it to finish starting, panics if it does not finish starting
+pub fn spawn_exit_root() {
+    let successful_start: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+    let start_move = successful_start.clone();
+    // the exit root server does not get its own namespace- instead it runs in the native namespace/host
+    let exit_contract_data_cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+    signature_update_loop(exit_contract_data_cache.clone());
+    let web_data = web::Data::new(exit_contract_data_cache.clone());
+    thread::spawn(move || {
+        let successful_start = start_move.clone();
+        let runner = System::new();
+        runner.block_on(async move {
+            let server = HttpServer::new(move || {
+                App::new()
+                    .service(return_exit_contract_data)
+                    .app_data(web_data.clone())
+            });
+            info!("Starting exit trust root server on 10.0.0.1:4050");
+            let server = server
+                .bind("10.0.0.1:4050")
+                .unwrap();
+            successful_start.store(true, Relaxed);
+            let _ = server.run().await;
+        });
+    });
+
+    const FAILURE_TIME: Duration = Duration::from_secs(10);
+    let start = Instant::now();
+    while start.elapsed() < FAILURE_TIME {
+        if successful_start.clone().load(Relaxed) {
+            break;
+        }
+    }
+    if !successful_start.load(Relaxed) {
+        panic!("Exit root server failed to start!");
+    }
 }

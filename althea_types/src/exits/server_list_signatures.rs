@@ -63,10 +63,15 @@ impl ExitServerList {
         if sig.is_valid() {
             let hash = get_ethereum_msg_hash(&self.encode_to_eth_abi());
             match sig.recover(&hash) {
-                Ok(addr) => addr == key,
-                Err(_) => false,
+                Ok(addr) => {
+                    println!("Recovered address is {:?}", addr);
+                    addr == key},
+                Err(_) => {
+                    println!("Failed to recover address from signature");
+                    false},
             }
         } else {
+            println!("Signature is invalid");
             false
         }
     }

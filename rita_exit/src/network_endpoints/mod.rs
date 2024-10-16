@@ -19,7 +19,6 @@ use reqwest::ClientBuilder;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::rita_loop::get_web3_server;
-use settings::exit::EXIT_LIST_IP;
 use settings::get_rita_exit;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -195,33 +194,44 @@ pub async fn get_exit_list() -> HttpResponse {
     let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
 
     // we are receiving a SignedExitServerList from the root server.
-    let signed_list: SignedExitServerList =
-        match get_exit_list_from_root(contract_addr).await {
-            Some(a) => a,
-            None => {
-                return HttpResponse::InternalServerError()
-                    .json("Failed to get exit list from root server");
-            }
-        };
+    let signed_list: SignedExitServerList = match get_exit_list_from_root(contract_addr).await {
+        Some(a) => a,
+        None => {
+            return HttpResponse::InternalServerError()
+                .json("Failed to get exit list from root server!");
+        }
+    };
 
     HttpResponse::Ok().json(signed_list)
 }
 
-async fn get_exit_list_from_root(
-    contract_addr: Address,
-) -> Option<SignedExitServerList> {
-    let request_url = format!("https://{}/{}", EXIT_LIST_IP, contract_addr);
+async fn get_exit_list_from_root(contract_addr: Address) -> Option<SignedExitServerList> {
+    let rita_exit = get_rita_exit();
+    let request_url = rita_exit.exit_root_url;
+    let allowed_signers = rita_exit.allowed_exit_list_signatures;
     let timeout = Duration::new(15, 0);
     let client = ClientBuilder::new().timeout(timeout).build().unwrap();
+    let request_url = format!("{}/{}", request_url, contract_addr);
+    info!("Requesting exit list from {}", request_url);
     let response = client
-        .head(request_url)
+        .get(request_url)
         .send()
         .await
         .expect("Could not receive data from exit root server");
     if response.status().is_success() {
         info!("Received an exit list");
-        match response.json().await {
-            Ok(a) => Some(a),
+        match response.json::<SignedExitServerList>().await {
+            Ok(a) => {
+                // verify the signature of the exit list
+                for signer in allowed_signers {
+                    if a.verify(signer) {
+                        info!("Verified exit list signature");
+                        return Some(a);
+                    }
+                }
+                error!("Failed to verify exit list signature");
+                None
+            }
             Err(e) => {
                 error!("Failed to parse exit list from root server {:?}", e);
                 None

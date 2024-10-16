@@ -10,8 +10,12 @@ use althea_types::WgKey;
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState};
 use settings::exit::EXIT_LIST_IP;
 use settings::exit::EXIT_LIST_PORT;
+use settings::get_rita_client;
 use settings::set_rita_client;
 use std::net::{IpAddr, SocketAddr};
+use std::time::Duration;
+
+const EXIT_LIST_TIMEOUT: Duration = Duration::from_secs(20);
 
 async fn send_exit_setup_request(
     exit_pubkey: WgKey,
@@ -208,54 +212,15 @@ pub async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
     Ok(())
 }
 
-/// Hits the exit_list endpoint for a given exit.
-pub async fn get_exit_list(exit: IpAddr) -> Result<SignedExitServerList, RitaClientError> {
-    let current_exit = match settings::get_rita_client()
-        .exit_client
-        .bootstrapping_exits
-        .get(&exit)
-    {
-        Some(current_exit) => current_exit.clone(),
-        None => {
-            return Err(RitaClientError::NoExitError(exit.to_string()));
-        }
-    };
-
-    let exit_pubkey = current_exit.wg_key;
-    let reg_details = match settings::get_rita_client().payment.contact_info {
-        Some(val) => val.into(),
-        None => {
-            return Err(RitaClientError::MiscStringError(
-                "No valid details".to_string(),
-            ))
-        }
-    };
-    let ident = ExitClientIdentity {
-        global: match settings::get_rita_client().get_identity() {
-            Some(id) => id,
-            None => {
-                return Err(RitaClientError::MiscStringError(
-                    "Identity has no mesh IP ready yet".to_string(),
-                ));
-            }
-        },
-        wg_port: DEFAULT_WG_LISTEN_PORT,
-        reg_details,
-    };
-
-    // todo formatting for the exit list endpoint
+/// Hits the exit_list endpoint
+pub async fn get_exit_list() -> Result<SignedExitServerList, RitaClientError> {
     let endpoint = format!("http://{}:{}/exit_list", EXIT_LIST_IP, EXIT_LIST_PORT);
-    let settings = settings::get_rita_client();
-    let our_pubkey = settings.network.wg_public_key.unwrap();
-    let our_privkey = settings.network.wg_private_key.unwrap();
-
-    let ident = encrypt_exit_client_id(our_pubkey, &our_privkey.into(), &exit_pubkey.into(), ident);
 
     let client = awc::Client::default();
     let response = client
         .post(&endpoint)
-        .timeout(CLIENT_LOOP_TIMEOUT)
-        .send_json(&ident)
+        .timeout(EXIT_LIST_TIMEOUT)
+        .send()
         .await;
     let response = match response {
         Ok(mut response) => response.json().await,
@@ -278,13 +243,15 @@ pub async fn get_exit_list(exit: IpAddr) -> Result<SignedExitServerList, RitaCli
         }
     };
 
-    //verify the signature on the list
-    let key = list.data.contract;
-    let sig = list.clone().signature;
-    match list.data.verify(key, sig) {
-        true => Ok(list),
-        false => Err(RitaClientError::MiscStringError(
-            "Failed to verify exit list signature!".to_owned(),
-        )),
+    let config = get_rita_client();
+    let allowed_signers = config.exit_client.allowed_exit_list_signatures;
+    for key in allowed_signers {
+        error!("Verifying exit list with key {:?}", key);
+        if list.verify(key) {
+            return Ok(list);
+        }
     }
+    Err(RitaClientError::MiscStringError(
+        "Failed to verify exit list signature!".to_owned(),
+    ))
 }
