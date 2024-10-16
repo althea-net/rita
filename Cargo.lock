@@ -1977,6 +1977,7 @@ dependencies = [
  "diesel_migrations",
  "docopt",
  "env_logger",
+ "exit_trust_root",
  "futures 0.3.30",
  "ipnetwork",
  "lazy_static",

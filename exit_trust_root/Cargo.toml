@@ -5,8 +5,12 @@ edition = "2021"
 license = "Apache-2.0"
 description = "Server to provide a root of exit trust for Althea routers"
 
-[[bin]]
+[lib]
 name = "exit_trust_root"
+path = "src/lib.rs"
+
+[[bin]]
+name = "exit_trust_root_server"
 path = "src/bin.rs"
 
 [dependencies]

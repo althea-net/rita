@@ -47,13 +47,7 @@ use settings::{
     payment::PaymentSettings,
 };
 use std::{
-    collections::{HashMap, HashSet},
-    net::Ipv6Addr,
-    process::Command,
-    str::from_utf8,
-    sync::{Arc, RwLock},
-    thread,
-    time::{Duration, Instant},
+    collections::{HashMap, HashSet}, net::Ipv6Addr, process::Command, str::from_utf8, sync::{Arc, RwLock}, thread, time::{Duration, Instant}
 };
 use std::{
     fs::File,
@@ -441,6 +435,7 @@ pub fn get_default_settings(
         .exit_client
         .bootstrapping_exits
         .clone_from(&exit_servers);
+
     // first node is passed through to the host machine for testing second node is used
     // for testnet queries
     exit.payment.althea_grpc_list = vec![get_althea_grpc()];

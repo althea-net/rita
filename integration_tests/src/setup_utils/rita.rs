@@ -7,6 +7,8 @@ use super::namespaces::NodeType;
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::Identity;
 use clarity::Address;
+use exit_trust_root;
+use exit_trust_root::start_exit_trust_root_server;
 use ipnetwork::IpNetwork;
 use ipnetwork::Ipv6Network;
 use log::info;
@@ -274,4 +276,9 @@ pub fn spawn_rita_exit(
     }
     let val = router_identity_ref_local.read().unwrap().unwrap();
     val
+}
+
+pub fn spawn_exit_root() {
+    // the exit root server does not get its own namespace- instead it runs in the native namespace/host
+    start_exit_trust_root_server();
 }
