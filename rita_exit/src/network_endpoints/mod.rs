@@ -208,15 +208,15 @@ pub async fn get_exit_list() -> HttpResponse {
 
 // todo this is copied over from exit root server, deduplicate
 pub const EXIT_ROOT_DOMAIN: &str = if cfg!(test) || cfg!(feature = "dev_env") {
-    "localhost"
+    "http://10.0.0.1:4050"
 } else {
-    "exitroot.althea.net"
+    "https://exitroot.althea.net:4050"
 };
 
 async fn get_exit_list_from_root(
     contract_addr: Address,
 ) -> Option<SignedExitServerList> {
-    let request_url = format!("https://{}/{}", EXIT_ROOT_DOMAIN, contract_addr);
+    let request_url = format!("{}/{}", EXIT_ROOT_DOMAIN, contract_addr);
     let timeout = Duration::new(15, 0);
     let client = ClientBuilder::new().timeout(timeout).build().unwrap();
     info!("Requesting exit list from {}", request_url);

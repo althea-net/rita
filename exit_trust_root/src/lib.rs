@@ -26,13 +26,14 @@ const SIGNATURE_UPDATE_SLEEP: Duration = Duration::from_secs(300);
 
 pub const DEVELOPMENT: bool = cfg!(feature = "development");
 const SSL: bool = !DEVELOPMENT;
-pub const EXIT_ROOT_DOMAIN: &str = if cfg!(test) || DEVELOPMENT {
-    "localhost"
+// todo this is copied over from exit root server, deduplicate
+pub const EXIT_ROOT_DOMAIN: &str = if cfg!(test) || cfg!(feature = "development") {
+    "http://10.0.0.1"
 } else {
-    "exitroot.althea.net"
+    "https://exitroot.althea.net"
 };
 /// The backend RPC port for the info server fucntions implemented in this repo
-const SERVER_PORT: u16 = 9000;
+const SERVER_PORT: u16 = 4050;
 
 /// This endpoint retrieves and signs the data from any specified exit contract,
 /// allowing this server to serve as a root of trust for several different exit contracts.
@@ -143,6 +144,7 @@ pub fn start_exit_trust_root_server() {
                     .bind_rustls(format!("{}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT), config.clone())
                     .unwrap()
             } else {
+                info!("Binding to {}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT);
                 server.bind(format!("{}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT)).unwrap()
             };
 

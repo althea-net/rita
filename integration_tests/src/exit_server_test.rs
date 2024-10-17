@@ -36,9 +36,6 @@ pub async fn run_exit_server_test() {
     info!("Waiting to deploy contracts");
     let db_addr = deploy_contracts().await;
 
-    info!("Starting root server!");
-    spawn_exit_root();
-
     info!("Starting registration server");
     start_registration_server(db_addr).await;
 
@@ -47,6 +44,9 @@ pub async fn run_exit_server_test() {
     namespaces.validate();
 
     let res = setup_ns(namespaces.clone());
+
+    info!("Starting root server!");
+    spawn_exit_root();
 
     let rita_identities = thread_spawner(
         namespaces.clone(),
