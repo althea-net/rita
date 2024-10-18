@@ -27,7 +27,7 @@ use clarity::Address;
 use exit_trust_root::client_db::get_all_registered_clients;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
-use settings::exit::{EXIT_LIST_IP, EXIT_LIST_PORT};
+use settings::exit::EXIT_LIST_PORT;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -356,7 +356,10 @@ pub fn start_rita_exit_endpoints(workers: usize) {
     });
 }
 
-// the exit list gets its own server on hardcoded IP so that clients go to the nearest
+/// the exit list gets its own server on hardcoded multihomed IP. Clients will always go to the nearest
+/// instance of this IP due to the way babel handles multihoming. Due to race conditions we don't explicitly
+/// bind to the IP for this listener, we instead bind to all available IPs. As we make tunnels kernel interface
+/// will add the ip to each wg tunnel and then babel will handle the rest.
 pub fn start_rita_exit_list_endpoint(workers: usize) {
     let exit_contract_data_cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>> =
         Arc::new(RwLock::new(HashMap::new()));
@@ -370,7 +373,7 @@ pub fn start_rita_exit_list_endpoint(workers: usize) {
                     .app_data(web_data.clone())
             })
             .workers(workers)
-            .bind(format!("{}:{}", EXIT_LIST_IP, EXIT_LIST_PORT,))
+            .bind(format!("[::0]:{}", EXIT_LIST_PORT,))
             .unwrap()
             .shutdown_timeout(0)
             .run()

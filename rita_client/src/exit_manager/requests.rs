@@ -214,7 +214,7 @@ pub async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
 
 /// Hits the exit_list endpoint
 pub async fn get_exit_list() -> Result<SignedExitServerList, RitaClientError> {
-    let endpoint = format!("http://{}:{}/exit_list", EXIT_LIST_IP, EXIT_LIST_PORT);
+    let endpoint = format!("http://[{}]:{}/exit_list", EXIT_LIST_IP, EXIT_LIST_PORT);
 
     let client = awc::Client::default();
     let response = client

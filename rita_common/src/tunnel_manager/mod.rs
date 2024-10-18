@@ -179,7 +179,7 @@ impl Tunnel {
             remote_pub_key: neigh_id.global.wg_public_key,
             private_key_path: Path::new(&network.wg_private_key_path),
             own_ip,
-            own_ip_v2: network.mesh_ip_v2,
+            alternate_ip: network.alternate_mesh_ips,
             external_nic: network.external_nic.clone(),
             settings_default_route: &mut network.last_default_route,
         };

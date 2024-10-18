@@ -75,10 +75,10 @@ pub struct NetworkSettings {
     /// The static IP used on mesh interfaces
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mesh_ip: Option<IpAddr>,
-    /// Essentially a second ip that can be added to this router on the Babel network
-    /// used only by exits so that they can advertise a second ip to the network
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mesh_ip_v2: Option<IpAddr>,
+    /// Essentially a list of other ip that can be added to this router on the Babel network
+    /// used only by exits so that they can advertise a second ip to the network for the exit list
+    #[serde(default)]
+    pub alternate_mesh_ips: Vec<IpAddr>,
     /// Broadcast ip address used for peer discovery (in ff02::/8)
     #[serde(default = "default_discovery_ip")]
     pub discovery_ip: Ipv6Addr,
@@ -155,7 +155,7 @@ impl Default for NetworkSettings {
             backup_created: false,
             metric_factor: None,
             mesh_ip: None,
-            mesh_ip_v2: None,
+            alternate_mesh_ips: vec![],
             discovery_ip: default_discovery_ip(),
             babel_port: 6872,
             rita_contact_port: 4874,

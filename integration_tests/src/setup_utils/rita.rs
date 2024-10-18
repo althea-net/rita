@@ -30,6 +30,7 @@ use rita_exit::{
     operator_update::update_loop::start_operator_update_loop,
     rita_loop::{start_rita_exit_endpoints, start_rita_exit_loop},
 };
+use settings::exit::EXIT_LIST_IP;
 use settings::set_flag_config;
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
 use std::sync::atomic::AtomicBool;
@@ -238,6 +239,7 @@ pub fn spawn_rita_exit(
             0,
             id.try_into().unwrap(),
         )));
+        resettings.network.alternate_mesh_ips = vec![EXIT_LIST_IP.into()];
 
         resettings.exit_network.subnet = Some(IpNetwork::V6(
             Ipv6Network::new(instance.subnet, 40).unwrap(),

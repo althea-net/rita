@@ -47,9 +47,8 @@ pub struct TunnelOpenArgs<'a> {
     pub private_key_path: &'a Path,
     /// our mesh ipv6 address
     pub own_ip: IpAddr,
-    /// Exit second mesh ip used for exit roaming
-    /// This can be removed after all client migrate to Beta20 and have exit swithcing enabled
-    pub own_ip_v2: Option<IpAddr>,
+    /// List of alterante IPs that this exit should be reachable from, used for multihomed endpoints
+    pub alternate_ip: Vec<IpAddr>,
     /// the nic that we use to get to the internet if we are a gateway, only used to handle
     /// default route considerations on the gateway
     pub external_nic: Option<String>,
@@ -123,7 +122,7 @@ pub fn open_tunnel(args: TunnelOpenArgs) -> Result<(), KernelInterfaceError> {
     )?;
 
     // Add second ip to tunnel used only by exits currently
-    if let Some(ip) = args.own_ip_v2 {
+    for ip in args.alternate_ip.iter() {
         let _output = run_command(
             "ip",
             &["address", "add", &ip.to_string(), "dev", &args.interface],

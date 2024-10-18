@@ -8,13 +8,17 @@ use althea_types::{regions::Regions, ExitIdentity, Identity};
 use clarity::Address;
 use ipnetwork::IpNetwork;
 use std::collections::HashSet;
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 
 pub const APP_NAME: &str = "rita_exit";
 
 // IP serving exit lists from the root server back to clients
-pub const EXIT_LIST_IP: &str = "10.11.12.13";
+// this unique address is multihomed across every exit server so that
+// clients can always call the nearest exit and get the signed list
+pub const EXIT_LIST_IP: Ipv6Addr = Ipv6Addr::new(
+    0xfd00, 0xca11, 0xc0de, 0xcafe, 0x0000, 0x0000, 0x0000, 0x0001,
+);
 /// This is the port which exit lists are served over
 pub const EXIT_LIST_PORT: u16 = 5566;
 /// This is the network settings specific to rita_exit

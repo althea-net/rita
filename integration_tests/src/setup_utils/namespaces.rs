@@ -320,7 +320,7 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                     "ip",
                     "addr",
                     "add",
-                    EXIT_LIST_IP,
+                    &EXIT_LIST_IP.to_string(),
                     "dev",
                     &veth_exit_to_native,
                 ],
