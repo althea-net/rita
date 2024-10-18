@@ -245,10 +245,9 @@ pub async fn get_exit_list() -> Result<SignedExitServerList, RitaClientError> {
 
     let config = get_rita_client();
     let allowed_signers = config.exit_client.allowed_exit_list_signatures;
-    for key in allowed_signers {
-        if list.verify(key) {
-            return Ok(list);
-        }
+    // signature must both be valid and from a trusted signer
+    if list.verify() && allowed_signers.contains(&list.get_signer()) {
+        return Ok(list);
     }
     Err(RitaClientError::MiscStringError(
         "Failed to verify exit list signature!".to_owned(),

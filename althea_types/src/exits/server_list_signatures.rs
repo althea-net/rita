@@ -20,16 +20,6 @@ pub struct ExitServerList {
     pub created: SystemTime,
 }
 
-impl Default for ExitServerList {
-    fn default() -> Self {
-        ExitServerList {
-            contract: Address::default(),
-            exit_list: Vec::new(),
-            created: SystemTime::now(),
-        }
-    }
-}
-
 impl ExitServerList {
     /// Returns the ExitServerList as an Ethereum ABI token
     pub fn encode_to_eth_abi_token(&self) -> AbiToken {
@@ -55,6 +45,7 @@ impl ExitServerList {
         SignedExitServerList {
             signature: sig,
             data: self.clone(),
+            signer: key.to_address(),
         }
     }
 
@@ -63,17 +54,10 @@ impl ExitServerList {
         if sig.is_valid() {
             let hash = get_ethereum_msg_hash(&self.encode_to_eth_abi());
             match sig.recover(&hash) {
-                Ok(addr) => {
-                    println!("Recovered address is {:?}", addr);
-                    addr == key
-                }
-                Err(_) => {
-                    println!("Failed to recover address from signature");
-                    false
-                }
+                Ok(addr) => addr == key,
+                Err(_) => false,
             }
         } else {
-            println!("Signature is invalid");
             false
         }
     }
@@ -82,14 +66,31 @@ impl ExitServerList {
 /// Signed format of the exit server list
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct SignedExitServerList {
-    pub signature: Signature,
-    pub data: ExitServerList,
+    /// The signature of the data
+    signature: Signature,
+    /// The data that was signed
+    data: ExitServerList,
+    /// The address of the signer of this list
+    /// if this does not match the address of the signature recover then the signature is invalid
+    signer: Address,
 }
 
 impl SignedExitServerList {
     /// Verifies the signature on this signed exit server list
-    pub fn verify(&self, key: Address) -> bool {
-        self.data.verify(key, self.signature.clone())
+    pub fn verify(&self) -> bool {
+        self.data.verify(self.signer, self.signature.clone())
+    }
+
+    pub fn get_signer(&self) -> Address {
+        self.signer
+    }
+
+    pub fn get_server_list(&self) -> ExitServerList {
+        self.data.clone()
+    }
+
+    pub fn get_signature(&self) -> Signature {
+        self.signature.clone()
     }
 }
 
@@ -110,12 +111,13 @@ mod tests {
 
         let exit_server_list = ExitServerList {
             contract,
-            exit_list: vec![exit_identity],
+            exit_list: vec![exit_identity.clone()],
             created,
         };
 
         let signed_exit_server_list = SignedExitServerList {
             signature: Signature::new(false, 0u8.into(), 0u8.into()),
+            signer: exit_identity.eth_addr,
             data: exit_server_list.clone(),
         };
 
@@ -153,11 +155,11 @@ mod tests {
 
         let mut signed_exit_server_list = exit_server_list.sign(private_key);
 
-        assert!(signed_exit_server_list.verify(private_key.to_address()));
+        assert!(signed_exit_server_list.verify());
 
         // now we will tamper with the data and ensure that the signature fails
         signed_exit_server_list.data.created += std::time::Duration::from_secs(500);
 
-        assert!(!signed_exit_server_list.verify(private_key.to_address()));
+        assert!(!signed_exit_server_list.verify());
     }
 }

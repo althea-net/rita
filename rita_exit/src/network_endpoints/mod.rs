@@ -241,11 +241,9 @@ async fn get_exit_list_from_root(contract_addr: Address) -> Option<SignedExitSer
         match response.json::<SignedExitServerList>().await {
             Ok(a) => {
                 // verify the signature of the exit list
-                for signer in allowed_signers {
-                    if a.verify(signer) {
-                        info!("Verified exit list signature");
-                        return Some(a);
-                    }
+                if a.verify() && allowed_signers.contains(&a.get_signer()) {
+                    info!("Verified exit list signature");
+                    return Some(a);
                 }
                 error!("Failed to verify exit list signature");
                 None
