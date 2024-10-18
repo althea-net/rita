@@ -6,8 +6,8 @@ use std::{
 use althea_types::random_identity;
 use clarity::{Address, PrivateKey};
 use diesel::{PgConnection, RunQueryDsl};
-use rita_client_registration::{
-    client_db::{check_and_add_user_admin, get_all_regsitered_clients},
+use exit_trust_root::{
+    client_db::{check_and_add_user_admin, get_all_registered_clients},
     register_client_batch_loop::register_client_batch_loop,
 };
 use rita_db_migration::{
@@ -129,7 +129,7 @@ async fn validate_db_migration(
 
     let start = Instant::now();
     loop {
-        let client_vec = get_all_regsitered_clients(&contact, miner_pub_key, althea_db_addr).await;
+        let client_vec = get_all_registered_clients(&contact, miner_pub_key, althea_db_addr).await;
         if client_vec.is_err() {
             if Instant::now() - start > Duration::from_secs(300) {
                 panic!("Failed to migrate clients after waiting for 5 mins");

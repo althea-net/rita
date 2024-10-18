@@ -23,7 +23,7 @@ use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::ExitClient;
 use althea_types::{Identity, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
-use rita_client_registration::client_db::get_all_regsitered_clients;
+use exit_trust_root::client_db::get_all_registered_clients;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
 use settings::exit::{EXIT_LIST_IP, EXIT_LIST_PORT};
@@ -117,7 +117,7 @@ async fn update_client_list(reg_clients_list: Vec<Identity>) -> Vec<Identity> {
     let web3 = web30::client::Web3::new(&full_node, Duration::from_secs(5));
 
     let get_clients_benchmark = Instant::now();
-    match get_all_regsitered_clients(&web3, our_address, contract_address).await {
+    match get_all_registered_clients(&web3, our_address, contract_address).await {
         Ok(list) => {
             info!(
                 "Finished Rita get clients, got {:?} clients in {}ms",

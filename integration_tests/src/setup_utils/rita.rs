@@ -306,9 +306,7 @@ pub fn spawn_exit_root() {
                     .app_data(web_data.clone())
             });
             info!("Starting exit trust root server on 10.0.0.1:4050");
-            let server = server
-                .bind("10.0.0.1:4050")
-                .unwrap();
+            let server = server.bind("10.0.0.1:4050").unwrap();
             successful_start.store(true, Relaxed);
             let _ = server.run().await;
         });

@@ -2,9 +2,9 @@ use actix_web::rt::System;
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
 use althea_types::{ExitServerList, SignedExitServerList};
 use clarity::Address;
+use client_db::get_exits_list;
 use config::CONFIG;
 use log::info;
-use rita_client_registration::client_db::get_exits_list;
 use rustls::ServerConfig;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
@@ -15,7 +15,10 @@ use tls::{load_certs, load_rustls_private_key};
 use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
 
+pub mod client_db;
 pub mod config;
+pub mod register_client_batch_loop;
+pub mod rita_client_registration;
 pub mod tls;
 
 const RPC_SERVER: &str = "https://dai.althea.net";
@@ -71,7 +74,10 @@ async fn retrieve_exit_server_list(
         true => {
             let node_ip = IpAddr::V4(Ipv4Addr::new(7, 7, 7, 1));
             let web3_url = format!("http://{}:8545", node_ip);
-            info!("Our address is {:?}", CONFIG.clarity_private_key.to_address());
+            info!(
+                "Our address is {:?}",
+                CONFIG.clarity_private_key.to_address()
+            );
             get_exits_list(
                 &Web3::new(&web3_url, WEB3_TIMEOUT),
                 CONFIG.clarity_private_key.to_address(),
@@ -97,7 +103,10 @@ async fn retrieve_exit_server_list(
                 exit_list: exits,
                 created: std::time::SystemTime::now(),
             };
-            println!("Signing exit list with PUBKEY: {:?}", CONFIG.clarity_private_key.to_address());
+            println!(
+                "Signing exit list with PUBKEY: {:?}",
+                CONFIG.clarity_private_key.to_address()
+            );
             let cache_value = exit_list.sign(CONFIG.clarity_private_key);
 
             // add this new exit list to the cache
@@ -129,8 +138,10 @@ pub fn start_exit_trust_root_server() {
             });
             info!("Starting exit trust root server on {:?}", EXIT_ROOT_DOMAIN);
             let server = if SSL {
-                let cert_chain =
-                    load_certs(&format!("/etc/letsencrypt/live/{}/fullchain.pem", EXIT_ROOT_DOMAIN));
+                let cert_chain = load_certs(&format!(
+                    "/etc/letsencrypt/live/{}/fullchain.pem",
+                    EXIT_ROOT_DOMAIN
+                ));
                 let keys = load_rustls_private_key(&format!(
                     "/etc/letsencrypt/live/{}/privkey.pem",
                     EXIT_ROOT_DOMAIN
@@ -143,11 +154,16 @@ pub fn start_exit_trust_root_server() {
 
                 info!("Binding to SSL");
                 server
-                    .bind_rustls(format!("{}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT), config.clone())
+                    .bind_rustls(
+                        format!("{}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT),
+                        config.clone(),
+                    )
                     .unwrap()
             } else {
                 info!("Binding to {}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT);
-                server.bind(format!("{}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT)).unwrap()
+                server
+                    .bind(format!("{}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT))
+                    .unwrap()
             };
 
             let _ = server.run().await;

@@ -9,7 +9,6 @@ license = "Apache-2.0"
 num256 = "0.5"
 exit_trust_root = { path = "../exit_trust_root" }
 rita_common = { path = "../rita_common" }
-rita_client_registration = { path = "../rita_client_registration" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }
 settings = { path = "../settings" }

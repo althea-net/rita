@@ -1,16 +1,21 @@
-use crate::{
-    client_db::{add_users_to_registered_list, get_all_regsitered_clients},
-    get_reg_queue, remove_client_from_reg_queue, REGISTRATION_LOOP_SPEED, TX_TIMEOUT, WEB3_TIMEOUT,
-};
 use actix::System;
 use althea_types::Identity;
 use clarity::{Address, PrivateKey};
+use log::{error, info};
 use std::{
     collections::HashSet,
     thread,
     time::{Duration, Instant},
 };
 use web30::{client::Web3, types::SendTxOption};
+
+use crate::{
+    client_db::{add_users_to_registered_list, get_all_registered_clients},
+    rita_client_registration::{
+        get_reg_queue, remove_client_from_reg_queue, REGISTRATION_LOOP_SPEED, TX_TIMEOUT,
+        WEB3_TIMEOUT,
+    },
+};
 
 pub const MAX_BATCH_SIZE: usize = 75;
 
@@ -55,7 +60,7 @@ pub fn register_client_batch_loop(
                         // get a copy of all existing clients, we do this in order to handle a potential future edgecase where more than one registration server
                         // is operating at a time and the same user attempts to register to more than one before the transaction can be sent. Without this check
                         // once a already registered user is in the queue all future transactions would fail and the server would no longer operate correctly
-                        let all_clients = match get_all_regsitered_clients(&web3, our_private_key.to_address(), contract_addr).await {
+                        let all_clients = match get_all_registered_clients(&web3, our_private_key.to_address(), contract_addr).await {
                             Ok(all_clients) => all_clients,
                             Err(e) => {
                                 error!("Failed to get list of already registered clients {:?}, retrying", e);

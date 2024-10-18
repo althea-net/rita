@@ -65,10 +65,12 @@ impl ExitServerList {
             match sig.recover(&hash) {
                 Ok(addr) => {
                     println!("Recovered address is {:?}", addr);
-                    addr == key},
+                    addr == key
+                }
                 Err(_) => {
                     println!("Failed to recover address from signature");
-                    false},
+                    false
+                }
             }
         } else {
             println!("Signature is invalid");

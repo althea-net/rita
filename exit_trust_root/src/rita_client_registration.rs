@@ -1,6 +1,10 @@
 use althea_types::{error::AltheaTypesError, ExitClientIdentity, Identity, WgKey};
 use awc::error::JsonPayloadError;
 use awc::error::SendRequestError;
+use lazy_static::lazy_static;
+use log::error;
+use log::info;
+use log::trace;
 use phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -12,22 +16,14 @@ use std::{
 };
 use web30::jsonrpc::error::Web3Error;
 
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate lazy_static;
-
-pub mod client_db;
-pub mod register_client_batch_loop;
-
 lazy_static! {
     /// A map that stores number of texts sent to a client during registration
     static ref TEXTS_SENT: Arc<RwLock<HashMap<WgKey, u8>>> = Arc::new(RwLock::new(HashMap::new()));
     static ref REGISTER_QUEUE: Arc<RwLock<HashSet<Identity>>> = Arc::new(RwLock::new(HashSet::new()));
 }
 
-const REGISTRATION_LOOP_SPEED: Duration = Duration::from_secs(10);
-const WEB3_TIMEOUT: Duration = Duration::from_secs(15);
+pub const REGISTRATION_LOOP_SPEED: Duration = Duration::from_secs(10);
+pub const WEB3_TIMEOUT: Duration = Duration::from_secs(15);
 pub const TX_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Return struct from check_text and Send Text. Verified indicates status from api http req,
@@ -97,11 +93,11 @@ pub fn add_client_to_reg_queue(id: Identity) {
     REGISTER_QUEUE.write().unwrap().insert(id);
 }
 
-fn remove_client_from_reg_queue(id: Identity) {
+pub fn remove_client_from_reg_queue(id: Identity) {
     REGISTER_QUEUE.write().unwrap().remove(&id);
 }
 
-fn get_reg_queue() -> Vec<Identity> {
+pub fn get_reg_queue() -> Vec<Identity> {
     REGISTER_QUEUE.read().unwrap().clone().into_iter().collect()
 }
 
