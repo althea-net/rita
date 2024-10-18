@@ -442,7 +442,6 @@ pub fn get_default_settings(
         }
         .into(),
     );
-    // todo bootstrapping exits should be removed to test the exit root server?
     client
         .exit_client
         .bootstrapping_exits

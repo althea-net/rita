@@ -246,7 +246,6 @@ pub async fn get_exit_list() -> Result<SignedExitServerList, RitaClientError> {
     let config = get_rita_client();
     let allowed_signers = config.exit_client.allowed_exit_list_signatures;
     for key in allowed_signers {
-        error!("Verifying exit list with key {:?}", key);
         if list.verify(key) {
             return Ok(list);
         }

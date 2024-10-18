@@ -14,7 +14,6 @@ use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
 use althea_kernel_interface::ip_addr::setup_ipv6_slaac as setup_ipv6_slaac_ki;
 use althea_kernel_interface::ip_route::get_default_route;
-use althea_kernel_interface::netns::get_namespace;
 use althea_kernel_interface::run_command;
 use althea_types::ExitDetails;
 use althea_types::ExitServerList;
@@ -134,8 +133,6 @@ async fn handle_exit_switching(em_state: &mut ExitManager, babel_port: u16) {
     // When it is empty, it means an exit we connected to went down, and we use the list from memory to connect to a new instance
     let exit_list = match get_exit_list().await {
         Ok(a) => {
-            let ns: String = get_namespace().unwrap();
-            error!("ns {:?} Received an exit list: {:?}", ns, a);
             a.data
         }
         Err(e) => {

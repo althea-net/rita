@@ -21,8 +21,9 @@ use althea_kernel_interface::exit_server_tunnel::{one_time_exit_setup, setup_nat
 use althea_kernel_interface::setup_wg_if::create_blank_wg_interface;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::ExitClient;
-use althea_types::{Identity, WgKey};
+use althea_types::{Identity, SignedExitServerList, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
+use clarity::Address;
 use exit_trust_root::client_db::get_all_registered_clients;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
@@ -357,17 +358,23 @@ pub fn start_rita_exit_endpoints(workers: usize) {
 
 // the exit list gets its own server on hardcoded IP so that clients go to the nearest
 pub fn start_rita_exit_list_endpoint(workers: usize) {
+    let exit_contract_data_cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+    let web_data = web::Data::new(exit_contract_data_cache.clone());
     thread::spawn(move || {
         let runner = AsyncSystem::new();
         runner.block_on(async move {
-            let _res =
-                HttpServer::new(|| App::new().route("/exit_list", web::post().to(get_exit_list)))
-                    .workers(workers)
-                    .bind(format!("{}:{}", EXIT_LIST_IP, EXIT_LIST_PORT,))
-                    .unwrap()
-                    .shutdown_timeout(0)
-                    .run()
-                    .await;
+            let _res = HttpServer::new(move || {
+                App::new()
+                    .route("/exit_list", web::post().to(get_exit_list))
+                    .app_data(web_data.clone())
+            })
+            .workers(workers)
+            .bind(format!("{}:{}", EXIT_LIST_IP, EXIT_LIST_PORT,))
+            .unwrap()
+            .shutdown_timeout(0)
+            .run()
+            .await;
         });
     });
 }
