@@ -16,7 +16,6 @@ use althea_kernel_interface::ip_addr::setup_ipv6_slaac as setup_ipv6_slaac_ki;
 use althea_kernel_interface::ip_route::get_default_route;
 use althea_kernel_interface::run_command;
 use althea_types::ExitDetails;
-use althea_types::ExitServerList;
 use althea_types::{ExitIdentity, ExitState};
 use rita_common::blockchain_oracle::low_balance;
 use std::thread;
@@ -132,12 +131,10 @@ async fn handle_exit_switching(em_state: &mut ExitManager, babel_port: u16) {
     // Get cluster exit list. This is saved locally and updated every tick depending on what exit we connect to.
     // When it is empty, it means an exit we connected to went down, and we use the list from memory to connect to a new instance
     let exit_list = match get_exit_list().await {
-        Ok(a) => {
-            a.data
-        }
+        Ok(a) => a.get_server_list(),
         Err(e) => {
             error!("Exit_Switcher: Unable to get exit list: {:?}", e);
-            ExitServerList::default()
+            return;
         }
     };
 

@@ -12,7 +12,7 @@ use std::{
 };
 
 /// An enum representation of the Regions supported by althea exits
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum Regions {
     UnitedStates,
     Canada,

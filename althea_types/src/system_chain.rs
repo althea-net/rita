@@ -5,7 +5,7 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::str::FromStr;
 
-#[derive(Default, Debug, Hash, Clone, Eq, PartialEq, Copy)]
+#[derive(Default, Debug, Hash, Clone, Eq, PartialEq, Copy, Ord, PartialOrd)]
 pub enum SystemChain {
     Ethereum,
     Sepolia,
