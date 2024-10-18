@@ -25,11 +25,14 @@ clarity = "1.4"
 web30 = "1.4"
 crypto_box = "0.9"
 lazy_static = "1.5"
+phonenumber = "0.3.6"
+awc = "3.5"
+actix = "0.13"
+tokio = { version = "1.40", features = ["macros", "time"] }
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 toml = "0.5"
-rita_client_registration = { path = "../rita_client_registration" }
 # we don't call or us OpenSSL directly in this codebase, but by adding
 # this dependency with this feature we can enforce that openssl is compiled
 # in 'vendored' mode all the way down the tree. What this means is that we use

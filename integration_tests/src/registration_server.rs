@@ -7,18 +7,16 @@ use actix_web::{
 };
 use althea_types::ExitClientIdentity;
 use clarity::{Address, PrivateKey};
-use rita_client_registration::{
-    client_db::check_and_add_user_admin, handle_sms_registration, register_client_batch_loop,
+use exit_trust_root::{
+    client_db::check_and_add_user_admin, register_client_batch_loop::register_client_batch_loop,
+    rita_client_registration::handle_sms_registration,
 };
 use web30::client::Web3;
 
+use crate::utils::REGISTRATION_SERVER_KEY;
 use crate::{
     payments_eth::WEB3_TIMEOUT,
     utils::{get_eth_node, get_test_runner_magic_phone, TX_TIMEOUT},
-};
-use crate::{
-    registration_server::register_client_batch_loop::register_client_batch_loop,
-    utils::REGISTRATION_SERVER_KEY,
 };
 
 pub const REGISTRATION_PORT_SERVER: u16 = 40400;

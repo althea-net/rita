@@ -16,9 +16,11 @@ use althea_types::Identity;
 use clarity::Address;
 use diesel::{r2d2::ConnectionManager, PgConnection, RunQueryDsl};
 use error::RitaDBMigrationError;
+use exit_trust_root::{
+    client_db::get_all_registered_clients, rita_client_registration::add_client_to_reg_queue,
+};
 use models::Client;
 use r2d2::PooledConnection;
-use rita_client_registration::{add_client_to_reg_queue, client_db::get_all_regsitered_clients};
 use web30::client::Web3;
 
 const WEB3_TIMEOUT: Duration = Duration::from_secs(60);
@@ -63,7 +65,7 @@ async fn add_clients_to_reg_queue(
     contract: Address,
 ) {
     let existing_users: HashSet<Identity> =
-        match get_all_regsitered_clients(contact, requester_address, contract).await {
+        match get_all_registered_clients(contact, requester_address, contract).await {
             Ok(a) => HashSet::from_iter(a.iter().cloned()),
             Err(e) => {
                 error!(

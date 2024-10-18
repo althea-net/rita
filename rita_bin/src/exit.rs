@@ -15,6 +15,7 @@
 
 use althea_types::Identity;
 use clarity::Address;
+use exit_trust_root::client_db::get_all_registered_clients;
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
 use rita_exit::rita_loop::start_rita_exit_list_endpoint;
@@ -29,7 +30,6 @@ static GLOBAL: Jemalloc = Jemalloc;
 extern crate log;
 
 use docopt::Docopt;
-use rita_client_registration::client_db::get_all_regsitered_clients;
 use rita_common::debt_keeper::save_debt_on_shutdown;
 use rita_common::logging::enable_remote_logging;
 use rita_common::rita_loop::get_web3_server;
@@ -222,7 +222,7 @@ async fn get_registered_users() -> Result<Vec<Identity>, Web3Error> {
     let contract_address = settings::get_rita_exit()
         .exit_network
         .registered_users_contract_addr;
-    get_all_regsitered_clients(&web3, our_address, contract_address).await
+    get_all_registered_clients(&web3, our_address, contract_address).await
 }
 
 async fn check_balance(

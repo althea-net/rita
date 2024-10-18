@@ -3,7 +3,6 @@
 //! exit and client routers can read it to coordinate user setup and two way key exchange with the blockchain
 //! as the trusted party
 
-use crate::convert_althea_types_to_web3_error;
 use althea_types::{ExitIdentity, Identity, WgKey};
 use clarity::{
     abi::{encode_call, AbiToken},
@@ -17,10 +16,12 @@ use web30::{
     types::{SendTxOption, TransactionRequest},
 };
 
+use crate::rita_client_registration::convert_althea_types_to_web3_error;
+
 /// The EVM integer size
 pub const WORD_SIZE: usize = 32;
 
-pub async fn get_all_regsitered_clients(
+pub async fn get_all_registered_clients(
     web30: &Web3,
     requester_address: Address,
     contract: Address,

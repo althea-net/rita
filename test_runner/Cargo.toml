@@ -18,7 +18,6 @@ integration_tests = { path = "../integration_tests" }
 althea_types = { path = "../althea_types" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 deep_space = { version = "2", features = ["althea"] }
-rita_client_registration = { path = "../rita_client_registration" }
 web30 = "1.4"
 clarity = "1.4"
 

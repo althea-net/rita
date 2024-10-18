@@ -1356,8 +1356,10 @@ dependencies = [
 name = "exit_trust_root"
 version = "0.21.5"
 dependencies = [
+ "actix",
  "actix-web",
  "althea_types",
+ "awc",
  "clarity",
  "crypto_box",
  "env_logger",
@@ -1365,12 +1367,13 @@ dependencies = [
  "log",
  "openssl",
  "openssl-probe",
- "rita_client_registration",
+ "phonenumber",
  "rustls 0.20.9",
  "rustls-pemfile 0.3.0",
  "serde",
  "serde_derive",
  "serde_json",
+ "tokio",
  "toml 0.5.11",
  "web30",
 ]
@@ -1955,7 +1958,6 @@ dependencies = [
  "petgraph",
  "phonenumber",
  "rita_client",
- "rita_client_registration",
  "rita_common",
  "rita_db_migration",
  "rita_exit",
@@ -3074,6 +3076,7 @@ dependencies = [
  "diesel",
  "docopt",
  "env_logger",
+ "exit_trust_root",
  "flate2",
  "hex-literal",
  "ipnetwork",
@@ -3084,7 +3087,6 @@ dependencies = [
  "phonenumber",
  "r2d2",
  "rita_client",
- "rita_client_registration",
  "rita_common",
  "rita_db_migration",
  "rita_exit",
@@ -3130,25 +3132,6 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "settings",
- "tokio",
- "web30",
-]
-
-[[package]]
-name = "rita_client_registration"
-version = "0.1.0"
-dependencies = [
- "actix",
- "althea_types",
- "awc",
- "clarity",
- "futures 0.3.31",
- "lazy_static",
- "log",
- "num-traits",
- "phonenumber",
- "rand",
- "serde",
  "tokio",
  "web30",
 ]
@@ -3208,9 +3191,9 @@ dependencies = [
  "clarity",
  "diesel",
  "dotenv",
+ "exit_trust_root",
  "log",
  "r2d2",
- "rita_client_registration",
  "serde",
  "serde_derive",
  "serde_json",
@@ -3239,7 +3222,6 @@ dependencies = [
  "num256",
  "phonenumber",
  "reqwest",
- "rita_client_registration",
  "rita_common",
  "serde",
  "serde_derive",
@@ -3933,7 +3915,6 @@ dependencies = [
  "futures 0.3.31",
  "integration_tests",
  "log",
- "rita_client_registration",
  "web30",
 ]
 

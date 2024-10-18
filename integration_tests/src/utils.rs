@@ -23,6 +23,7 @@ use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use clarity::{Address, PrivateKey as ClarityPrivkey, Transaction, Uint256};
 use deep_space::{Address as AltheaAddress, Coin, Contact, CosmosPrivateKey, PrivateKey};
+use exit_trust_root::client_db::{add_exit_admin, add_exits_to_registration_list};
 use futures::future::join_all;
 use ipnetwork::IpNetwork;
 use lazy_static;
@@ -32,7 +33,6 @@ use nix::{
     sys::stat::Mode,
 };
 use phonenumber::PhoneNumber;
-use rita_client_registration::client_db::{add_exit_admin, add_exits_to_registration_list};
 use rita_common::{
     debt_keeper::GetDebtsResult,
     payment_validator::{ALTHEA_CHAIN_PREFIX, ALTHEA_CONTACT_TIMEOUT},
