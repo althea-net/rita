@@ -4,6 +4,7 @@
 use crate::database::{client_status, signup_client};
 
 use crate::RitaExitError;
+use actix_web_async::web;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
 use althea_types::Identity;
 use althea_types::SignedExitServerList;
@@ -20,7 +21,9 @@ use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::rita_loop::get_web3_server;
 use settings::get_rita_exit;
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::time::SystemTime;
 use web30::client::Web3;
@@ -187,18 +190,33 @@ pub async fn get_exit_timestamp_http(_req: HttpRequest) -> HttpResponse {
 
 /// This function takes a list of exit ips in the cluster from the exit registration smart
 /// contract, and returns a list of exit ips that are in the same region and currency as the client
-/// This exit may not be included in the list returned by the smart contract! If this is the case it must
-/// first be added to the root of trust server, and clients will know to choose a different exit.
-pub async fn get_exit_list() -> HttpResponse {
+/// This exit may not be included in the list returned by the smart contract! All exits run their
+/// get_exit_list endpoint on the same IP within the babel mesh, so any exit that is online will get
+/// requests regardless of whether they are on the list. Clients verify the signature on the list and
+/// switch only to valid exits, and exits not on the list must be added to the root of trust server's
+/// list in order to be considered valid.
+pub async fn get_exit_list(
+    cache: web::Data<Arc<RwLock<HashMap<Address, SignedExitServerList>>>>,
+) -> HttpResponse {
     let rita_exit = get_rita_exit();
     let contract_addr = rita_exit.exit_network.registered_users_contract_addr;
 
     // we are receiving a SignedExitServerList from the root server.
     let signed_list: SignedExitServerList = match get_exit_list_from_root(contract_addr).await {
-        Some(a) => a,
+        Some(a) => {
+            // add to the cache
+            cache.write().unwrap().insert(contract_addr, a.clone());
+            a
+        }
         None => {
-            return HttpResponse::InternalServerError()
-                .json("Failed to get exit list from root server!");
+            error!("Failed to get exit list from root server, trying cached list");
+            match cache.read().unwrap().get(&contract_addr).cloned() {
+                Some(a) => a,
+                None => {
+                    return HttpResponse::InternalServerError()
+                        .json("Failed to get exit list and no cached value present!")
+                }
+            }
         }
     };
 

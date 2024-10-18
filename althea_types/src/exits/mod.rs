@@ -102,12 +102,6 @@ pub struct EncryptedExitState {
     pub encrypted_exit_state: Vec<u8>,
 }
 
-// impl ExitList {
-//     pub fn into_identities(self) -> Vec<Identity> {
-//         self.exit_list.into_iter().map(|exit| exit.into()).collect()
-//     }
-// }
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ExitVerifMode {
     Phone,

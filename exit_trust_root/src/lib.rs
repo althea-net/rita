@@ -29,7 +29,6 @@ const SIGNATURE_UPDATE_SLEEP: Duration = Duration::from_secs(300);
 
 pub const DEVELOPMENT: bool = cfg!(feature = "development");
 const SSL: bool = !DEVELOPMENT;
-// todo this is copied over from exit root server, deduplicate
 pub const EXIT_ROOT_DOMAIN: &str = if cfg!(test) || cfg!(feature = "development") {
     "http://10.0.0.1:4050"
 } else {
@@ -97,13 +96,12 @@ async fn retrieve_exit_server_list(
 
     match exits {
         Ok(exits) => {
-            info!("Got exit list from contract");
             let exit_list = ExitServerList {
                 contract: exit_contract,
                 exit_list: exits,
                 created: std::time::SystemTime::now(),
             };
-            println!(
+            info!(
                 "Signing exit list with PUBKEY: {:?}",
                 CONFIG.clarity_private_key.to_address()
             );
