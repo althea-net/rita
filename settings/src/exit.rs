@@ -13,6 +13,12 @@ use std::path::{Path, PathBuf};
 
 pub const APP_NAME: &str = "rita_exit";
 
+// IP serving exit lists from the root server back to clients
+// this unique address is multihomed across every exit server so that
+// clients can always call the nearest exit and get the signed list
+pub const EXIT_LIST_IP: &str = "fd00:ca11:c0de:cafe::1";
+/// This is the port which exit lists are served over
+pub const EXIT_LIST_PORT: u16 = 5566;
 /// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitNetworkSettings {
@@ -114,6 +120,10 @@ pub struct RitaExitSettingsStruct {
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     pub allowed_countries: HashSet<Regions>,
+    /// This is the Address/Pubkey of the exit root of trust server which clients use to verify signed exit lists
+    pub allowed_exit_list_signatures: Vec<Address>,
+    /// url to the exit root of trust server to query exit lists
+    pub exit_root_url: String,
 }
 
 impl RitaExitSettingsStruct {
@@ -137,6 +147,8 @@ impl RitaExitSettingsStruct {
             exit_network: ExitNetworkSettings::test_default(),
             allowed_countries: HashSet::new(),
             log: LoggingSettings::default(),
+            allowed_exit_list_signatures: Vec::new(),
+            exit_root_url: "".to_string(),
         }
     }
 

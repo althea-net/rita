@@ -2,6 +2,7 @@ use crate::five_nodes::five_node_config;
 use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::setup_ns;
 use crate::setup_utils::namespaces::Namespace;
+use crate::setup_utils::rita::spawn_exit_root;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::add_exits_contract_exit_list;
 use crate::utils::deploy_contracts;
@@ -50,7 +51,8 @@ pub async fn run_eth_payments_test_scenario() {
     info!("Starting registration server");
     start_registration_server(db_addr).await;
 
-    let (mut client_settings, mut exit_settings) = get_default_settings(namespaces.clone());
+    let (mut client_settings, mut exit_settings, exit_root_addr) =
+        get_default_settings(namespaces.clone());
 
     // Set payment thresholds low enough so that they get triggered after an iperf
     let (client_settings, exit_settings) =
@@ -61,6 +63,9 @@ pub async fn run_eth_payments_test_scenario() {
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
+    info!("Starting root server!");
+    spawn_exit_root();
+
     let rita_identities =
         thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
             .expect("Could not spawn Rita threads");
@@ -69,7 +74,7 @@ pub async fn run_eth_payments_test_scenario() {
     // Add exits to the contract exit list so clients get the propers exits they can migrate to
     add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
 
-    populate_routers_eth(rita_identities).await;
+    populate_routers_eth(rita_identities, exit_root_addr).await;
 
     test_reach_all(namespaces.clone());
     test_routes(namespaces.clone(), expected_routes);

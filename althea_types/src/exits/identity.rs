@@ -1,5 +1,5 @@
 use crate::error::AltheaTypesError;
-use crate::random_identity;
+use crate::random_idenity_with_private_key;
 use crate::regions::Regions;
 use crate::to_evm_words;
 use crate::wg_key::WgKey;
@@ -9,6 +9,7 @@ use crate::WORD_SIZE;
 use clarity::abi::encode_tokens;
 use clarity::abi::AbiToken;
 use clarity::Address;
+use clarity::PrivateKey;
 use num256::Uint256;
 use serde::Deserialize;
 use serde::Serialize;
@@ -336,6 +337,8 @@ impl ExitIdentity {
 }
 
 fn allowed_regions_abi_array(allowed_regions: HashSet<Regions>) -> Vec<AbiToken> {
+    let mut allowed_regions: Vec<Regions> = allowed_regions.into_iter().collect();
+    allowed_regions.sort();
     let mut ret = vec![];
     for reg in allowed_regions.iter() {
         let reg_int: u8 = (*reg).into();
@@ -345,6 +348,8 @@ fn allowed_regions_abi_array(allowed_regions: HashSet<Regions>) -> Vec<AbiToken>
 }
 
 fn payment_types_abi_array(payment_types: HashSet<SystemChain>) -> Vec<AbiToken> {
+    let mut payment_types: Vec<SystemChain> = payment_types.into_iter().collect();
+    payment_types.sort();
     let mut ret = vec![];
     for payment_type in payment_types.iter() {
         let pay_int: u8 = (*payment_type).into();
@@ -389,9 +394,10 @@ pub fn exit_identity_to_id(exit_id: ExitIdentity) -> Identity {
     exit_id.into()
 }
 
-/// generates a random identity, never use in production
-pub fn random_exit_identity() -> ExitIdentity {
-    let base_id = random_identity();
+/// Returns a random exit identity, never use in production, your money will be stolen
+/// Also returns the private key for testing purposes
+pub fn random_exit_identity_with_private_key() -> (ExitIdentity, PrivateKey) {
+    let (base_id, key) = random_idenity_with_private_key();
 
     let mut payment_types = HashSet::new();
     let num_payment_types = rand::random::<u8>().max(4);
@@ -408,15 +414,23 @@ pub fn random_exit_identity() -> ExitIdentity {
         allowed_regions.insert(region);
     }
 
-    ExitIdentity {
-        mesh_ip: base_id.mesh_ip,
-        eth_addr: base_id.eth_address,
-        wg_key: base_id.wg_public_key,
-        registration_port: rand::random(),
-        wg_exit_listen_port: rand::random(),
-        allowed_regions,
-        payment_types,
-    }
+    (
+        ExitIdentity {
+            mesh_ip: base_id.mesh_ip,
+            eth_addr: base_id.eth_address,
+            wg_key: base_id.wg_public_key,
+            registration_port: rand::random(),
+            wg_exit_listen_port: rand::random(),
+            allowed_regions,
+            payment_types,
+        },
+        key,
+    )
+}
+
+/// generates a random identity, never use in production
+pub fn random_exit_identity() -> ExitIdentity {
+    random_exit_identity_with_private_key().0
 }
 
 #[cfg(test)]

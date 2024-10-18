@@ -5,7 +5,7 @@ use std::time::Duration;
 use crate::five_nodes::five_node_config;
 use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
-use crate::setup_utils::rita::thread_spawner;
+use crate::setup_utils::rita::{spawn_exit_root, thread_spawner};
 use crate::utils::{
     add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_default_settings,
     get_ip_from_namespace, populate_routers_eth, query_debts, register_all_namespaces_to_exit,
@@ -49,7 +49,7 @@ pub async fn run_debts_test() {
     info!("Starting registration server");
     start_registration_server(db_addr).await;
 
-    let (client_settings, exit_settings) = get_default_settings(namespaces.clone());
+    let (client_settings, exit_settings, exit_root_addr) = get_default_settings(namespaces.clone());
 
     // The exit price is set to ns.cost during thread_spawner
     let exit_price = namespaces.get_namespace(4).unwrap().cost;
@@ -59,6 +59,9 @@ pub async fn run_debts_test() {
     let res = setup_ns(namespaces.clone());
     info!("Namespaces setup: {res:?}");
 
+    info!("Starting root server!");
+    spawn_exit_root();
+
     let rita_identities =
         thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
             .expect("Could not spawn Rita threads");
@@ -67,7 +70,7 @@ pub async fn run_debts_test() {
     // Add exits to the contract exit list so clients get the propers exits they can migrate to
     add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
 
-    populate_routers_eth(rita_identities).await;
+    populate_routers_eth(rita_identities, exit_root_addr).await;
 
     // Test for network convergence
     test_reach_all(namespaces.clone());

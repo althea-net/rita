@@ -1,0 +1,23 @@
+---
+  - name: Stop exit-trust-root
+    systemd:
+      name: exit-trust-root
+      state: stopped
+    # just in case we haven't deployed the service yet
+    ignore_errors: true
+
+  - name: Copy exit_trust_root binary
+    copy:
+      src: "{{playbook_dir}}/exit_trust_root"
+      dest: /usr/sbin/exit_trust_root
+      mode: 0755
+    become: true
+
+  - name: Fail on nonsystemd systems
+    fail:
+      msg: "No support for non systemd services, please add support for your init system!"
+    when: "ansible_service_mgr != 'systemd'"
+    delegate_to: localhost
+
+  - include_tasks: systemd.yml 
+  

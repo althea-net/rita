@@ -3,6 +3,7 @@ use nix::{
     fcntl::{open, OFlag},
     sys::stat::Mode,
 };
+use settings::exit::EXIT_LIST_IP;
 use std::collections::{HashMap, HashSet};
 
 /// This struct holds the format for a namespace info
@@ -305,6 +306,21 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                     "addr",
                     "add",
                     &exit_ip,
+                    "dev",
+                    &veth_exit_to_native,
+                ],
+            )?;
+            // add ip address for the exit list endpoint
+            run_command(
+                "ip",
+                &[
+                    "netns",
+                    "exec",
+                    &name.get_name(),
+                    "ip",
+                    "addr",
+                    "add",
+                    EXIT_LIST_IP,
                     "dev",
                     &veth_exit_to_native,
                 ],

@@ -13,12 +13,12 @@ use althea_types::SystemChain;
 use clarity::PrivateKey;
 use diesel::RunQueryDsl;
 use docopt::Docopt;
+use exit_trust_root::client_db::add_exits_to_registration_list;
+use exit_trust_root::client_db::add_users_to_registered_list;
+use exit_trust_root::client_db::get_all_registered_clients;
+use exit_trust_root::register_client_batch_loop::get_clients_hashset;
+use exit_trust_root::register_client_batch_loop::MAX_BATCH_SIZE;
 use log::{error, info};
-use rita_client_registration::client_db::add_exits_to_registration_list;
-use rita_client_registration::{
-    client_db::{add_users_to_registered_list, get_all_regsitered_clients},
-    register_client_batch_loop::{get_clients_hashset, MAX_BATCH_SIZE},
-};
 use rita_db_migration::{
     get_database_connection,
     models::{self, Client},
@@ -72,7 +72,7 @@ async fn main() {
         // is operating at a time and the same user attempts to register to more than one before the transaction can be sent. Without this check
         // once a already registered user is in the queue all future transactions would fail and the server would no longer operate correctly
         let all_contract_clients =
-            match get_all_regsitered_clients(&web3, address, contract_addr).await {
+            match get_all_registered_clients(&web3, address, contract_addr).await {
                 Ok(all_clients) => all_clients,
                 Err(e) => {
                     panic!("Failed to get list of already registered clients {:?}", e);

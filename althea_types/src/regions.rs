@@ -5,13 +5,14 @@
 
 use serde::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
+use std::convert::Infallible;
 use std::{
     fmt::{self, Display},
     str::FromStr,
 };
 
 /// An enum representation of the Regions supported by althea exits
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum Regions {
     UnitedStates,
     Canada,
@@ -758,8 +759,8 @@ impl Display for Regions {
 }
 
 impl FromStr for Regions {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Regions, String> {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Regions, Infallible> {
         let lowercase_s = s.to_lowercase();
         for i in 0..Regions::NUM_REGIONS {
             let region = Regions::from(i);
@@ -772,7 +773,9 @@ impl FromStr for Regions {
 }
 
 impl Regions {
-    pub const NUM_REGIONS: u8 = 179;
+    /// There are 179 specified regions and one unknown region
+    /// for a total of 180
+    pub const NUM_REGIONS: u8 = 180;
 }
 
 impl Serialize for Regions {
@@ -798,22 +801,20 @@ impl<'de> Deserialize<'de> for Regions {
 mod test {
     use super::Regions;
 
-    /// The number of current valid regions
-    const NUM_REGIONS: u8 = 179;
-
     #[test]
     fn string_serialize_and_parse() {
-        for i in 0..NUM_REGIONS {
+        for i in 0..Regions::NUM_REGIONS {
             let region = Regions::from(i);
             let region_str = region.to_string();
             let parsed_region: Regions = region_str.parse().unwrap();
+            println!("Parsed region: {}", parsed_region);
             assert_eq!(region, parsed_region);
         }
     }
 
     #[test]
     fn integer_serialize_and_parse() {
-        for i in 0..NUM_REGIONS {
+        for i in 0..Regions::NUM_REGIONS {
             let region = Regions::from(i);
             let region_num_2: u8 = region.into();
             assert_eq!(i, region_num_2);

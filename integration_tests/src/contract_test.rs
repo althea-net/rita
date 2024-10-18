@@ -1,9 +1,9 @@
 use althea_types::random_identity;
 use althea_types::{regions::Regions, ExitIdentity, SystemChain};
 use clarity::{Address, PrivateKey};
-use rita_client_registration::client_db::{
+use exit_trust_root::client_db::{
     add_exit_admin, add_exits_to_registration_list, add_users_to_registered_list,
-    check_and_add_user_admin, get_all_regsitered_clients, get_exits_list,
+    check_and_add_user_admin, get_all_registered_clients, get_exits_list,
     get_registered_client_using_wgkey,
 };
 use std::collections::HashSet;
@@ -199,7 +199,7 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     .unwrap();
 
     // Try requests when there are no users present
-    let res = get_all_regsitered_clients(&contact, miner_pub_key, db_addr).await;
+    let res = get_all_registered_clients(&contact, miner_pub_key, db_addr).await;
 
     assert_eq!(res.unwrap(), vec![]);
 
@@ -247,7 +247,7 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     assert_eq!(user_1, res);
 
     // Request a list of all reg users (should be an array of one entry)
-    let res = get_all_regsitered_clients(&contact, miner_pub_key, db_addr)
+    let res = get_all_registered_clients(&contact, miner_pub_key, db_addr)
         .await
         .unwrap();
 
@@ -336,7 +336,7 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     )
     .await;
 
-    let res = get_all_regsitered_clients(&contact, miner_pub_key, db_addr)
+    let res = get_all_registered_clients(&contact, miner_pub_key, db_addr)
         .await
         .unwrap();
 

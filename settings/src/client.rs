@@ -5,6 +5,7 @@ use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_client, SettingsError};
 use althea_types::regions::Regions;
 use althea_types::{ExitIdentity, ExitState, Identity};
+use clarity::Address;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -61,6 +62,8 @@ pub struct ExitClientSettings {
     /// For example if we have a None value, we will connect to other exits with no specified region, but not ones that specify a region lock.
     /// If we have some value we will connect to exits that have that region specified as well as exits with no region specified.
     pub our_region: Option<Regions>,
+    /// This is the Address/Pubkey of the exit root of trust server which clients use to verify signed exit lists
+    pub allowed_exit_list_signatures: Vec<Address>,
 }
 
 impl Default for ExitClientSettings {
@@ -71,6 +74,7 @@ impl Default for ExitClientSettings {
             exit_db_smart_contract_on_xdai: exit_db_smart_contract_on_xdai(),
             lan_nics: HashSet::new(),
             our_region: None,
+            allowed_exit_list_signatures: Vec::new(),
         }
     }
 }

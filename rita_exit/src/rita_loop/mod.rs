@@ -21,11 +21,13 @@ use althea_kernel_interface::exit_server_tunnel::{one_time_exit_setup, setup_nat
 use althea_kernel_interface::setup_wg_if::create_blank_wg_interface;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::ExitClient;
-use althea_types::{Identity, WgKey};
+use althea_types::{Identity, SignedExitServerList, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
-use rita_client_registration::client_db::get_all_regsitered_clients;
+use clarity::Address;
+use exit_trust_root::client_db::get_all_registered_clients;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
+use settings::exit::{EXIT_LIST_IP, EXIT_LIST_PORT};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -116,7 +118,7 @@ async fn update_client_list(reg_clients_list: Vec<Identity>) -> Vec<Identity> {
     let web3 = web30::client::Web3::new(&full_node, Duration::from_secs(5));
 
     let get_clients_benchmark = Instant::now();
-    match get_all_regsitered_clients(&web3, our_address, contract_address).await {
+    match get_all_registered_clients(&web3, our_address, contract_address).await {
         Ok(list) => {
             info!(
                 "Finished Rita get clients, got {:?} clients in {}ms",
@@ -340,14 +342,35 @@ pub fn start_rita_exit_endpoints(workers: usize) {
                     .route("/secure_status", web::post().to(secure_status_request))
                     .route("/client_debt", web::post().to(get_client_debt))
                     .route("/time", web::get().to(get_exit_timestamp_http))
-                    .route("/exit_list", web::post().to(get_exit_list))
-                    .route("/exit_list_v2", web::post().to(get_exit_list_v2))
             })
             .workers(workers)
             .bind(format!(
                 "[::0]:{}",
                 settings::get_rita_exit().exit_network.exit_hello_port
             ))
+            .unwrap()
+            .shutdown_timeout(0)
+            .run()
+            .await;
+        });
+    });
+}
+
+// the exit list gets its own server on hardcoded IP so that clients go to the nearest
+pub fn start_rita_exit_list_endpoint(workers: usize) {
+    let exit_contract_data_cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+    let web_data = web::Data::new(exit_contract_data_cache.clone());
+    thread::spawn(move || {
+        let runner = AsyncSystem::new();
+        runner.block_on(async move {
+            let _res = HttpServer::new(move || {
+                App::new()
+                    .route("/exit_list", web::post().to(get_exit_list))
+                    .app_data(web_data.clone())
+            })
+            .workers(workers)
+            .bind(format!("{}:{}", EXIT_LIST_IP, EXIT_LIST_PORT,))
             .unwrap()
             .shutdown_timeout(0)
             .run()
