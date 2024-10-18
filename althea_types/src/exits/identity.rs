@@ -337,6 +337,8 @@ impl ExitIdentity {
 }
 
 fn allowed_regions_abi_array(allowed_regions: HashSet<Regions>) -> Vec<AbiToken> {
+    let mut allowed_regions: Vec<Regions> = allowed_regions.into_iter().collect();
+    allowed_regions.sort();
     let mut ret = vec![];
     for reg in allowed_regions.iter() {
         let reg_int: u8 = (*reg).into();
@@ -346,6 +348,8 @@ fn allowed_regions_abi_array(allowed_regions: HashSet<Regions>) -> Vec<AbiToken>
 }
 
 fn payment_types_abi_array(payment_types: HashSet<SystemChain>) -> Vec<AbiToken> {
+    let mut payment_types: Vec<SystemChain> = payment_types.into_iter().collect();
+    payment_types.sort();
     let mut ret = vec![];
     for payment_type in payment_types.iter() {
         let pay_int: u8 = (*payment_type).into();
