@@ -5,7 +5,8 @@ pub mod updater;
 extern crate openssh_keys;
 use crate::dashboard::extender_checkin::extend_hardware_info;
 use crate::dashboard::router::set_router_update_instruction;
-use crate::exit_manager::{get_current_exit_ip, utils::get_client_pub_ipv6};
+use crate::exit_manager::get_current_exit;
+use crate::exit_manager::utils::get_client_pub_ipv6;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::rita_loop::is_gateway_client;
 use crate::RitaClientError;
@@ -60,15 +61,19 @@ lazy_static! {
 
 pub fn get_exit_con() -> Option<ExitConnection> {
     // Get current exit info
-    let cur_exit = Some(CurExitInfo {
+    let curr_exit_ip = match get_current_exit() {
+        Some(exit) => Some(exit.mesh_ip),
+        None => None,
+    };
+    let cur_exit_info = Some(CurExitInfo {
         cluster_name: None,
         // Hopefully ops fills this in
         instance_name: None,
-        instance_ip: Some(get_current_exit_ip()),
+        instance_ip: curr_exit_ip,
     });
 
     Some(ExitConnection {
-        cur_exit,
+        cur_exit: cur_exit_info,
         client_pub_ipv6: get_client_pub_ipv6(),
     })
 }

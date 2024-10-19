@@ -61,6 +61,11 @@ impl ExitServerList {
             false
         }
     }
+
+    /// Checks if a given exit is in the list and returns as an option
+    pub fn find_exit(&self, exit: &ExitIdentity) -> Option<&ExitIdentity> {
+        self.exit_list.iter().find(|x| x == &exit)
+    }
 }
 
 /// Signed format of the exit server list

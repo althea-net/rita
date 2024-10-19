@@ -442,10 +442,7 @@ pub fn get_default_settings(
         }
         .into(),
     );
-    client
-        .exit_client
-        .bootstrapping_exits
-        .clone_from(&exit_servers);
+
     client.exit_client.allowed_exit_list_signatures = vec![exit_root_addr];
 
     // first node is passed through to the host machine for testing second node is used
@@ -1190,6 +1187,7 @@ pub async fn add_exits_contract_exit_list(db_addr: Address, rita_identities: Ins
                 let mut ret = HashSet::new();
                 ret.insert(SystemChain::AltheaL1);
                 ret.insert(SystemChain::Ethereum);
+                ret.insert(SystemChain::Xdai);
                 ret
             },
         };

@@ -23,7 +23,7 @@ pub fn select_best_exit(
     // we return the currently selected exit
     if let Err(e) = get_and_merge_routes_for_exit_list(
         &mut switcher_state.quality_history,
-        exit_list,
+        exit_list.clone(),
         babel_port,
     ) {
         // in tests we won't be able to get babel routes and should just continue
@@ -33,26 +33,23 @@ pub fn select_best_exit(
             return;
         }
     }
-    // continue with the current exit if we can't find a better one
+    // continue with first saved exit if we can't find a better one
     let best_exit = match switcher_state.get_best_exit() {
         Some(exit) => exit,
-        None => {
-            error!("No exits in exit list, can't select exit");
-            return;
-        }
+        None => exit_list.exit_list.first().cloned().unwrap(),
     };
     // it hasn't been long enough to initiate a switch, unless our current exit is down
     // either way once we're past this code block we're allowed to switch
     if let Some(last_switch) = switcher_state.last_switch {
         if last_switch.elapsed() < switcher_state.backoff
-            && !switcher_state.exit_is_down(current_exit)
+            && !switcher_state.exit_is_down(current_exit.clone())
         {
             return;
         }
     }
 
     // switch to the best exit
-    switcher_state.currently_selected = best_exit;
+    switcher_state.currently_selected = Some(best_exit);
     switcher_state.last_switch = Some(Instant::now());
     switcher_state.backoff *= 2;
 }
@@ -75,13 +72,19 @@ pub struct ExitSwitcherState {
     pub backoff: Duration,
     /// the currently selected exit starts as a random exit from the bootstrapping list
     /// and/or the last successfully selected exit if the router has been online before
-    pub currently_selected: ExitIdentity,
+    pub currently_selected: Option<ExitIdentity>,
     /// This is a history of route quality for exits on the exit list
     pub quality_history: HashMap<ExitIdentity, Vec<ExitQualitySample>>,
 }
 
 impl ExitSwitcherState {
-    pub fn exit_is_down(&self, exit: ExitIdentity) -> bool {
+    pub fn exit_is_down(&self, exit: Option<ExitIdentity>) -> bool {
+        let exit = match exit {
+            Some(exit) => exit,
+            None => {
+                return true;
+            }
+        };
         match self.quality_history.get(&exit) {
             Some(history) => {
                 let most_recent_sample = history.iter().max_by_key(|sample| sample.time);
@@ -308,7 +311,7 @@ mod tests {
         let mut state = ExitSwitcherState {
             last_switch: None,
             backoff: Duration::from_secs(10),
-            currently_selected: random_exit_identity(),
+            currently_selected: Some(random_exit_identity()),
             quality_history: HashMap::new(),
         };
 
@@ -320,7 +323,7 @@ mod tests {
 
         // Simulate route qualities
         state.quality_history.insert(
-            state.currently_selected.clone(),
+            state.currently_selected.clone().unwrap(),
             vec![ExitQualitySample {
                 time: Instant::now(),
                 route_quality: 100,
@@ -339,7 +342,10 @@ mod tests {
         // Test selection of the best exit
         select_best_exit(&mut state, exit_list, 0);
 
-        assert_eq!(state.currently_selected.mesh_ip, other_exit.mesh_ip);
+        assert_eq!(
+            state.currently_selected.unwrap().mesh_ip,
+            other_exit.mesh_ip
+        );
     }
 
     #[test]
@@ -347,14 +353,14 @@ mod tests {
         let mut state = ExitSwitcherState {
             last_switch: None,
             backoff: Duration::from_secs(10),
-            currently_selected: random_exit_identity(),
+            currently_selected: Some(random_exit_identity()),
             quality_history: HashMap::new(),
         };
 
         let exit = random_exit_identity();
 
         // Test when no history exists for an exit
-        assert!(state.exit_is_down(exit.clone()));
+        assert!(state.exit_is_down(Some(exit.clone())));
 
         // Test when history exists but the route quality is u16::MAX
         state.quality_history.insert(
@@ -364,7 +370,8 @@ mod tests {
                 route_quality: u16::MAX,
             }],
         );
-        assert!(state.exit_is_down(exit));
+        assert!(state.exit_is_down(Some(exit)));
+        assert!(state.exit_is_down(None));
     }
 
     #[test]
@@ -372,7 +379,7 @@ mod tests {
         let mut state = ExitSwitcherState {
             last_switch: None,
             backoff: Duration::from_secs(10),
-            currently_selected: random_exit_identity(),
+            currently_selected: Some(random_exit_identity()),
             quality_history: HashMap::new(),
         };
 
@@ -407,7 +414,7 @@ mod tests {
         let mut state = ExitSwitcherState {
             last_switch: Some(Instant::now() - Duration::from_secs(5)),
             backoff: Duration::from_secs(10),
-            currently_selected: random_exit_identity(),
+            currently_selected: Some(random_exit_identity()),
             quality_history: HashMap::new(),
         };
 
@@ -420,7 +427,7 @@ mod tests {
         // Simulate route qualities
         let current_exit = state.currently_selected.clone();
         state.quality_history.insert(
-            current_exit.clone(),
+            current_exit.clone().unwrap(),
             vec![ExitQualitySample {
                 time: Instant::now(),
                 route_quality: 100,
@@ -438,11 +445,17 @@ mod tests {
 
         // It shouldn't switch because backoff hasn't passed and the current exit isn't down
         select_best_exit(&mut state, exit_list.clone(), 0);
-        assert_eq!(state.currently_selected.mesh_ip, current_exit.mesh_ip);
+        assert_eq!(
+            state.currently_selected.clone().unwrap().mesh_ip,
+            current_exit.unwrap().mesh_ip
+        );
 
         // It should switch now since the backoff has passed
         state.last_switch = Some(Instant::now() - Duration::from_secs(15));
         select_best_exit(&mut state, exit_list, 0);
-        assert_eq!(state.currently_selected.mesh_ip, better_exit.mesh_ip);
+        assert_eq!(
+            state.currently_selected.unwrap().mesh_ip,
+            better_exit.mesh_ip
+        );
     }
 }

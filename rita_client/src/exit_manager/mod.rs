@@ -27,7 +27,6 @@ use althea_types::ExitServerList;
 use althea_types::ExitState;
 use exit_selector::ExitSwitcherState;
 use std::collections::HashMap;
-use std::net::IpAddr;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -54,7 +53,7 @@ pub struct ExitManager {
 }
 
 impl ExitManager {
-    pub fn new(currently_selected: ExitIdentity) -> ExitManager {
+    pub fn new(currently_selected: Option<ExitIdentity>) -> ExitManager {
         ExitManager {
             nat_setup: false,
             exit_list: None,
@@ -70,24 +69,17 @@ impl ExitManager {
     }
 }
 
-/// Gets the currently selected exit, if none is selected returns the first exit from the bootstrapping list
-pub fn get_current_exit_ip() -> IpAddr {
-    get_current_exit().mesh_ip
-}
-
-/// Gets the currently selected exit, if none is selected returns the first exit from the bootstrapping list
-pub fn get_current_exit() -> ExitIdentity {
+/// Gets the currently selected exit, if none is selected returns the first exit from the verified list or None if none exist
+pub fn get_current_exit() -> Option<ExitIdentity> {
     let settings = settings::get_rita_client();
     match settings.exit_client.registration_state {
-        ExitState::Registered { identity, .. } => *identity,
+        ExitState::Registered { identity, .. } => Some(*identity),
         _ => {
-            let exit = settings
-                .exit_client
-                .bootstrapping_exits
-                .iter()
-                .next()
-                .expect("No exits in bootstrapping list");
-            exit.1.clone()
+            let exit = settings.exit_client.verified_exit_list.iter().next();
+            match exit {
+                Some(exit) => exit.exit_list.first().cloned(),
+                None => None,
+            }
         }
     }
 }

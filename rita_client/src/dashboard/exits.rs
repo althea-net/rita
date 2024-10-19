@@ -69,10 +69,17 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                     let reg_state = exit_client.registration_state;
                     let current_exit = get_current_exit();
 
-                    for exit in exit_client.bootstrapping_exits.clone().into_iter() {
-                        let selected = is_selected(&exit.1, Some(current_exit.clone()));
-                        info!("Trying to get exit: {}", exit.0.clone());
-                        let route_ip = exit.0;
+                    let verified_exit_list = match exit_client.verified_exit_list.clone() {
+                        Some(list) => list,
+                        None => {
+                            warn!("No verified exits");
+                            return Ok(output);
+                        }
+                    };
+
+                    for exit in verified_exit_list.exit_list {
+                        let selected = is_selected(&exit, current_exit.clone());
+                        let route_ip = exit.mesh_ip;
                         let have_route = do_we_have_route(&route_ip, &route_table_sample)?;
 
                         // failed pings block for one second, so we should be sure it's at least reasonable
@@ -83,17 +90,15 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                             false
                         };
                         let tunnel_working = match (have_route, selected) {
-                            (true, true) => is_tunnel_working(
-                                &exit.1,
-                                Some(current_exit.clone()),
-                                reg_state.clone(),
-                            ),
+                            (true, true) => {
+                                is_tunnel_working(&exit, current_exit.clone(), reg_state.clone())
+                            }
                             _ => false,
                         };
 
                         output.push(ExitInfo {
-                            nickname: exit.0.to_string(),
-                            exit_settings: exit.1.clone(),
+                            nickname: exit.mesh_ip.to_string(),
+                            exit_settings: exit,
                             is_selected: selected,
                             have_route,
                             is_reachable: reachable,

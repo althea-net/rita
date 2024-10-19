@@ -4,10 +4,9 @@ use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_client, SettingsError};
 use althea_types::regions::Regions;
-use althea_types::{ExitIdentity, ExitState, Identity};
+use althea_types::{ExitServerList, ExitState, Identity};
 use clarity::Address;
-use std::collections::{HashMap, HashSet};
-use std::net::IpAddr;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 pub const APP_NAME: &str = "rita";
@@ -26,10 +25,6 @@ fn exit_db_smart_contract_on_xdai() -> String {
     "0x29a3800C28dc133f864C22533B649704c6CD7e15".to_string()
 }
 
-fn default_boostrapping_exits() -> HashMap<IpAddr, ExitIdentity> {
-    HashMap::new()
-}
-
 fn default_registration_state() -> ExitState {
     ExitState::default()
 }
@@ -38,12 +33,11 @@ fn default_registration_state() -> ExitState {
 /// to a exit and to setup the exit tunnel
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitClientSettings {
-    #[serde(default = "default_boostrapping_exits")]
-    /// This map of exits is populated in the routers initial config. Once the router is up and running is it will query
-    /// one or more of these exits to understand it's current status and to register with the exit database smart contract.
-    /// Once regsitered and online this list may be populated with new exits through the chain of trust established by the
-    /// bootstrapping process
-    pub bootstrapping_exits: HashMap<IpAddr, ExitIdentity>,
+    /// This list of exits is populated once it can verify an exit list received from an exit. Once the router is up and
+    /// running is it will query one or more of these exits to understand it's current status and to register with the
+    /// exit database smart contract. Once registered and online this list may be populated with new exits through the
+    /// exit manager loop which receives verifiable exit lists.
+    pub verified_exit_list: Option<ExitServerList>,
     /// The registration state of this router with the exit database smart contract
     /// note this value may be affected by what contract is currently selected and what
     /// chain we are on. Since different chains may reference different registration smart contracts
@@ -53,7 +47,7 @@ pub struct ExitClientSettings {
     /// a new version of the contract is ever deployed. Otherwise it won't change much. What this contract contains
     /// is the registration data for all routers, facilitating key exchange between new exits in the cluster and clients
     /// So the client registers with the smart contract and the exit takes it's registration data (wireguard key) and sets
-    /// up a tunnel, vice versa for the client after bootstrapping by talking to an exit in it's config
+    /// up a tunnel, vice versa for the client after finding an exit to register to
     #[serde(default = "exit_db_smart_contract_on_xdai")]
     pub exit_db_smart_contract_on_xdai: String,
     /// This controls which interfaces will be proxied over the exit tunnel
@@ -70,11 +64,11 @@ impl Default for ExitClientSettings {
     fn default() -> Self {
         ExitClientSettings {
             registration_state: default_registration_state(),
-            bootstrapping_exits: default_boostrapping_exits(),
             exit_db_smart_contract_on_xdai: exit_db_smart_contract_on_xdai(),
             lan_nics: HashSet::new(),
             our_region: None,
             allowed_exit_list_signatures: Vec::new(),
+            verified_exit_list: None,
         }
     }
 }

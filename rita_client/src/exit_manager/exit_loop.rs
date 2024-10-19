@@ -1,13 +1,12 @@
 use super::utils::get_babel_routes;
 use super::{get_current_exit, ExitManager, LastExitStates};
 use crate::exit_manager::exit_selector::select_best_exit;
-use crate::exit_manager::get_current_exit_ip;
 use crate::exit_manager::requests::exit_status_request;
 use crate::exit_manager::requests::get_exit_list;
 use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
 use crate::exit_manager::utils::{
     correct_default_route, get_client_pub_ipv6, has_exit_changed, linux_setup_exit_tunnel,
-    merge_exit_lists, remove_nat, restore_nat,
+    remove_nat, restore_nat,
 };
 use crate::heartbeat::get_exit_registration_state;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
@@ -79,46 +78,42 @@ pub fn start_exit_manager_loop() {
 async fn exit_manager_loop(em_state: &mut ExitManager, babel_port: u16) {
     info!("Exit_Switcher: exit manager tick");
     let client_can_use_free_tier = { settings::get_rita_client().payment.client_can_use_free_tier };
-    let rita_client = settings::get_rita_client();
-    let current_exit_ip = get_current_exit_ip();
 
-    let mut exits = rita_client.exit_client.bootstrapping_exits;
-
-    trace!("Current exit is {:?}", current_exit_ip);
-
-    let exit_ser_ref = exits.get_mut(&current_exit_ip);
+    // TODO setup exit using old selected exit the first run, of the loop, right now we force a wait
+    // for this request to complete before we get things setup, we can store the ExitIdentity somewhere
+    handle_exit_switching(em_state, babel_port).await;
 
     // code that connects to the current exit server
-    info!("About to setup exit tunnel!");
-    if let Some(exit) = exit_ser_ref {
-        info!("We have selected an exit!, {:?}", exit.clone());
-        let registration_state = get_exit_registration_state();
-        if let Some(general_details) = registration_state.clone().general_details() {
-            info!("We have details for the selected exit!");
-            // TODO setup exit using old selected exit the first run, of the loop, right now we force a wait
-            // for this request to complete before we get things setup, we can store the ExitIdentity somewhere
-            handle_exit_switching(em_state, babel_port).await;
+    let registration_state = get_exit_registration_state();
+    if let Some(general_details) = registration_state.clone().general_details() {
+        // if there is no current exit, we can't setup- wait for the next tick/until we have a verified exit list.
+        // handle_exit_switching will populate the verified_exit_list to get a selected exit if it can reach one.
+        let selected_exit = match em_state.exit_switcher_state.currently_selected.clone() {
+            Some(a) => a,
+            None => {
+                error!("No exit selected, can't setup exit tunnel");
+                return;
+            }
+        };
+        setup_exit_tunnel(
+            selected_exit.clone(),
+            general_details,
+            em_state.last_exit_state.clone(),
+        );
 
-            setup_exit_tunnel(
-                em_state.exit_switcher_state.currently_selected.clone(),
-                general_details,
-                em_state.last_exit_state.clone(),
-            );
+        // Set last state vairables
+        em_state.last_exit_state = Some(LastExitStates {
+            last_exit: selected_exit.clone(),
+            last_exit_details: registration_state.clone(),
+        });
 
-            // Set last state vairables
-            em_state.last_exit_state = Some(LastExitStates {
-                last_exit: em_state.exit_switcher_state.currently_selected.clone(),
-                last_exit_details: registration_state.clone(),
-            });
+        // check the exit's time and update locally if it's very different
+        maybe_set_local_to_exit_time(selected_exit.clone()).await;
 
-            // check the exit's time and update locally if it's very different
-            maybe_set_local_to_exit_time(exit.clone()).await;
+        em_state.nat_setup = setup_nat(em_state.nat_setup, client_can_use_free_tier);
 
-            em_state.nat_setup = setup_nat(em_state.nat_setup, client_can_use_free_tier);
-
-            // run billing at all times when an exit is setup
-            run_exit_billing(general_details, exit).await;
-        }
+        // run billing at all times when an exit is setup
+        run_exit_billing(general_details, &selected_exit).await;
     }
 
     handle_exit_status_request(em_state).await;
@@ -132,16 +127,19 @@ async fn handle_exit_switching(em_state: &mut ExitManager, babel_port: u16) {
     // When it is empty, it means an exit we connected to went down, and we use the list from memory to connect to a new instance
     let exit_list = match get_exit_list().await {
         Ok(a) => a.get_server_list(),
-        Err(e) => {
-            error!("Exit_Switcher: Unable to get exit list: {:?}", e);
-            return;
+        Err(_) => {
+            // try from saved verified exit list
+            let rita_client = settings::get_rita_client();
+            let exit_client = rita_client.exit_client;
+            match exit_client.verified_exit_list.clone() {
+                Some(list) => list,
+                None => {
+                    warn!("No verified exits");
+                    return;
+                }
+            }
         }
     };
-
-    // The Exit list we receive from the exit may be different from what we have
-    // in the config. Update the config with any missing exits so we can request
-    // status from them in the future when we connect
-    let exit_list = merge_exit_lists(exit_list);
 
     // Calling set best exit function, this looks though a list of exit in a cluster, does some math, and determines what exit we should connect to
     trace!("Using exit list: {:?}", exit_list);
@@ -263,38 +261,53 @@ async fn handle_exit_status_request(em_state: &mut ExitManager) {
     // code that manages requesting details, we make this query to a single exit in a cluster.
     // as they will all have the same registration state, but different individual ip or other info
     let mut exit_status_requested = false;
-    let k = get_current_exit_ip();
+    let curr_exit = match get_current_exit() {
+        Some(a) => a,
+        None => {
+            trace!("No exit selected, can't request status");
+            return;
+        }
+    };
     let registration_state = get_exit_registration_state();
     match registration_state {
         // Once one exit is registered, this moves all exits from New -> Registered
         // Giving us an internal ipv4 and ipv6 address for each exit in our config
         ExitState::New { .. } => {
-            trace!("Exit {} is in state NEW, calling general details", k);
-            let _ = exit_status_request(k).await;
+            trace!(
+                "Exit {} is in state NEW, calling general details",
+                curr_exit.mesh_ip
+            );
+            let _ = exit_status_request(curr_exit).await;
         }
         // For routers that register normally, (not through ops), New -> Pending. In this state, we
         // continue to query until we reach Registered
         ExitState::Pending { .. } => {
-            trace!("Exit {} is in state Pending, calling status request", k);
-            let _ = exit_status_request(k).await;
+            trace!(
+                "Exit {} is in state Pending, calling status request",
+                curr_exit.mesh_ip
+            );
+            let _ = exit_status_request(curr_exit).await;
         }
         ExitState::Registered { .. } => {
-            trace!("Exit {} is in state Registered, calling status request", k);
+            trace!(
+                "Exit {} is in state Registered, calling status request",
+                curr_exit.mesh_ip
+            );
             // Make a status request every STATUS_REQUEST_QUERY seconds
             if let Some(last_query) = em_state.last_status_request {
                 if Instant::now() - last_query > STATUS_REQUEST_QUERY {
                     exit_status_requested = true;
-                    let _ = exit_status_request(k).await;
+                    let _ = exit_status_request(curr_exit).await;
                 }
             } else {
                 exit_status_requested = true;
-                let _ = exit_status_request(k).await;
+                let _ = exit_status_request(curr_exit).await;
             }
         }
         _ => {
             trace!(
-                "Exit {} is in state {:?} calling status request",
-                k,
+                "Exit {:?} is in state {:?} calling status request",
+                curr_exit,
                 registration_state
             );
         }

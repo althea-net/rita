@@ -51,7 +51,7 @@ use dummy::dummy_neigh_tunnel;
 #[allow(unused_imports)]
 use dummy::dummy_route;
 
-use crate::exit_manager::get_current_exit_ip;
+use crate::exit_manager::get_current_exit;
 
 pub const HEARTBEAT_LOOP_SPEED: u64 = 5;
 
@@ -258,7 +258,14 @@ fn send_udp_heartbeat() {
 }
 
 fn get_selected_exit_route(route_dump: &[Route]) -> Result<Route, BabelMonitorError> {
-    let exit_mesh_ip = get_current_exit_ip();
+    let exit_mesh_ip = match get_current_exit() {
+        Some(exit) => exit.mesh_ip,
+        None => {
+            return Err(BabelMonitorError::MiscStringError(
+                "No exit selected, can't heartbeat!".to_string(),
+            ));
+        }
+    };
     get_installed_route(&exit_mesh_ip, route_dump)
 }
 

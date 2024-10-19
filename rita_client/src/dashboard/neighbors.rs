@@ -14,7 +14,7 @@ use rita_common::tunnel_manager::{tm_get_neighbors, Neighbor};
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::exit_manager::get_current_exit_ip;
+use crate::exit_manager::get_current_exit;
 use crate::RitaClientError;
 
 const BABEL_TIMEOUT: Duration = Duration::from_secs(5);
@@ -107,7 +107,19 @@ fn generate_neighbors_list(
         }
         let neigh_route = maybe_route.unwrap();
 
-        let exit_ip = get_current_exit_ip();
+        let exit_ip = match get_current_exit() {
+            Some(exit) => exit.mesh_ip,
+            None => {
+                output.push(nonviable_node_info(
+                    nickname,
+                    neigh_route.metric,
+                    identity.mesh_ip.to_string(),
+                    *identity,
+                    neigh.speed_limit,
+                ));
+                continue;
+            }
+        };
         if let Some(stats_entry) = stats.get(&neigh_route.iface) {
             let maybe_exit_route =
                 get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);

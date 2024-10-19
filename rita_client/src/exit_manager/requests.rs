@@ -5,6 +5,7 @@ use crate::RitaClientError;
 use actix_web_async::Result;
 use althea_types::decrypt_exit_state;
 use althea_types::encrypt_exit_client_id;
+use althea_types::ExitIdentity;
 use althea_types::SignedExitServerList;
 use althea_types::WgKey;
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState};
@@ -12,7 +13,7 @@ use settings::exit::EXIT_LIST_IP;
 use settings::exit::EXIT_LIST_PORT;
 use settings::get_rita_client;
 use settings::set_rita_client;
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::time::Duration;
 
 const EXIT_LIST_TIMEOUT: Duration = Duration::from_secs(20);
@@ -95,7 +96,14 @@ async fn send_exit_status_request(
 /// with our information.
 pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientError> {
     let client_settings = settings::get_rita_client();
-    let exit = get_current_exit();
+    let exit = match get_current_exit() {
+        None => {
+            return Err(RitaClientError::MiscStringError(
+                "No exit set, can't register!".to_string(),
+            ))
+        }
+        Some(exit) => exit,
+    };
 
     match client_settings.exit_client.registration_state {
         ExitState::New { .. } | ExitState::Pending { .. } => {
@@ -156,20 +164,26 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
         }
     }
 
+    error!("Could not find a valid exit to register to!");
     Err(RitaClientError::MiscStringError(
         "Could not find a valid exit to register to!".to_string(),
     ))
 }
 
-pub async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
-    let current_exit = match settings::get_rita_client()
-        .exit_client
-        .bootstrapping_exits
-        .get(&exit)
-    {
+pub async fn exit_status_request(exit: ExitIdentity) -> Result<(), RitaClientError> {
+    let exit_list = match settings::get_rita_client().exit_client.verified_exit_list {
+        Some(list) => list,
+        None => {
+            return Err(RitaClientError::MiscStringError(
+                "No verified exits".to_string(),
+            ))
+        }
+    };
+
+    let current_exit = match exit_list.find_exit(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
-            return Err(RitaClientError::NoExitError(exit.to_string()));
+            return Err(RitaClientError::NoExitError(exit.mesh_ip.to_string()));
         }
     };
     let reg_details = match settings::get_rita_client().payment.contact_info {
@@ -199,7 +213,7 @@ pub async fn exit_status_request(exit: IpAddr) -> Result<(), RitaClientError> {
 
     trace!(
         "sending exit status request to {} using {:?}",
-        exit,
+        current_exit.mesh_ip,
         endpoint
     );
 
@@ -247,6 +261,10 @@ pub async fn get_exit_list() -> Result<SignedExitServerList, RitaClientError> {
     let allowed_signers = config.exit_client.allowed_exit_list_signatures;
     // signature must both be valid and from a trusted signer
     if list.verify() && allowed_signers.contains(&list.get_signer()) {
+        // save list of verified exits
+        let mut rita_client = settings::get_rita_client();
+        rita_client.exit_client.verified_exit_list = Some(list.get_server_list());
+        settings::set_rita_client(rita_client);
         return Ok(list);
     }
     Err(RitaClientError::MiscStringError(

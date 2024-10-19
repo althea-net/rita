@@ -192,7 +192,13 @@ fn check_for_gateway_client_billing_corner_case() {
             info!("Neighbor is {:?}", neigh);
             // we have a neighbor who is also our selected exit!
             // wg_key excluded due to multihomed exits having a different one
-            let exit = get_current_exit();
+            let exit = match get_current_exit() {
+                Some(e) => e,
+                None => {
+                    set_gateway_client(false);
+                    return;
+                }
+            };
             if neigh.identity.global.mesh_ip == exit.mesh_ip
                 && neigh.identity.global.eth_address == exit.eth_addr
             {
