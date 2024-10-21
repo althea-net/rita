@@ -2,8 +2,8 @@
 //! and providing internet access. This module contains the operator fee related endpoints.
 
 use crate::operator_fee_manager::get_operator_fee_debt;
-use actix_web_async::web::Path;
-use actix_web_async::{HttpRequest, HttpResponse};
+use actix_web::web::Path;
+use actix_web::{HttpRequest, HttpResponse};
 use clarity::Uint256;
 
 pub async fn get_operator_fee(_req: HttpRequest) -> HttpResponse {

@@ -66,7 +66,7 @@ fn main() {
         env!("GIT_HASH")
     );
 
-    let system = actix_async::System::new();
+    let system = actix::System::new();
 
     start_rita_extender_loop();
     start_extender_dashboard(dashboard_port);

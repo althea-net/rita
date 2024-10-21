@@ -1,6 +1,6 @@
-use actix_web_async::http::StatusCode;
-use actix_web_async::web::Path;
-use actix_web_async::{HttpRequest, HttpResponse};
+use actix_web::http::StatusCode;
+use actix_web::web::Path;
+use actix_web::{HttpRequest, HttpResponse};
 use babel_monitor::open_babel_stream;
 use babel_monitor::set_local_fee as babel_set_local_fee;
 use babel_monitor::set_metric_factor as babel_set_metric_factor;

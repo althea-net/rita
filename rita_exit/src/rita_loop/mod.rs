@@ -15,8 +15,8 @@ use crate::database::{
 };
 use crate::network_endpoints::*;
 use crate::traffic_watcher::watch_exit_traffic;
-use actix_async::System as AsyncSystem;
-use actix_web_async::{web, App, HttpServer};
+use actix::System as AsyncSystem;
+use actix_web::{web, App, HttpServer};
 use althea_kernel_interface::exit_server_tunnel::{one_time_exit_setup, setup_nat};
 use althea_kernel_interface::setup_wg_if::create_blank_wg_interface;
 use althea_kernel_interface::wg_iface_counter::WgUsage;

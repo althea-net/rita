@@ -2,8 +2,8 @@ use crate::blockchain_oracle::{
     calculate_close_thresh, get_oracle_balance, get_pay_thresh, low_balance,
 };
 use crate::rita_loop::is_gateway;
-use actix_web_async::HttpRequest;
-use actix_web_async::HttpResponse;
+use actix_web::HttpRequest;
+use actix_web::HttpResponse;
 use clarity::Address;
 use num256::{Int256, Uint256};
 

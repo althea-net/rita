@@ -1,5 +1,5 @@
 use crate::dashboard::extend_hardware_info;
-use actix_web_async::{HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse};
 use althea_kernel_interface::{
     hardware_info::get_hardware_info,
     interface_tools::{get_ip_from_iface, get_ipv6_from_iface},

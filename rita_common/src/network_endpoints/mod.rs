@@ -5,10 +5,10 @@ use crate::peer_listener::structs::Peer;
 use crate::tm_identity_callback;
 use crate::tunnel_manager::id_callback::IdentityCallback;
 
-use actix_web_async::http::StatusCode;
-use actix_web_async::web::Json;
+use actix_web::http::StatusCode;
+use actix_web::web::Json;
 
-use actix_web_async::{HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse};
 use althea_types::{LocalIdentity, PaymentTx};
 use std::collections::HashSet;
 use std::time::Instant;

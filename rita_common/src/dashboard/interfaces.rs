@@ -1,8 +1,8 @@
 //! A generalized interface for modifying networking interface assignments using UCI
 use crate::RitaCommonError;
-use actix_web_async::http::StatusCode;
-use actix_web_async::web::Path;
-use actix_web_async::{web::Json, HttpRequest, HttpResponse};
+use actix_web::http::StatusCode;
+use actix_web::web::Path;
+use actix_web::{web::Json, HttpRequest, HttpResponse};
 use althea_kernel_interface::fs_sync::fs_sync;
 use althea_kernel_interface::manipulate_uci::{
     del_uci_var, get_uci_var, openwrt_reset_network, openwrt_reset_wireless, set_uci_var,

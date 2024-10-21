@@ -1,5 +1,5 @@
-use actix_web_async::http::StatusCode;
-use actix_web_async::{HttpRequest, HttpResponse};
+use actix_web::http::StatusCode;
+use actix_web::{HttpRequest, HttpResponse};
 
 use crate::RitaCommonError;
 

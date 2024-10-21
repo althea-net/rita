@@ -10,7 +10,7 @@ use crate::exit_manager::utils::{
 };
 use crate::heartbeat::get_exit_registration_state;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
-use actix_async::System as AsyncSystem;
+use actix::System as AsyncSystem;
 use althea_kernel_interface::ip_addr::setup_ipv6_slaac as setup_ipv6_slaac_ki;
 use althea_kernel_interface::ip_route::get_default_route;
 use althea_kernel_interface::run_command;

@@ -2,7 +2,7 @@ use crate::handle_shaping;
 use crate::simulated_txfee_manager::tick_simulated_tx;
 use crate::token_bridge::tick_token_bridge;
 use crate::tunnel_manager::tm_common_slow_loop_helper;
-use actix_async::System as AsyncSystem;
+use actix::System as AsyncSystem;
 use althea_kernel_interface::babel::restart_babel;
 use althea_kernel_interface::is_openwrt::is_openwrt;
 use althea_kernel_interface::run_command;

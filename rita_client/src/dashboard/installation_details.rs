@@ -1,5 +1,5 @@
-use actix_web_async::HttpResponse;
-use actix_web_async::{web::Json, web::Path, HttpRequest};
+use actix_web::HttpResponse;
+use actix_web::{web::Json, web::Path, HttpRequest};
 use althea_types::ContactType;
 use althea_types::InstallationDetails;
 use althea_types::{BillingDetails, MailingAddress};

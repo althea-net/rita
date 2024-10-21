@@ -2,7 +2,7 @@ use super::get_current_exit;
 use super::DEFAULT_WG_LISTEN_PORT;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
-use actix_web_async::Result;
+use actix_web::Result;
 use althea_types::decrypt_exit_state;
 use althea_types::encrypt_exit_client_id;
 use althea_types::ExitIdentity;

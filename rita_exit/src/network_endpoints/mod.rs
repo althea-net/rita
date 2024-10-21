@@ -4,8 +4,8 @@
 use crate::database::{client_status, signup_client};
 
 use crate::RitaExitError;
-use actix_web_async::web;
-use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
+use actix_web::web;
+use actix_web::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
 use althea_types::Identity;
 use althea_types::SignedExitServerList;
 use althea_types::WgKey;

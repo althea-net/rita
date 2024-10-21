@@ -1,7 +1,7 @@
 use crate::extender::{
     get_device_mac, ExtenderAdditionalSettings, ExtenderCheckin, ExtenderUpdate,
 };
-use actix_web_async::{web::Json, HttpResponse};
+use actix_web::{web::Json, HttpResponse};
 use althea_types::{ClientExtender, HardwareInfo};
 use rita_common::dashboard::wifi::get_wifi_config_internal;
 use std::{

@@ -4,7 +4,7 @@ extern crate log;
 pub mod dashboard;
 mod error;
 
-use actix_async::System as AsyncSystem;
+use actix::System as AsyncSystem;
 use althea_kernel_interface::run_command;
 use althea_kernel_interface::upgrade::perform_opkg;
 use althea_types::OpkgCommand;

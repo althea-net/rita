@@ -9,7 +9,7 @@ use crate::peer_listener::structs::PeerListener;
 use crate::traffic_watcher::watch;
 use crate::tunnel_manager::contact_peers::tm_contact_peers;
 use crate::tunnel_manager::tm_get_neighbors;
-use actix_async::System as AsyncSystem;
+use actix::System as AsyncSystem;
 use althea_kernel_interface::is_openwrt::is_openwrt;
 use althea_kernel_interface::run_command;
 use babel_monitor::open_babel_stream;

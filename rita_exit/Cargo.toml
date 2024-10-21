@@ -13,7 +13,7 @@ althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }
 settings = { path = "../settings" }
 babel_monitor = { path = "../babel_monitor" }
-actix-async = { package = "actix", version = "0.13"}
+actix = {workspace = true}
 awc = {workspace = true}
 handlebars = "5.1"
 lazy_static = "1.5"
@@ -26,9 +26,7 @@ lettre = { version = "0.10", features = ["file-transport"] }
 phonenumber = "0.3.6"
 log = { version = "0.4", features = ["release_max_level_info"] }
 reqwest = { version = "0.12", features = ["blocking", "json"] }
-actix-web-async = { package = "actix-web", version = "4.9", default-features = false, features = [
-    "openssl",
-] }
+actix-web = {workspace = true}
 deep_space = { workspace = true }
 web30 = "1.4"
 crypto_box = "0.9"

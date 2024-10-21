@@ -1,5 +1,5 @@
 use crate::RitaCommonError;
-use actix_web_async::{http::StatusCode, web::Json, HttpResponse};
+use actix_web::{http::StatusCode, web::Json, HttpResponse};
 use althea_kernel_interface::{
     fs_sync::fs_sync, is_openwrt::is_openwrt, set_system_password::set_system_password,
 };

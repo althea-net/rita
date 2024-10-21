@@ -1,10 +1,10 @@
 pub use crate::database::geoip::*;
 pub use crate::database::in_memory_database::*;
-use actix_async::System;
-use actix_web_async::web;
-use actix_web_async::App;
-use actix_web_async::HttpResponse;
-use actix_web_async::HttpServer;
+use actix::System;
+use actix_web::web;
+use actix_web::App;
+use actix_web::HttpResponse;
+use actix_web::HttpServer;
 use rita_common::dashboard::auth::*;
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::backup_created::*;

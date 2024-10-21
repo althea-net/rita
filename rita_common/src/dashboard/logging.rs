@@ -1,5 +1,5 @@
-use actix_web_async::http::StatusCode;
-use actix_web_async::{web::Path, HttpRequest, HttpResponse};
+use actix_web::http::StatusCode;
+use actix_web::{web::Path, HttpRequest, HttpResponse};
 use althea_kernel_interface::is_openwrt::is_openwrt;
 use althea_kernel_interface::run_command;
 use log::LevelFilter;

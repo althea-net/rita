@@ -1,7 +1,7 @@
 use crate::blockchain_oracle::set_oracle_balance;
-use actix_web_async::http::StatusCode;
-use actix_web_async::web::Path;
-use actix_web_async::{HttpRequest, HttpResponse};
+use actix_web::http::StatusCode;
+use actix_web::web::Path;
+use actix_web::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
 use settings::payment::PaymentSettings;
 

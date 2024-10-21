@@ -1,7 +1,7 @@
 use crate::debt_keeper::get_debts_list;
 use crate::debt_keeper::traffic_replace;
 use crate::debt_keeper::Traffic;
-use actix_web_async::{web::Json, HttpRequest, HttpResponse};
+use actix_web::{web::Json, HttpRequest, HttpResponse};
 use althea_types::Identity;
 
 pub async fn get_debts(_req: HttpRequest) -> HttpResponse {

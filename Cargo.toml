@@ -42,4 +42,15 @@ deep_space = {version = "2.26", features = ["althea"], default-features=false}
 web30 = "1.4"
 clarity = "1.4"
 awc = {version = "3.5", default-features = false, features=["openssl", "compress-gzip", "compress-zstd"]}
+actix-web = { version = "4.9", default-features = false, features = ["openssl", "compress-gzip", "compress-zstd", "macros"] }
+actix-web-httpauth = {version = "0.8.2"}
+actix = "0.13"
+actix-rt = "2.10"
 althea_proto = "0.9"
+# we don't call or us OpenSSL directly in this codebase, but by adding
+# this dependency with this feature we can enforce that openssl is compiled
+# in 'vendored' mode all the way down the tree. What this means is that we use
+# an openssl implementation from the crate and not from the system, simplifying
+# our build process for a lot of cross-compile situations
+openssl = {version = "0.10", features = ["vendored"]}
+openssl-probe = "0.1"

@@ -3,7 +3,7 @@ use crate::exit_manager::DEFAULT_WG_LISTEN_PORT;
 use crate::heartbeat::get_exit_registration_state;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
-use actix_web_async::Result;
+use actix_web::Result;
 use althea_kernel_interface::exit_client_tunnel::{
     block_client_nat, create_client_nat_rules, restore_client_nat, set_client_exit_tunnel_config,
     set_ipv6_route_to_tunnel, set_route_to_tunnel,

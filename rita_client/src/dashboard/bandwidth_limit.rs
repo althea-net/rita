@@ -1,9 +1,9 @@
 //! Beta 16 introduces a feature where users can select their own self imposed router bandwidth limit
 //! these dashboard endpoints facilitate users setting that value.
 
-use actix_web_async::http::StatusCode;
-use actix_web_async::HttpResponse;
-use actix_web_async::{web::Path, HttpRequest};
+use actix_web::http::StatusCode;
+use actix_web::HttpResponse;
+use actix_web::{web::Path, HttpRequest};
 use althea_kernel_interface::traffic_control::set_codel_shaping;
 use rita_common::RitaCommonError;
 

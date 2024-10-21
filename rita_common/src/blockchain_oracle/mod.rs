@@ -279,7 +279,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_update_blockchain_info() {
-        let runner = actix_async::System::new();
+        let runner = actix::System::new();
         let contact = Contact::new(
             "https://rpc.althea.zone:9090",
             Duration::from_secs(30),

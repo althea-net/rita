@@ -1,4 +1,4 @@
-use actix_web_async::{HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse};
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]

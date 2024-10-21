@@ -173,7 +173,7 @@ fn main() {
     );
     trace!("Starting with Identity: {:?}", settings.get_identity());
 
-    let system = actix_async::System::new();
+    let system = actix::System::new();
 
     start_rita_common_loops();
     start_rita_client_loops();

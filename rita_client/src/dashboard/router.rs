@@ -1,5 +1,5 @@
 use crate::operator_update::updater::update_system;
-use actix_web_async::{http::StatusCode, HttpRequest, HttpResponse};
+use actix_web::{http::StatusCode, HttpRequest, HttpResponse};
 use althea_kernel_interface::{is_openwrt::is_openwrt, run_command};
 use althea_types::UpdateType;
 use std::sync::{Arc, RwLock};

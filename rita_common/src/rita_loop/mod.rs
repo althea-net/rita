@@ -7,8 +7,8 @@
 
 use crate::network_endpoints::*;
 use crate::traffic_watcher::init_traffic_watcher;
-use actix_async::System;
-use actix_web_async::{web, App, HttpServer};
+use actix::System;
+use actix_web::{web, App, HttpServer};
 use rand::thread_rng;
 use rand::Rng;
 use std::sync::atomic::AtomicBool;

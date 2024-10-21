@@ -2,9 +2,9 @@
 
 use crate::dashboard::nickname::maybe_set_nickname;
 use crate::RitaCommonError;
-use ::actix_web_async::http::StatusCode;
-use ::actix_web_async::web::Path;
-use ::actix_web_async::{web::Json, HttpRequest, HttpResponse};
+use ::actix_web::http::StatusCode;
+use ::actix_web::web::Path;
+use ::actix_web::{web::Json, HttpRequest, HttpResponse};
 use althea_kernel_interface::exit_client_tunnel::create_client_nat_rules;
 use althea_kernel_interface::fs_sync::fs_sync;
 use althea_kernel_interface::manipulate_uci::{

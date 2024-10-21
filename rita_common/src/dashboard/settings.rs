@@ -1,4 +1,4 @@
-use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse};
+use actix_web::{http::StatusCode, web::Json, HttpRequest, HttpResponse};
 
 pub async fn get_settings(_req: HttpRequest) -> HttpResponse {
     debug!("Get settings endpoint hit!");

@@ -1,9 +1,9 @@
 use crate::RitaCommonError;
 use crate::DROPBEAR_CONFIG;
-use actix_web_async::http::StatusCode;
-use actix_web_async::web::Path;
-use actix_web_async::HttpRequest;
-use actix_web_async::HttpResponse;
+use actix_web::http::StatusCode;
+use actix_web::web::Path;
+use actix_web::HttpRequest;
+use actix_web::HttpResponse;
 use althea_kernel_interface::file_io::get_lines;
 use althea_kernel_interface::file_io::write_out;
 use althea_kernel_interface::is_openwrt::is_openwrt;

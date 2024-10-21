@@ -8,18 +8,16 @@
 //! as necessary and convert it into a response, modify it as necessary and then return that
 //! response
 
-use actix_web_async::body::BoxBody;
-use actix_web_async::dev::{Service, Transform};
-use actix_web_async::http::header::{
-    Header, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_ORIGIN,
-};
-use actix_web_async::http::{header, Method, StatusCode};
-use actix_web_async::HttpResponse;
+use actix_web::body::BoxBody;
+use actix_web::dev::{Service, Transform};
+use actix_web::http::header::{Header, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_ORIGIN};
+use actix_web::http::{header, Method, StatusCode};
+use actix_web::HttpResponse;
 
-use actix_web_async::{dev::ServiceRequest, dev::ServiceResponse, Error};
-use actix_web_httpauth_async::extractors::basic::Config;
-use actix_web_httpauth_async::extractors::AuthenticationError;
-use actix_web_httpauth_async::headers::authorization::{Authorization, Basic};
+use actix_web::{dev::ServiceRequest, dev::ServiceResponse, Error};
+use actix_web_httpauth::extractors::basic::Config;
+use actix_web_httpauth::extractors::AuthenticationError;
+use actix_web_httpauth::headers::authorization::{Authorization, Basic};
 use futures::future::{ok, LocalBoxFuture, Ready};
 use futures::FutureExt;
 use regex::Regex;
@@ -167,7 +165,7 @@ where
                     let requ = resp.request().clone();
                     let http_resp: HttpResponse<BoxBody> = HttpResponse::Forbidden()
                         .finish()
-                        .set_body(actix_web_async::body::BoxBody::new("Unauthorized"));
+                        .set_body(actix_web::body::BoxBody::new("Unauthorized"));
                     let resp = ServiceResponse::new(requ, http_resp);
                     return Ok(resp);
                 }

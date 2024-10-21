@@ -92,7 +92,7 @@ fn test_xdai_transfer_withdraw() {
     let amount = 10000000000000000000_u128;
 
     //Run the withdrawal process
-    let runner = actix_async::System::new();
+    let runner = actix::System::new();
     runner.block_on(async move {
         //do encode relay token call with our token bridge
         let res = encode_relaytokens(bridge, to, amount.into(), Duration::from_secs(600)).await;
@@ -123,7 +123,7 @@ fn test_xdai_unlock_withdraw() {
         TIMEOUT,
     );
 
-    let runner = actix_async::System::new();
+    let runner = actix::System::new();
 
     runner.block_on(async move {
         match simulated_withdrawal_on_eth(&bridge).await {
@@ -169,7 +169,7 @@ fn test_simulate_unlock_funds() {
 
     let amount = 10000000000000000000_u128;
 
-    let runner = actix_async::System::new();
+    let runner = actix::System::new();
 
     runner.block_on(async move {
         let withdraw_info = get_relay_message_hash(
@@ -210,7 +210,7 @@ fn test_transfer_dai() {
         TIMEOUT,
     );
 
-    let runner = actix_async::System::new();
+    let runner = actix::System::new();
     runner.block_on(async move {
         let res = transfer_dai(bridge.clone(), bridge.get_dai_balance().await.unwrap()).await;
         if res.is_err() {

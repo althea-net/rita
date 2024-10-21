@@ -1,4 +1,4 @@
-use actix_web_async::{HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse};
 use rita_common::usage_tracker::get_usage_data;
 use rita_common::usage_tracker::structs::UsageType;
 

@@ -896,7 +896,7 @@ mod tests {
         blockchain_oracle::get_pay_thresh,
         debt_keeper::{send_debt_update, traffic_update, Traffic},
     };
-    use actix_async::System;
+    use actix::System;
     use althea_types::identity::random_identity;
     use num256::Int256;
     use num_traits::Num;

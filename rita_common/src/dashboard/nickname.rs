@@ -1,4 +1,4 @@
-use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
+use actix_web::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
 use arrayvec::ArrayString;
 
 use crate::RitaCommonError;

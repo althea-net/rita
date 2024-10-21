@@ -5,13 +5,12 @@ use clarity::Address;
 use client_db::get_exits_list;
 use config::CONFIG;
 use log::info;
-use rustls::ServerConfig;
+use openssl::ssl::{SslAcceptor, SslMethod};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use tls::{load_certs, load_rustls_private_key};
 use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
 
@@ -19,7 +18,6 @@ pub mod client_db;
 pub mod config;
 pub mod register_client_batch_loop;
 pub mod rita_client_registration;
-pub mod tls;
 
 const RPC_SERVER: &str = "https://dai.althea.net";
 const WEB3_TIMEOUT: Duration = Duration::from_secs(10);
@@ -40,7 +38,7 @@ pub const SERVER_PORT: u16 = 4050;
 /// This endpoint retrieves and signs the data from any specified exit contract,
 /// allowing this server to serve as a root of trust for several different exit contracts.
 #[get("/{exit_contract}")]
-async fn return_exit_contract_data(
+pub async fn return_exit_contract_data(
     exit_contract: web::Path<Address>,
     cache: web::Data<Arc<RwLock<HashMap<Address, SignedExitServerList>>>>,
 ) -> impl Responder {
@@ -135,27 +133,27 @@ pub fn start_exit_trust_root_server() {
                     .app_data(web_data.clone())
             });
             info!("Starting exit trust root server on {:?}", EXIT_ROOT_DOMAIN);
+
             let server = if SSL {
-                let cert_chain = load_certs(&format!(
-                    "/etc/letsencrypt/live/{}/fullchain.pem",
-                    EXIT_ROOT_DOMAIN
-                ));
-                let keys = load_rustls_private_key(&format!(
-                    "/etc/letsencrypt/live/{}/privkey.pem",
-                    EXIT_ROOT_DOMAIN
-                ));
-                let config = ServerConfig::builder()
-                    .with_safe_defaults()
-                    .with_no_client_auth()
-                    .with_single_cert(cert_chain, keys)
+                // build TLS config from files
+                let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+                // set the certificate chain file location
+                builder
+                    .set_certificate_chain_file(format!(
+                        "/etc/letsencrypt/live/{}/fullchain.pem",
+                        EXIT_ROOT_DOMAIN
+                    ))
+                    .unwrap();
+                builder
+                    .set_private_key_file(
+                        format!("/etc/letsencrypt/live/{}/privkey.pem", EXIT_ROOT_DOMAIN),
+                        openssl::ssl::SslFiletype::PEM,
+                    )
                     .unwrap();
 
                 info!("Binding to SSL");
                 server
-                    .bind_rustls(
-                        format!("{}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT),
-                        config.clone(),
-                    )
+                    .bind_openssl(format!("{}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT), builder)
                     .unwrap()
             } else {
                 info!("Binding to {}:{}", EXIT_ROOT_DOMAIN, SERVER_PORT);

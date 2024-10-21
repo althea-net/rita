@@ -25,10 +25,8 @@ path = "src/extender.rs"
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }
 clu = { path = "../clu" }
-actix-async = { package = "actix", version = "0.13" }
-actix-web-async = { package = "actix-web", version = "4.9", default-features = false, features = [
-    "openssl",
-] }
+actix = { workspace = true }
+actix-web = { workspace = true }
 docopt = "1.1"
 compressed_log = "0.5"
 settings = { path = "../settings" }
@@ -38,7 +36,6 @@ serde = "1.0"
 serde_json = "1.0"
 arrayvec = { version = "0.7", features = ["serde"] }
 hex-literal = "0.4"
-openssl-probe = "0.1"
 env_logger = "0.11"
 phonenumber = "0.3.6"
 r2d2 = "0.8"
@@ -53,16 +50,12 @@ flate2 = { version = "1.0", features = [
     "rust_backend",
 ], default-features = false }
 jemallocator = { version = "0.5", optional = true }
-# we don't call or us OpenSSL directly in this codebase, but by adding
-# this dependency with this feature we can enforce that openssl is compiled
-# in 'vendored' mode all the way down the tree. What this means is that we use
-# an openssl implementation from the crate and not from the system, simplifying
-# our build process for a lot of cross-compile situations
-openssl = { version = "0.10", features = ["vendored"] }
 ipnetwork = "0.20"
 actix-rt = "2"
 clarity = {workspace = true}
 web30 = {workspace = true}
+openssl = {workspace = true}
+openssl-probe = {workspace = true}
 
 [features]
 jemalloc = ["jemallocator"]

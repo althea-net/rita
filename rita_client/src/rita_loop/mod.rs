@@ -9,7 +9,7 @@ use crate::heartbeat::get_exit_registration_state;
 use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::operator_fee_manager::tick_operator_payments;
-use actix_async::System as AsyncSystem;
+use actix::System as AsyncSystem;
 use althea_kernel_interface::dns::get_resolv_servers;
 use althea_kernel_interface::ip_addr::is_iface_up;
 use althea_kernel_interface::ip_route::manual_peers_route;

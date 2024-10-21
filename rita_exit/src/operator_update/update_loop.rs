@@ -1,7 +1,7 @@
 //! Independent loop for operator updates
 
 use crate::operator_update::{operator_update, UPDATE_FREQUENCY};
-use actix_async::System as AsyncSystem;
+use actix::System as AsyncSystem;
 use std::thread;
 use std::time::Instant;
 

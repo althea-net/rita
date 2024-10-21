@@ -1,8 +1,8 @@
 //! This module contains the operator address related endpoints the operator address is used to organize
 //! what network a given device is a part of and for client devices the address to which operator fees are
 //! paid, exits only use operator addresses for organization and not for fee collection.
-use actix_web_async::web::Path;
-use actix_web_async::{HttpRequest, HttpResponse};
+use actix_web::web::Path;
+use actix_web::{HttpRequest, HttpResponse};
 use clarity::Address;
 
 enum Mode {

@@ -3,8 +3,8 @@
 use crate::exit_manager::get_current_exit;
 use crate::exit_manager::requests::exit_setup_request;
 use crate::RitaClientError;
-use actix_web_async::http::StatusCode;
-use actix_web_async::{web::Path, HttpRequest, HttpResponse};
+use actix_web::http::StatusCode;
+use actix_web::{web::Path, HttpRequest, HttpResponse};
 use althea_kernel_interface::ping_check::ping_check;
 use althea_types::{ExitIdentity, ExitState};
 use babel_monitor::open_babel_stream;

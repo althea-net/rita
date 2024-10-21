@@ -2,7 +2,7 @@ use crate::operator_update::{
     get_client_mbps, get_exit_con, get_hardware_info_update, get_neighbor_info, get_relay_mbps,
     get_rita_uptime, get_user_bandwidth_usage, handle_operator_update,
 };
-use actix_async::System;
+use actix::System;
 use actix_web_actors::ws;
 use althea_types::{
     websockets::{

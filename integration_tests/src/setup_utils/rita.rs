@@ -172,7 +172,7 @@ pub fn spawn_rita(
         // pass the data to the calling thread via thread safe lock
         *router_identity_ref.write().unwrap() = Some(s.get_identity().unwrap());
 
-        let system = actix_async::System::new();
+        let system = actix::System::new();
 
         start_rita_common_loops();
         start_rita_client_loops();

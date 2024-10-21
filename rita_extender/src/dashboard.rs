@@ -1,7 +1,7 @@
 //! This file contains all the network endpoints used for the extender dashbaord.
 
-use actix_async::System;
-use actix_web_async::{web, App, HttpRequest, HttpResponse, HttpServer};
+use actix::System;
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use std::thread;
 
 pub fn start_extender_dashboard(rita_dashboard_port: u16) {
