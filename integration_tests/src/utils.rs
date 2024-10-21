@@ -19,7 +19,6 @@ use althea_proto::{
 use althea_types::{
     regions::Regions, ContactType, Denom, ExitIdentity, Identity, SystemChain, WgKey,
 };
-use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use clarity::{Address, PrivateKey as ClarityPrivkey, Transaction, Uint256};
 use deep_space::{Address as AltheaAddress, Coin, Contact, CosmosPrivateKey, PrivateKey};
@@ -483,12 +482,13 @@ pub fn althea_system_chain_exit(settings: RitaExitSettingsStruct) -> RitaExitSet
 }
 
 // Calls the register to exit rpc function within the provided namespace
-pub async fn register_to_exit(namespace_name: String) -> StatusCode {
+pub async fn register_to_exit(namespace_name: String) -> bool {
     // thread safe lock that allows us to pass data between the router thread and this thread
     // one copy of the reference is sent into the closure and the other is kept in this scope.
-    let response: Arc<RwLock<Option<StatusCode>>> = Arc::new(RwLock::new(None));
+    let response: Arc<RwLock<Option<bool>>> = Arc::new(RwLock::new(None));
     let response_local = response.clone();
     let namespace_local = namespace_name.clone();
+    const TIMEOUT: Duration = Duration::from_secs(15);
 
     let _ = thread::spawn(move || {
         // set the host of this thread to the ns
@@ -497,32 +497,51 @@ pub async fn register_to_exit(namespace_name: String) -> StatusCode {
         let runner = System::new();
         runner.block_on(async move {
             let client = awc::Client::default();
-            let req = client
-                .post("http://localhost:4877/exit/register")
-                .send()
-                .await
-                .expect("Failed to make request to rita RPC");
+            let start = Instant::now();
+            // this thread tries forever until timeout, then it updates the response lock
+            // so the outer thread can see the result
+            while start.elapsed() < TIMEOUT {
+                let req = client
+                    .post("http://localhost:4877/exit/register")
+                    .send()
+                    .await
+                    .expect("Failed to make request to rita RPC");
 
-            if !req.status().is_success() {
-                panic!("Exit registration failed with status: {:?}", req.status());
+                if !req.status().is_success() {
+                    warn!("Failed to register to exit, retrying...");
+                    thread::sleep(Duration::from_secs(1));
+                    continue;
+                }
+
+                let req = client
+                    .post("http://localhost:4877/exit/verify/1111".to_string())
+                    .send()
+                    .await
+                    .expect("Failed to make request to rita RPC");
+
+                if !req.status().is_success() {
+                    warn!("Failed to register verify exit, retrying...");
+                    thread::sleep(Duration::from_secs(1));
+                    continue;
+                }
+
+                // we mark the success flag
+                *response.write().unwrap() = Some(true);
+                return;
             }
-
-            let req = client
-                .post("http://localhost:4877/exit/verify/1111".to_string())
-                .send()
-                .await
-                .expect("Failed to make request to rita RPC");
-            *response.write().unwrap() = Some(req.status());
+            error!("Failed to register to exit, timeout reached!");
+            // if we reach here we have failed to register
+            *response.write().unwrap() = Some(false);
         })
     });
 
-    // wait for the child thread to finish performing it's query
-    const TIMEOUT: Duration = Duration::from_secs(30);
+    // wait for the child thread to finish performing it's query, with our own
+    // timeout in case the inner thread gets lost/stuck
     let start = Instant::now();
     while response_local.read().unwrap().is_none() {
         info!("Waiting for a rpc response from {}", namespace_local);
         sleep(Duration::from_millis(100)).await;
-        if Instant::now() - start > TIMEOUT {
+        if start.elapsed() > TIMEOUT * 2 {
             panic!("Timeout waiting for response from {}", namespace_local);
         }
     }
@@ -1116,22 +1135,14 @@ pub async fn validate_debt_entry(
 }
 
 pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
-    let register_timeout = Duration::from_secs(20);
     for r in namespaces.names.clone() {
         if let NodeType::Client { exit_name } = r.node_type.clone() {
-            let start: Instant = Instant::now();
-            loop {
-                let res = register_to_exit(r.get_name()).await;
-                if res.is_success() {
-                    break;
-                }
-                if Instant::now() - start > register_timeout {
-                    panic!("Failed to register {} to exit with {}", r.get_name(), res);
-                }
-                warn!("Failed {} registration to exit, trying again", r.get_name());
-                thread::sleep(Duration::from_secs(1));
+            let res = register_to_exit(r.get_name()).await;
+            if !res {
+                panic!("Failed to register {} to exit with {}", r.get_name(), res);
+            } else {
+                info!("{} registered to exit {}", r.get_name(), exit_name);
             }
-            info!("{} registered to exit {}", r.get_name(), exit_name);
         }
     }
 }
