@@ -70,6 +70,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh FIVE_NODES
   integration-test-althea-payment:
@@ -78,6 +80,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh PAYMENTS_ALTHEA
   integration-test-debts:
@@ -86,6 +90,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh DEBTS_TEST
   integration-test-eth-payments:
@@ -94,6 +100,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh ETH_PAYMENTS
   integration-test-multi-exit:
@@ -102,6 +110,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh MULTI_EXIT
   integration-test-validate-contract:
@@ -110,6 +120,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh CONTRACT_TEST
   integration-test-db-migration:
@@ -118,5 +130,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh MIGRATION_TEST
