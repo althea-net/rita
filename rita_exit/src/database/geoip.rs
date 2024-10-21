@@ -1,3 +1,4 @@
+use actix::System;
 use althea_kernel_interface::interface_tools::get_wg_remote_ip;
 use althea_types::regions::Regions;
 use babel_monitor::open_babel_stream;
@@ -185,44 +186,49 @@ pub fn get_country(ip: IpAddr) -> Result<Regions, Box<RitaExitError>> {
                 geo_ip_url,
                 ip.to_string()
             );
-            let client = reqwest::blocking::Client::new();
-            if let Ok(res) = client
-                .get(&geo_ip_url)
-                .basic_auth(api_user, Some(api_key))
-                .timeout(Duration::from_secs(1))
-                .send()
-            {
-                trace!("Got geoip result {:?}", res);
-                if let Ok(res) = res.json() {
-                    let value: GeoIpRet = res;
-                    let code = match value.country.iso_code.parse() {
-                        Ok(r) => r,
-                        Err(_) => {
-                            error!(
-                                "Failed to parse geoip response {:?}",
-                                value.country.iso_code
-                            );
-                            Regions::UnkownRegion
-                        }
-                    };
-                    trace!("Adding GeoIP value {:?} to cache", code);
-                    RITA_EXIT_STATE
-                        .write()
-                        .unwrap()
-                        .geoip_cache
-                        .insert(ip, code);
-                    trace!("Added to cache, returning");
-                    Ok(code)
+            // run in async closure and return the result
+            let runner = System::new();
+            runner.block_on(async move {
+                let client = awc::Client::new();
+                if let Ok(mut res) = client
+                    .get(&geo_ip_url)
+                    .basic_auth(api_user, api_key)
+                    .timeout(Duration::from_secs(1))
+                    .send()
+                    .await
+                {
+                    trace!("Got geoip result {:?}", res);
+                    if let Ok(res) = res.json().await {
+                        let value: GeoIpRet = res;
+                        let code = match value.country.iso_code.parse() {
+                            Ok(r) => r,
+                            Err(_) => {
+                                error!(
+                                    "Failed to parse geoip response {:?}",
+                                    value.country.iso_code
+                                );
+                                Regions::UnkownRegion
+                            }
+                        };
+                        trace!("Adding GeoIP value {:?} to cache", code);
+                        RITA_EXIT_STATE
+                            .write()
+                            .unwrap()
+                            .geoip_cache
+                            .insert(ip, code);
+                        trace!("Added to cache, returning");
+                        Ok(code)
+                    } else {
+                        Err(Box::new(RitaExitError::MiscStringError(
+                            "Failed to deserialize geoip response".to_string(),
+                        )))
+                    }
                 } else {
                     Err(Box::new(RitaExitError::MiscStringError(
-                        "Failed to deserialize geoip response".to_string(),
+                        "Request failed".to_string(),
                     )))
                 }
-            } else {
-                Err(Box::new(RitaExitError::MiscStringError(
-                    "Request failed".to_string(),
-                )))
-            }
+            })
         }
     }
 }

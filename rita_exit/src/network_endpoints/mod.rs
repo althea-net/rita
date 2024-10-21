@@ -16,7 +16,6 @@ use althea_types::{
 use clarity::Address;
 use crypto_box::SecretKey;
 use num256::Int256;
-use reqwest::ClientBuilder;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::rita_loop::get_web3_server;
@@ -228,11 +227,12 @@ async fn get_exit_list_from_root(contract_addr: Address) -> Option<SignedExitSer
     let request_url = rita_exit.exit_root_url;
     let allowed_signers = rita_exit.allowed_exit_list_signatures;
     let timeout = Duration::new(15, 0);
-    let client = ClientBuilder::new().timeout(timeout).build().unwrap();
+    let client = awc::Client::new();
     let request_url = format!("{}/{}", request_url, contract_addr);
     info!("Requesting exit list from {}", request_url);
-    let response = client
+    let mut response = client
         .get(request_url)
+        .timeout(timeout)
         .send()
         .await
         .expect("Could not receive data from exit root server");
