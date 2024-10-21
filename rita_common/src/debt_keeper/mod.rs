@@ -1122,6 +1122,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_credit_reopen_limited() {
+        settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
         common.payment.payment_threshold = 10.into();
 
