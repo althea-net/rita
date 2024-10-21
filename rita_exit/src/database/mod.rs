@@ -120,18 +120,18 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<
             ExitSignupReturn::PendingRegistration => Ok(ExitState::Pending {
                 message: "awaiting verification".to_string(),
             }),
-            ExitSignupReturn::BadPhoneNumber => Ok(ExitState::Denied {
+            ExitSignupReturn::BadPhoneNumber => Ok(ExitState::Pending {
                 message: format!(
                     "Error parsing client phone number {:?}",
                     exit_client.public_key,
                 ),
             }),
-            ExitSignupReturn::InternalServerError { e } => Ok(ExitState::Denied {
+            ExitSignupReturn::InternalServerError { e } => Ok(ExitState::Pending {
                 message: format!("Internal Error from registration server {:?}", e,),
             }),
         }
     } else {
-        Ok(ExitState::Denied {
+        Ok(ExitState::Pending {
             message: format!("Error parsing client details with {:?}", exit_client,),
         })
     }

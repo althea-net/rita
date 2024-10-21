@@ -105,7 +105,7 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
         Some(exit) => exit,
     };
 
-    match client_settings.exit_client.registration_state {
+    match client_settings.exit_client.registration_state.clone() {
         ExitState::New { .. } | ExitState::Pending { .. } => {
             let exit_pubkey = exit.wg_key;
 
@@ -151,23 +151,27 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
             client_settings.exit_client.registration_state = exit_response;
             set_rita_client(client_settings);
 
-            return Ok(());
+            Ok(())
         }
         ExitState::Denied { message } => {
             warn!(
                 "Exit {} is in ExitState DENIED with {}, not able to be setup",
                 exit.mesh_ip, message
             );
+            error!(
+                "Could not find a valid exit to register to! {:#?} {:#?}",
+                client_settings.exit_client.verified_exit_list,
+                client_settings.exit_client.registration_state
+            );
+            Err(RitaClientError::MiscStringError(
+                "Could not find a valid exit to register to!".to_string(),
+            ))
         }
         ExitState::Registered { .. } => {
-            warn!("Exit {} already reports us as registered", exit.mesh_ip)
+            warn!("Exit {} already reports us as registered", exit.mesh_ip);
+            Ok(())
         }
     }
-
-    error!("Could not find a valid exit to register to!");
-    Err(RitaClientError::MiscStringError(
-        "Could not find a valid exit to register to!".to_string(),
-    ))
 }
 
 pub async fn exit_status_request(exit: ExitIdentity) -> Result<(), RitaClientError> {
