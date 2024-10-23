@@ -1,7 +1,6 @@
 use crate::five_nodes::five_node_config;
-use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
-use crate::setup_utils::rita::{spawn_exit_root, thread_spawner};
+use crate::setup_utils::rita::{spawn_exit_root_of_trust, thread_spawner};
 use crate::utils::{
     add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_althea_grpc,
     get_default_settings, populate_routers_eth, print_althea_balances,
@@ -48,11 +47,8 @@ pub async fn run_althea_payments_test_scenario() {
     info!("Waiting to deploy contracts");
     let db_addr = deploy_contracts().await;
 
-    info!("Starting registration server");
-    start_registration_server(db_addr).await;
-
     let (mut client_settings, mut exit_settings, exit_root_addr) =
-        get_default_settings(namespaces.clone());
+        get_default_settings(namespaces.clone(), db_addr);
 
     namespaces.validate();
 
@@ -60,7 +56,7 @@ pub async fn run_althea_payments_test_scenario() {
     info!("Namespaces setup: {res:?}");
 
     info!("Starting root server!");
-    spawn_exit_root();
+    spawn_exit_root_of_trust(db_addr).await;
 
     // Modify configs to use Althea chain
     let (client_settings, exit_settings) =

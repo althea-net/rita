@@ -92,16 +92,13 @@ impl ExitNetworkSettings {
 fn default_remote_log() -> bool {
     false
 }
-pub fn default_reg_url() -> String {
-    "https://operator.althea.net:8080/register_router".to_string()
+pub fn default_root_url() -> String {
+    "https://exitroot.althea.net:4050".to_string()
 }
 
 /// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct RitaExitSettingsStruct {
-    /// url exit uses to request a clients registration
-    #[serde(default = "default_reg_url")]
-    pub client_registration_url: String,
     /// the size of the worker thread pool, the connection pool is this plus one
     pub workers: u32,
     /// if we should log remotely or if we should send our logs to the logging server
@@ -122,9 +119,8 @@ pub struct RitaExitSettingsStruct {
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     pub allowed_countries: HashSet<Regions>,
-    /// This is the Address/Pubkey of the exit root of trust server which clients use to verify signed exit lists
-    pub allowed_exit_list_signatures: Vec<Address>,
-    /// url to the exit root of trust server to query exit lists
+    /// url to the exit root of trust server to query exit lists, and make registration requests
+    #[serde(default = "default_root_url")]
     pub exit_root_url: String,
 }
 
@@ -138,7 +134,6 @@ impl RitaExitSettingsStruct {
     /// default trait to prevent some future code from picking up on the 'default' implementation
     pub fn test_default() -> Self {
         RitaExitSettingsStruct {
-            client_registration_url: "".to_string(),
             workers: 1,
             remote_log: false,
             description: "".to_string(),
@@ -149,8 +144,7 @@ impl RitaExitSettingsStruct {
             exit_network: ExitNetworkSettings::test_default(),
             allowed_countries: HashSet::new(),
             log: LoggingSettings::default(),
-            allowed_exit_list_signatures: Vec::new(),
-            exit_root_url: "".to_string(),
+            exit_root_url: "http://10.0.0.1:4050".to_string(),
         }
     }
 

@@ -225,11 +225,10 @@ pub async fn get_exit_list(
 async fn get_exit_list_from_root(contract_addr: Address) -> Option<SignedExitServerList> {
     let rita_exit = get_rita_exit();
     let request_url = rita_exit.exit_root_url;
-    let allowed_signers = rita_exit.allowed_exit_list_signatures;
     let timeout = Duration::new(15, 0);
     let client = awc::Client::new();
     let request_url = format!("{}/{}", request_url, contract_addr);
-    info!("Requesting exit list from {}", request_url);
+    trace!("Requesting exit list from {}", request_url);
     let mut response = client
         .get(request_url)
         .timeout(timeout)
@@ -237,12 +236,14 @@ async fn get_exit_list_from_root(contract_addr: Address) -> Option<SignedExitSer
         .await
         .expect("Could not receive data from exit root server");
     if response.status().is_success() {
-        info!("Received an exit list");
+        trace!("Received an exit list");
         match response.json::<SignedExitServerList>().await {
             Ok(a) => {
                 // verify the signature of the exit list
-                if a.verify() && allowed_signers.contains(&a.get_signer()) {
-                    info!("Verified exit list signature");
+                // note the exit cares if it's passing along a valid signature
+                // but does not police allowed signers, that's entierly up to the client
+                if a.verify() {
+                    trace!("Verified exit list signature");
                     return Some(a);
                 }
                 error!("Failed to verify exit list signature");

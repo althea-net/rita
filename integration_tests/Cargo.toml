@@ -38,3 +38,5 @@ web30 = {workspace = true}
 lazy_static = "1.5"
 actix-web = {workspace = true}
 phonenumber = "0.3.6"
+crossbeam = "0.8"
+tokio = "1.41"

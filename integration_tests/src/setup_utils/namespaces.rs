@@ -105,12 +105,12 @@ impl NamespaceInfo {
 /// For each key in destination, the u32 value is the price we expect to see in its route,
 /// and the namespace value is the next hop we take to reach the key. This struct is meant to
 /// be used within an outer hashmap which holds the "from" namespace.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct RouteHop {
     pub destination: HashMap<u16, PriceId>,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PriceId {
     pub price: u32,
     pub id: u16,

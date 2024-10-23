@@ -158,6 +158,7 @@ mod tests {
     use crate::exits::identity::random_exit_identity;
     use crate::exits::ExitRegistrationDetails;
     use crate::ExitClientIdentity;
+    use clarity::Address;
     use crypto_box::PublicKey;
     use crypto_box::SecretKey;
     use sodiumoxide::crypto::box_;
@@ -169,6 +170,10 @@ mod tests {
         let secret_key = SecretKey::generate(&mut OsRng);
         let public_key = PublicKey::from(&secret_key);
         (public_key, secret_key)
+    }
+
+    pub fn random_address() -> Address {
+        Address::from_slice(&[1u8; 20]).unwrap()
     }
 
     /// Used to test cross compatibility with libsodium
@@ -247,7 +252,7 @@ mod tests {
                 email_code: None,
                 phone: None,
                 phone_code: None,
-                sequence_number: None,
+                exit_database_contract: random_address(),
             },
         };
 
@@ -292,7 +297,7 @@ mod tests {
                 email_code: None,
                 phone: None,
                 phone_code: None,
-                sequence_number: None,
+                exit_database_contract: random_address(),
             },
         };
 

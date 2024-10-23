@@ -31,7 +31,9 @@ use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use clarity::Address;
 use exit_trust_root::client_db::get_registered_client_using_wgkey;
-use exit_trust_root::rita_client_registration::ExitSignupReturn;
+use exit_trust_root::endpoints::RegisterRequest;
+use exit_trust_root::endpoints::SubmitCodeRequest;
+use phonenumber::PhoneNumber;
 use rita_common::blockchain_oracle::calculate_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
@@ -103,53 +105,59 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<
         });
     }
 
-    // Forward request to ops and send result to client accordingly
-    let exit_client = to_exit_client(client.global);
-    if let Ok(exit_client) = exit_client {
-        match forward_client_signup_request(client).await {
-            ExitSignupReturn::RegistrationOk => Ok(ExitState::Registered {
-                our_details: ExitClientDetails {
-                    client_internal_ip: exit_client.internal_ip,
-                    internet_ipv6_subnet: exit_client.internet_ipv6,
-                },
-                general_details: get_exit_info(),
-                message: "Registration OK".to_string(),
-                identity: Box::new(exit_settings.get_exit_identity()),
-            }),
-
-            ExitSignupReturn::PendingRegistration => Ok(ExitState::Pending {
-                message: "awaiting verification".to_string(),
-            }),
-            ExitSignupReturn::BadPhoneNumber => Ok(ExitState::Pending {
-                message: format!(
-                    "Error parsing client phone number {:?}",
-                    exit_client.public_key,
-                ),
-            }),
-            ExitSignupReturn::InternalServerError { e } => Ok(ExitState::Pending {
-                message: format!("Internal Error from registration server {:?}", e,),
-            }),
+    let number = match client.clone().reg_details.phone {
+        Some(n) => n,
+        None => {
+            return Err(Box::new(RitaExitError::MiscStringError(
+                "Phone number is required for registration".to_string(),
+            )));
         }
+    };
+
+    let phone_number: PhoneNumber = match number.parse() {
+        Ok(p) => p,
+        Err(e) => {
+            return Err(Box::new(RitaExitError::MiscStringError(format!(
+                "Failed to parse phone number with error {}",
+                e
+            ))));
+        }
+    };
+
+    let exit_client = to_exit_client(client.global)?;
+    // if there is a phone registration code, we should submit it for verification
+    if let Some(code) = client.reg_details.phone_code.clone() {
+        info!("Forwarding client verification request");
+        forward_client_verify_request(client, phone_number, code).await?;
+        Ok(ExitState::Registered {
+            our_details: ExitClientDetails {
+                client_internal_ip: exit_client.internal_ip,
+                internet_ipv6_subnet: exit_client.internet_ipv6,
+            },
+            general_details: get_exit_info(),
+            message: "Registration OK".to_string(),
+            identity: Box::new(exit_settings.get_exit_identity()),
+        })
     } else {
+        info!("Forwarding client signup request");
+        // if there is no phone registration code, we should submit the client for registration
+        forward_client_signup_request(client, phone_number).await?;
         Ok(ExitState::Pending {
-            message: format!("Error parsing client details with {:?}", exit_client,),
+            message: "awaiting verification".to_string(),
         })
     }
 }
 
-pub async fn forward_client_signup_request(exit_client: ExitClientIdentity) -> ExitSignupReturn {
-    let url: &str;
-    let reg_url = get_rita_exit().client_registration_url;
-    if cfg!(feature = "dev_env") {
-        url = "http://7.7.7.1:40400/register_router";
-    } else if cfg!(feature = "operator_debug") {
-        url = "http://192.168.10.2:40400/register_router";
-    } else {
-        url = &reg_url;
-    }
+pub async fn forward_client_verify_request(
+    exit_client: ExitClientIdentity,
+    phone_number: PhoneNumber,
+    code: String,
+) -> Result<(), RitaExitError> {
+    let settings = get_rita_exit();
+    let url = format!("{}/submit_code", settings.exit_root_url);
 
     info!(
-        "About to request client {} registration with {}",
+        "About to submit client code {} with {}",
         exit_client.global, url
     );
 
@@ -157,33 +165,65 @@ pub async fn forward_client_signup_request(exit_client: ExitClientIdentity) -> E
     let response = client
         .post(url)
         .timeout(CLIENT_REGISTER_TIMEOUT)
-        .send_json(&exit_client)
+        .send_json(&SubmitCodeRequest {
+            phone_number,
+            identity: exit_client.global,
+            code,
+            contract: exit_client.reg_details.exit_database_contract,
+        })
         .await;
 
-    let response = match response {
-        Ok(mut response) => {
-            trace!("Response is {:?}", response.status());
-            trace!("Response is {:?}", response.headers());
-            response.json().await
+    match response {
+        Ok(v) => {
+            trace!("Response is {:?}", v.status());
+            trace!("Response is {:?}", v.headers());
+            if v.status().is_success() {
+                Ok(())
+            } else {
+                Err(RitaExitError::MiscStringError(v.status().to_string()))
+            }
         }
         Err(e) => {
             error!("Failed to perform client registration with {:?}", e);
-            return ExitSignupReturn::InternalServerError {
-                e: format!("Unable to contact registration server: {}", e),
-            };
+            Err(RitaExitError::MiscStringError(e.to_string()))
         }
-    };
+    }
+}
 
-    let response: ExitSignupReturn = match response {
-        Ok(a) => a,
-        Err(e) => {
-            error!("Failed to decode registration request {:?}", e);
-            return ExitSignupReturn::InternalServerError {
-                e: format!("Failed to decode registration request {:?}", e),
-            };
+pub async fn forward_client_signup_request(
+    exit_client: ExitClientIdentity,
+    phone_number: PhoneNumber,
+) -> Result<(), RitaExitError> {
+    let settings = get_rita_exit();
+    let url = format!("{}/register", settings.exit_root_url);
+
+    info!(
+        "About to request registration for client {} registration with {}",
+        exit_client.global, url
+    );
+
+    let client = awc::Client::default();
+    let response = client
+        .post(url)
+        .timeout(CLIENT_REGISTER_TIMEOUT)
+        .send_json(&RegisterRequest { phone_number })
+        .await;
+
+    match response {
+        Ok(v) => {
+            trace!("Response is {:?}", v.status());
+            trace!("Response is {:?}", v.headers());
+            if v.status().is_success() {
+                Ok(())
+            } else {
+                Err(RitaExitError::MiscStringError(v.status().to_string()))
+            }
         }
-    };
-    response
+        Err(e) => {
+            error!("Failed to perform client registration with {:?}", e);
+            Err(RitaExitError::MiscStringError(e.to_string()))
+        }
+    }
 }
 
 /// Gets the status of a client and updates it in the database

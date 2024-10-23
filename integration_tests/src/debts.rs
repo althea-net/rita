@@ -3,9 +3,8 @@ use std::thread;
 use std::time::Duration;
 
 use crate::five_nodes::five_node_config;
-use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
-use crate::setup_utils::rita::{spawn_exit_root, thread_spawner};
+use crate::setup_utils::rita::{spawn_exit_root_of_trust, thread_spawner};
 use crate::utils::{
     add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_default_settings,
     get_ip_from_namespace, populate_routers_eth, query_debts, register_all_namespaces_to_exit,
@@ -46,10 +45,8 @@ pub async fn run_debts_test() {
     info!("Waiting to deploy contracts");
     let db_addr = deploy_contracts().await;
 
-    info!("Starting registration server");
-    start_registration_server(db_addr).await;
-
-    let (client_settings, exit_settings, exit_root_addr) = get_default_settings(namespaces.clone());
+    let (client_settings, exit_settings, exit_root_addr) =
+        get_default_settings(namespaces.clone(), db_addr);
 
     // The exit price is set to ns.cost during thread_spawner
     let exit_price = namespaces.get_namespace(4).unwrap().cost;
@@ -60,7 +57,7 @@ pub async fn run_debts_test() {
     info!("Namespaces setup: {res:?}");
 
     info!("Starting root server!");
-    spawn_exit_root();
+    spawn_exit_root_of_trust(db_addr).await;
 
     let rita_identities =
         thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)

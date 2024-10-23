@@ -11,6 +11,7 @@ use althea_types::WgKey;
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState};
 use settings::exit::EXIT_LIST_IP;
 use settings::exit::EXIT_LIST_PORT;
+use settings::get_registration_details;
 use settings::get_rita_client;
 use settings::set_rita_client;
 use std::net::SocketAddr;
@@ -109,15 +110,14 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
         ExitState::New { .. } | ExitState::Pending { .. } => {
             let exit_pubkey = exit.wg_key;
 
-            let mut reg_details: ExitRegistrationDetails =
-                match client_settings.payment.contact_info {
-                    Some(val) => val.into(),
-                    None => {
-                        return Err(RitaClientError::MiscStringError(
-                            "No registration info set!".to_string(),
-                        ))
-                    }
-                };
+            let mut reg_details: ExitRegistrationDetails = match get_registration_details() {
+                Some(val) => val,
+                None => {
+                    return Err(RitaClientError::MiscStringError(
+                        "No registration info set!".to_string(),
+                    ))
+                }
+            };
 
             // Send a verification code if we have one
             reg_details.phone_code = code;
@@ -190,8 +190,8 @@ pub async fn exit_status_request(exit: ExitIdentity) -> Result<(), RitaClientErr
             return Err(RitaClientError::NoExitError(exit.mesh_ip.to_string()));
         }
     };
-    let reg_details = match settings::get_rita_client().payment.contact_info {
-        Some(val) => val.into(),
+    let reg_details = match get_registration_details() {
+        Some(val) => val,
         None => {
             return Err(RitaClientError::MiscStringError(
                 "No valid details".to_string(),
@@ -262,9 +262,24 @@ pub async fn get_exit_list() -> Result<SignedExitServerList, RitaClientError> {
     };
 
     let config = get_rita_client();
-    let allowed_signers = config.exit_client.allowed_exit_list_signatures;
-    // signature must both be valid and from a trusted signer
-    if list.verify() && allowed_signers.contains(&list.get_signer()) {
+    let allowed_signers = config.exit_client.allowed_exit_list_signers;
+
+    trace!(
+        "About to verify exit list signer and contract we are expecting {} and signer {:?}",
+        config.exit_client.exit_db_smart_contract,
+        allowed_signers
+    );
+    trace!(
+        "We have the contract {} with signer {}",
+        list.get_server_list().contract,
+        list.get_signer()
+    );
+
+    // signature must both be valid, from a trusted signer and for the contract we asked for
+    if list.verify()
+        && allowed_signers.contains(&list.get_signer())
+        && list.get_server_list().contract == config.exit_client.exit_db_smart_contract
+    {
         // save list of verified exits
         let mut rita_client = settings::get_rita_client();
         rita_client.exit_client.verified_exit_list = Some(list.get_server_list());

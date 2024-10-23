@@ -1,6 +1,7 @@
 use crate::default_system_chain;
 use crate::wg_key::WgKey;
 use crate::{exits::identity::ExitIdentity, Identity, SystemChain};
+use clarity::Address;
 use ipnetwork::IpNetwork;
 use serde::Deserialize;
 use serde::Serialize;
@@ -11,6 +12,7 @@ pub mod encryption;
 pub mod identity;
 pub mod server_list_signatures;
 
+/// Struct for registration communication between the client and the exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Default)]
 pub struct ExitRegistrationDetails {
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -21,8 +23,8 @@ pub struct ExitRegistrationDetails {
     pub phone: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub phone_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub sequence_number: Option<u32>,
+    /// This is the exit database contract that the client wishes to register with
+    pub exit_database_contract: Address,
 }
 
 /// This is the state an exit can be in

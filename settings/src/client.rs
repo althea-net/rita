@@ -21,8 +21,10 @@ pub fn default_config_path() -> PathBuf {
     format!("/etc/{APP_NAME}.toml").into()
 }
 
-fn exit_db_smart_contract_on_xdai() -> String {
-    "0x29a3800C28dc133f864C22533B649704c6CD7e15".to_string()
+fn exit_db_smart_contract() -> Address {
+    "0x29a3800C28dc133f864C22533B649704c6CD7e15"
+        .parse()
+        .unwrap()
 }
 
 fn default_registration_state() -> ExitState {
@@ -43,13 +45,13 @@ pub struct ExitClientSettings {
     /// chain we are on. Since different chains may reference different registration smart contracts
     #[serde(default = "default_registration_state", flatten)]
     pub registration_state: ExitState,
-    /// This is the address of the exit database contract on the xDai chain, this value is a config value in case
+    /// This is the address of the exit database contract, this value is a config value in case
     /// a new version of the contract is ever deployed. Otherwise it won't change much. What this contract contains
     /// is the registration data for all routers, facilitating key exchange between new exits in the cluster and clients
     /// So the client registers with the smart contract and the exit takes it's registration data (wireguard key) and sets
     /// up a tunnel, vice versa for the client after finding an exit to register to
-    #[serde(default = "exit_db_smart_contract_on_xdai")]
-    pub exit_db_smart_contract_on_xdai: String,
+    #[serde(default = "exit_db_smart_contract")]
+    pub exit_db_smart_contract: Address,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
     /// This is the region we are in, this is used to determine if we are in a region that is allowed to connect to the exit
@@ -57,17 +59,17 @@ pub struct ExitClientSettings {
     /// If we have some value we will connect to exits that have that region specified as well as exits with no region specified.
     pub our_region: Option<Regions>,
     /// This is the Address/Pubkey of the exit root of trust server which clients use to verify signed exit lists
-    pub allowed_exit_list_signatures: Vec<Address>,
+    pub allowed_exit_list_signers: Vec<Address>,
 }
 
 impl Default for ExitClientSettings {
     fn default() -> Self {
         ExitClientSettings {
             registration_state: default_registration_state(),
-            exit_db_smart_contract_on_xdai: exit_db_smart_contract_on_xdai(),
+            exit_db_smart_contract: exit_db_smart_contract(),
             lan_nics: HashSet::new(),
             our_region: None,
-            allowed_exit_list_signatures: Vec::new(),
+            allowed_exit_list_signers: Vec::new(),
             verified_exit_list: None,
         }
     }

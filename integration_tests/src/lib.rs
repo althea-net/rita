@@ -13,7 +13,6 @@ pub mod five_nodes;
 pub mod mutli_exit;
 pub mod payments_althea;
 pub mod payments_eth;
-pub mod registration_server;
 pub mod setup_utils;
 pub mod utils;
 

@@ -1,20 +1,32 @@
-use crate::utils::TEST_EXIT_DETAILS;
-
 use super::babel::spawn_babel;
 use super::namespaces::get_nsfd;
 use super::namespaces::NamespaceInfo;
 use super::namespaces::NodeType;
+use crate::utils::get_eth_node;
+use crate::utils::get_test_runner_magic_phone;
+use crate::utils::EXIT_ROOT_SERVER_URL;
+use crate::utils::REGISTRATION_SERVER_KEY;
+use crate::utils::TEST_EXIT_DETAILS;
+use crate::SETUP_WAIT;
 use actix_web::rt::System;
 use actix_web::web;
 use actix_web::App;
 use actix_web::HttpServer;
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::Identity;
-use althea_types::SignedExitServerList;
 use clarity::Address;
+use clarity::PrivateKey;
+use crossbeam::queue::SegQueue;
 use exit_trust_root;
-use exit_trust_root::return_exit_contract_data;
+use exit_trust_root::client_db::check_and_add_user_admin;
+use exit_trust_root::config::Config;
+use exit_trust_root::config::ConfigAndCache;
+use exit_trust_root::endpoints::return_signed_exit_contract_data;
+use exit_trust_root::endpoints::start_client_registration;
+use exit_trust_root::endpoints::submit_registration_code;
+use exit_trust_root::register_client_batch_loop::register_client_batch_loop;
 use exit_trust_root::signature_update_loop;
+use futures::join;
 use ipnetwork::IpNetwork;
 use ipnetwork::Ipv6Network;
 use log::info;
@@ -33,11 +45,12 @@ use rita_exit::{
 use settings::exit::EXIT_LIST_IP;
 use settings::set_flag_config;
 use settings::{client::RitaClientSettings, exit::RitaExitSettingsStruct};
+use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Instant;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     convert::TryInto,
     fs::{self},
     net::{IpAddr, Ipv6Addr},
@@ -45,6 +58,7 @@ use std::{
     thread,
     time::Duration,
 };
+use web30::client::Web3;
 
 /// This struct contains metadata about instances that the thread spanwer has spawned
 /// if you need any data about an instance that can be had at startup use this to pass it
@@ -290,27 +304,63 @@ pub fn spawn_rita_exit(
 }
 
 /// Spawns the exit root server and waits for it to finish starting, panics if it does not finish starting
-pub fn spawn_exit_root() {
+/// also adds the exit root to the list of allowed admins that can register users. This is possible becuase
+/// the registration server key is the owner of the exit root contract. It's also the address we're using for
+/// the root of trust server, but just becuase it's the owner doesn't mean it's automatically an admin that can
+/// register users. We have to add it to the list of admins.
+pub async fn spawn_exit_root_of_trust(db_addr: Address) {
+    let registration_server_key: PrivateKey = REGISTRATION_SERVER_KEY.parse().unwrap();
+    check_and_add_user_admin(
+        &Web3::new(&get_eth_node(), SETUP_WAIT),
+        db_addr,
+        registration_server_key.to_address(),
+        registration_server_key,
+        Some(SETUP_WAIT),
+        vec![],
+    )
+    .await
+    .unwrap();
+
     let successful_start: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
     let start_move = successful_start.clone();
     // the exit root server does not get its own namespace- instead it runs in the native namespace/host
-    let exit_contract_data_cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-    signature_update_loop(exit_contract_data_cache.clone());
-    let web_data = web::Data::new(exit_contract_data_cache.clone());
+    let exit_contract_data_cache = ConfigAndCache {
+        config: Arc::new(Config {
+            timeout: 60,
+            rpc: get_eth_node(),
+            private_key: registration_server_key,
+            telnyx_api_key: String::new(),
+            verify_profile_id: String::new(),
+            magic_number: Some(get_test_runner_magic_phone()),
+            https: true,
+            url: EXIT_ROOT_SERVER_URL.to_string(),
+        }),
+        cache: Arc::new(RwLock::new(HashMap::new())),
+        registration_queue: Arc::new(SegQueue::new()),
+        texts_sent: Arc::new(RwLock::new(HashMap::new())),
+    };
     thread::spawn(move || {
+        let web_data = web::Data::new(exit_contract_data_cache.clone());
+        let sig_loop = signature_update_loop(exit_contract_data_cache.clone());
+        let reg_loop = register_client_batch_loop(
+            exit_contract_data_cache.config.rpc.clone(),
+            exit_contract_data_cache.config.private_key,
+            exit_contract_data_cache.registration_queue.clone(),
+        );
         let successful_start = start_move.clone();
         let runner = System::new();
         runner.block_on(async move {
             let server = HttpServer::new(move || {
                 App::new()
-                    .service(return_exit_contract_data)
+                    .service(return_signed_exit_contract_data)
+                    .service(start_client_registration)
+                    .service(submit_registration_code)
                     .app_data(web_data.clone())
             });
             info!("Starting exit trust root server on 10.0.0.1:4050");
             let server = server.bind("10.0.0.1:4050").unwrap();
             successful_start.store(true, Relaxed);
-            let _ = server.run().await;
+            let _ = join!(server.run(), sig_loop, reg_loop);
         });
     });
 
