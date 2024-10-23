@@ -53,14 +53,22 @@ impl From<ContactType> for ContactDetails {
 
 impl ContactType {
     pub fn convert(val: ContactDetails, seq: Option<u32>) -> Option<Self> {
-        let same = ExitRegistrationDetails {
-            phone: val.phone,
-            email: val.email,
-            phone_code: None,
-            email_code: None,
-            sequence_number: seq,
-        };
-        ContactStorage::convert(same).map(|val| val.into())
+        match (val.email, val.phone) {
+            (Some(email), Some(phone)) => Some(ContactType::Both {
+                email: email.parse().ok()?,
+                number: phone.parse().ok()?,
+                sequence_number: seq,
+            }),
+            (Some(email), None) => Some(ContactType::Email {
+                email: email.parse().ok()?,
+                sequence_number: seq,
+            }),
+            (None, Some(phone)) => Some(ContactType::Phone {
+                number: phone.parse().ok()?,
+                sequence_number: seq,
+            }),
+            (None, None) => None,
+        }
     }
 }
 
@@ -299,35 +307,35 @@ impl ContactStorage {
                 email: Some(email),
                 phone_code: _,
                 email_code: _,
-                sequence_number,
+                exit_database_contract: _,
             } => match (phone.parse(), email.parse()) {
                 (Ok(validated_phone), Ok(validated_email)) => Some(ContactStorage {
                     number: Some(validated_phone),
                     email: Some(validated_email),
                     invalid_email: None,
                     invalid_number: None,
-                    sequence_number: sequence_number.unwrap_or(0),
+                    sequence_number: 0,
                 }),
                 (Err(_e), Ok(validated_email)) => Some(ContactStorage {
                     email: Some(validated_email),
                     number: None,
                     invalid_email: None,
                     invalid_number: None,
-                    sequence_number: sequence_number.unwrap_or(0),
+                    sequence_number: 0,
                 }),
                 (Ok(validated_phone), Err(_e)) => Some(ContactStorage {
                     number: Some(validated_phone),
                     email: None,
                     invalid_email: None,
                     invalid_number: None,
-                    sequence_number: sequence_number.unwrap_or(0),
+                    sequence_number: 0,
                 }),
                 (Err(_ea), Err(_eb)) => Some(ContactStorage {
                     number: None,
                     email: None,
                     invalid_email: Some(email),
                     invalid_number: Some(phone),
-                    sequence_number: sequence_number.unwrap_or(0),
+                    sequence_number: 0,
                 }),
             },
             ExitRegistrationDetails {
@@ -335,21 +343,21 @@ impl ContactStorage {
                 email: None,
                 phone_code: _,
                 email_code: _,
-                sequence_number,
+                exit_database_contract: _,
             } => match phone.parse() {
                 Ok(validated_phone) => Some(ContactStorage {
                     number: Some(validated_phone),
                     email: None,
                     invalid_email: None,
                     invalid_number: None,
-                    sequence_number: sequence_number.unwrap_or(0),
+                    sequence_number: 0,
                 }),
                 Err(_e) => Some(ContactStorage {
                     number: None,
                     email: None,
                     invalid_number: Some(phone),
                     invalid_email: None,
-                    sequence_number: sequence_number.unwrap_or(0),
+                    sequence_number: 0,
                 }),
             },
             ExitRegistrationDetails {
@@ -357,21 +365,21 @@ impl ContactStorage {
                 email: Some(email),
                 phone_code: _,
                 email_code: _,
-                sequence_number,
+                exit_database_contract: _,
             } => match email.parse() {
                 Ok(validated_email) => Some(ContactStorage {
                     email: Some(validated_email),
                     number: None,
                     invalid_email: None,
                     invalid_number: None,
-                    sequence_number: sequence_number.unwrap_or(0),
+                    sequence_number: 0,
                 }),
                 Err(_e) => Some(ContactStorage {
                     email: None,
                     number: None,
                     invalid_email: Some(email),
                     invalid_number: None,
-                    sequence_number: sequence_number.unwrap_or(0),
+                    sequence_number: 0,
                 }),
             },
             ExitRegistrationDetails {
@@ -379,70 +387,14 @@ impl ContactStorage {
                 email: None,
                 phone_code: _,
                 email_code: _,
-                sequence_number,
+                exit_database_contract: _,
             } => Some(ContactStorage {
                 email: None,
                 number: None,
                 invalid_email: None,
                 invalid_number: None,
-                sequence_number: sequence_number.unwrap_or(0),
+                sequence_number: 0,
             }),
         }
-    }
-}
-
-impl From<ContactType> for ExitRegistrationDetails {
-    fn from(ct: ContactType) -> Self {
-        match ct {
-            ContactType::Both {
-                number,
-                email,
-                sequence_number,
-            } => ExitRegistrationDetails {
-                phone: Some(number.to_string()),
-                email: Some(email.to_string()),
-                email_code: None,
-                phone_code: None,
-                sequence_number,
-            },
-            ContactType::Email {
-                email,
-                sequence_number,
-            } => ExitRegistrationDetails {
-                phone: None,
-                email: Some(email.to_string()),
-                email_code: None,
-                phone_code: None,
-                sequence_number,
-            },
-            ContactType::Phone {
-                number,
-                sequence_number,
-            } => ExitRegistrationDetails {
-                phone: Some(number.to_string()),
-                email: None,
-                email_code: None,
-                phone_code: None,
-                sequence_number,
-            },
-            ContactType::Bad {
-                invalid_email,
-                invalid_number,
-                sequence_number,
-            } => ExitRegistrationDetails {
-                phone: invalid_number,
-                email: invalid_email,
-                email_code: None,
-                phone_code: None,
-                sequence_number,
-            },
-        }
-    }
-}
-
-impl From<ContactStorage> for ExitRegistrationDetails {
-    fn from(cs: ContactStorage) -> Self {
-        let ct: ContactType = cs.into();
-        ct.into()
     }
 }

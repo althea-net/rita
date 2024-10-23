@@ -20,7 +20,8 @@ use althea_types::{
     regions::Regions, ContactType, Denom, ExitIdentity, Identity, SystemChain, WgKey,
 };
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
-use clarity::{Address, PrivateKey as ClarityPrivkey, Transaction, Uint256};
+use clarity::PrivateKey as ClarityPrivkey;
+use clarity::{Address, Transaction, Uint256};
 use deep_space::{Address as AltheaAddress, Coin, Contact, CosmosPrivateKey, PrivateKey};
 use exit_trust_root::client_db::{add_exit_admin, add_exits_to_registration_list};
 use futures::future::join_all;
@@ -216,12 +217,13 @@ pub fn test_reach_all(nsinfo: NamespaceInfo) {
     info!("All nodes are rechable via ping!");
 }
 
-/// test pingability between namespaces on babel routes
+/// test pingability between namespaces on babel routes, returns true if all pings are successful
 pub fn test_reach_all_async(nsinfo: NamespaceInfo) -> bool {
     for i in nsinfo.clone().names {
         for j in nsinfo.clone().names {
-            if test_reach(i.clone(), j) {
+            if !test_reach(i.clone(), j.clone()) {
                 // ping failed
+                error!("Ping for {:?} to {:?} failed, retrying...", i, j);
                 return false;
             }
         }
@@ -229,6 +231,7 @@ pub fn test_reach_all_async(nsinfo: NamespaceInfo) -> bool {
     true
 }
 
+/// Returns true if the ping is successful
 fn test_reach(from: Namespace, to: Namespace) -> bool {
     // todo replace with oping
     // ip netns exec n-1 ping6 fd00::2
@@ -243,9 +246,11 @@ fn test_reach(from: Namespace, to: Namespace) -> bool {
         &["netns", "exec", &from.get_name(), "ping6", &ip, "-c", "1"],
     )
     .expect(&errormsg);
-    let output = from_utf8(&output.stdout).expect("could not get output for ping6!");
-    trace!("ping output: {output:?} end");
-    output.contains("1 packets transmitted, 1 received, 0% packet loss")
+    trace!(
+        "ping output: {output:?} end status is {}",
+        output.status.success()
+    );
+    output.status.success()
 }
 
 /// Tests routes, waiting until they are all found and panicing if that does not happen
@@ -301,6 +306,11 @@ pub fn test_routes_async(nsinfo: NamespaceInfo, expected: HashMap<Namespace, Rou
                     "No route found for {:?}, {:?}, retrying...",
                     ns1.get_name(),
                     ns2.get_name()
+                );
+                trace!(
+                    "We where expecting {:?} and found {:#?}",
+                    expected.get(&ns1).unwrap(),
+                    routes
                 );
                 return false;
             }
@@ -361,6 +371,13 @@ fn try_route(
     let dest_ip = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, ns2_id));
     for r in routes {
         if let IpNetwork::V6(ref ip) = r.prefix {
+            if ip.ip() == dest_ip && (r.price != expected_cost || r.fee != expected_cost) {
+                error!(
+                    "Failed to route match expected price {} found {} or fee {} found {}",
+                    expected_cost, r.price, expected_cost, r.fee
+                );
+            }
+
             if ip.ip() == dest_ip && r.price == expected_cost && r.fee == ns1.cost {
                 return true;
             } else {
@@ -380,17 +397,19 @@ pub const EXIT_ROOT_IP: IpAddr =
 pub const EXIT_SUBNET: Ipv6Addr = Ipv6Addr::new(0xfbad, 200, 0, 0, 0, 0, 0, 0);
 pub const EXIT_ROOT_SERVER_URL: &str = "http://10.0.0.1:4050";
 
+pub fn get_exit_root_private_key() -> ClarityPrivkey {
+    get_eth_miner_key()
+}
+
 /// Gets the default client and exit settings
 pub fn get_default_settings(
     namespaces: NamespaceInfo,
+    exit_db_contract: Address,
 ) -> (RitaClientSettings, RitaExitSettingsStruct, Address) {
     let mut exit_servers = HashMap::new();
-    // generate keys for the exit root server
-    let exit_root_privkey = ClarityPrivkey::from_bytes([1u8; 32]).unwrap();
-    let exit_root_addr = exit_root_privkey.to_address();
+    let exit_root_addr = get_exit_root_private_key().to_address();
     info!("Exit root address is {:?}", exit_root_addr);
     let exit = RitaExitSettingsStruct {
-        client_registration_url: "https://7.7.7.1:40400/register_router".to_string(),
         workers: 2,
         remote_log: false,
         description: "Test environment exit instance".to_string(),
@@ -401,7 +420,6 @@ pub fn get_default_settings(
         allowed_countries: HashSet::new(),
         log: LoggingSettings::default(),
         operator: ExitOperatorSettings::default(),
-        allowed_exit_list_signatures: vec![exit_root_addr],
         exit_root_url: EXIT_ROOT_SERVER_URL.to_owned(),
     };
     let client = RitaClientSettings::default();
@@ -442,7 +460,9 @@ pub fn get_default_settings(
         .into(),
     );
 
-    client.exit_client.allowed_exit_list_signatures = vec![exit_root_addr];
+    let key: ClarityPrivkey = REGISTRATION_SERVER_KEY.parse().unwrap();
+    client.exit_client.allowed_exit_list_signers = vec![key.to_address()];
+    client.exit_client.exit_db_smart_contract = exit_db_contract;
 
     // first node is passed through to the host machine for testing second node is used
     // for testnet queries

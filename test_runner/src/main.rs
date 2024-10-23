@@ -40,7 +40,7 @@ async fn main() {
     if let Ok(test_type) = test_type {
         if test_type == "FIVE_NODES" {
             run_five_node_test_scenario().await;
-        } else if test_type == "DEBTS_TEST" {
+        } else if test_type == "DEBTS_TEST" || test_type == "DEBTS" {
             run_debts_test().await;
         } else if test_type == "PAYMENTS_ETH" || test_type == "ETH_PAYMENTS" {
             run_eth_payments_test_scenario().await;
@@ -50,7 +50,7 @@ async fn main() {
             run_multi_exit_test().await
         } else if test_type == "CONTRACT_TEST" {
             run_altheadb_contract_test().await
-        } else if test_type == "MIGRATION_TEST" {
+        } else if test_type == "MIGRATION_TEST" || test_type == "DB_MIGRATION" {
             run_db_migration_test().await
         } else {
             panic!("Error unknown test type {}!", test_type);

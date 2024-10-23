@@ -1,25 +1,26 @@
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
-
-use althea_types::random_identity;
-use clarity::{Address, PrivateKey};
-use diesel::{PgConnection, RunQueryDsl};
-use exit_trust_root::{
-    client_db::{check_and_add_user_admin, get_all_registered_clients},
-    register_client_batch_loop::register_client_batch_loop,
-};
-use rita_db_migration::{
-    get_database_connection, models::Client, schema::clients::dsl::clients, start_db_migration,
-};
-use web30::client::Web3;
-
 use crate::{
     payments_eth::{TRASACTION_TIMEOUT, WEB3_TIMEOUT},
     setup_utils::database::start_postgres,
     utils::{deploy_contracts, get_eth_node, REGISTRATION_SERVER_KEY},
 };
+use althea_types::random_identity;
+use clarity::{Address, PrivateKey};
+use crossbeam::queue::SegQueue;
+use diesel::{PgConnection, RunQueryDsl};
+use exit_trust_root::{
+    client_db::{check_and_add_user_admin, get_all_registered_clients},
+    register_client_batch_loop::register_client_batch_loop,
+};
+use futures::future::{select, Either};
+use rita_db_migration::{
+    get_database_connection, models::Client, schema::clients::dsl::clients, start_db_migration,
+};
+use std::{
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
+use web30::client::Web3;
 
 pub const DB_URI: &str = "postgres://postgres@localhost/test";
 
@@ -62,26 +63,36 @@ pub async fn run_db_migration_test() {
 
     thread::sleep(Duration::from_secs(5));
 
+    let queue = Arc::new(SegQueue::new());
+
     info!("Starting registration loop");
-    register_client_batch_loop(get_eth_node(), althea_db_addr, reg_server_key);
+    let reg_loop = register_client_batch_loop(get_eth_node(), reg_server_key, queue.clone());
 
     info!("Running user migration");
-    match start_db_migration(
+    start_db_migration(
         DB_URI.to_string(),
         get_eth_node(),
         reg_server_key.to_address(),
         althea_db_addr,
+        queue.clone(),
+    )
+    .await
+    .expect("Failed to start migration!");
+
+    // wait for the timeout while also running the registration loop
+    match select(
+        Box::pin(validate_db_migration(
+            num_clients,
+            althea_db_addr,
+            reg_server_key,
+        )),
+        Box::pin(reg_loop),
     )
     .await
     {
-        Ok(_) => println!("Successfully migrated all clients!"),
-        Err(e) => println!("Failed to migrate clients with {}", e),
-    }
-
-    info!("Waiting for register loop to migrate all clients");
-    thread::sleep(Duration::from_secs(10));
-
-    validate_db_migration(num_clients, althea_db_addr, reg_server_key).await;
+        Either::Left((_, _)) => info!("Successfully migrated all clients!"),
+        Either::Right((_, _)) => panic!("Registration loop crashed!"),
+    };
 }
 
 fn add_dummy_clients_to_db(num_of_entries: usize, conn: &PgConnection) {

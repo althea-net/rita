@@ -9,15 +9,16 @@ pub mod error;
 pub mod models;
 pub mod schema;
 
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use crate::schema::clients::dsl::clients;
 use althea_types::Identity;
 use clarity::Address;
+use crossbeam::queue::SegQueue;
 use diesel::{r2d2::ConnectionManager, PgConnection, RunQueryDsl};
 use error::RitaDBMigrationError;
 use exit_trust_root::{
-    client_db::get_all_registered_clients, rita_client_registration::add_client_to_reg_queue,
+    client_db::get_all_registered_clients, register_client_batch_loop::RegistrationRequest,
 };
 use models::Client;
 use r2d2::PooledConnection;
@@ -30,6 +31,7 @@ pub async fn start_db_migration(
     web3_url: String,
     requester_address: Address,
     db_addr: Address,
+    reg_queue: Arc<SegQueue<RegistrationRequest>>,
 ) -> Result<(), RitaDBMigrationError> {
     // Validate that db_url and contract_addr are valid
     if !(db_url.contains("postgres://")
@@ -48,7 +50,14 @@ pub async fn start_db_migration(
         );
 
         let contact = Web3::new(&web3_url, WEB3_TIMEOUT);
-        add_clients_to_reg_queue(clients_list, &contact, requester_address, db_addr).await
+        add_clients_to_reg_queue(
+            clients_list,
+            &contact,
+            requester_address,
+            db_addr,
+            reg_queue,
+        )
+        .await
     } else {
         return Err(RitaDBMigrationError::MiscStringError(
             "Unable to get db clients".to_string(),
@@ -63,6 +72,7 @@ async fn add_clients_to_reg_queue(
     contact: &Web3,
     requester_address: Address,
     contract: Address,
+    reg_queue: Arc<SegQueue<RegistrationRequest>>,
 ) {
     let existing_users: HashSet<Identity> =
         match get_all_registered_clients(contact, requester_address, contract).await {
@@ -104,7 +114,10 @@ async fn add_clients_to_reg_queue(
 
         if !existing_users.contains(&id) {
             info!("Adding user {}", id.mesh_ip);
-            add_client_to_reg_queue(id);
+            reg_queue.push(RegistrationRequest {
+                identity: id,
+                contract,
+            });
         } else {
             warn!("User {} already exists!", id.mesh_ip);
         }

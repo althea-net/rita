@@ -18,7 +18,10 @@ extern crate log;
 extern crate arrayvec;
 
 use althea_kernel_interface::netns::check_integration_test_netns;
-use althea_types::{BillingDetails, ContactType, Identity, InstallationDetails, SystemChain};
+use althea_types::{
+    BillingDetails, ContactType, ExitRegistrationDetails, Identity, InstallationDetails,
+    SystemChain,
+};
 use clarity::Address;
 use logging::LoggingSettings;
 use network::NetworkSettings;
@@ -329,6 +332,19 @@ pub fn get_rita_client() -> RitaClientSettings {
 pub fn get_contact_info() -> Option<ContactType> {
     let rita_client = get_rita_client();
     option_convert(rita_client.payment.contact_info)
+}
+pub fn get_registration_details() -> Option<ExitRegistrationDetails> {
+    let rita_client = get_rita_client();
+    match get_contact_info() {
+        Some(contact_info) => Some(ExitRegistrationDetails {
+            email: contact_info.get_email().map(|a| a.to_string()),
+            email_code: None,
+            phone: contact_info.get_phone().map(|a| a.to_string()),
+            phone_code: None,
+            exit_database_contract: rita_client.exit_client.exit_db_smart_contract,
+        }),
+        None => None,
+    }
 }
 pub fn get_install_details() -> Option<InstallationDetails> {
     let rita_client = get_rita_client();

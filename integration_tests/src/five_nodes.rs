@@ -1,6 +1,5 @@
-use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
-use crate::setup_utils::rita::{spawn_exit_root, thread_spawner};
+use crate::setup_utils::rita::{spawn_exit_root_of_trust, thread_spawner};
 use crate::utils::{
     add_exits_contract_exit_list, deploy_contracts, get_default_settings, populate_routers_eth,
     register_all_namespaces_to_exit, test_all_internet_connectivity, test_reach_all, test_routes,
@@ -18,10 +17,8 @@ pub async fn run_five_node_test_scenario() {
     info!("Waiting to deploy contracts");
     let db_addr = deploy_contracts().await;
 
-    info!("Starting registration server");
-    start_registration_server(db_addr).await;
-
-    let (client_settings, exit_settings, exit_root_addr) = get_default_settings(namespaces.clone());
+    let (client_settings, exit_settings, exit_root_addr) =
+        get_default_settings(namespaces.clone(), db_addr);
 
     namespaces.validate();
 
@@ -29,7 +26,7 @@ pub async fn run_five_node_test_scenario() {
     info!("Namespaces setup: {res:?}");
 
     info!("Starting root server!");
-    spawn_exit_root();
+    spawn_exit_root_of_trust(db_addr).await;
 
     let rita_identities =
         thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
