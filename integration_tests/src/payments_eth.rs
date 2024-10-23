@@ -2,7 +2,7 @@ use crate::five_nodes::five_node_config;
 use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::setup_ns;
 use crate::setup_utils::namespaces::Namespace;
-use crate::setup_utils::rita::spawn_exit_root;
+use crate::setup_utils::rita::spawn_exit_root_of_trust;
 use crate::setup_utils::rita::thread_spawner;
 use crate::utils::add_exits_contract_exit_list;
 use crate::utils::deploy_contracts;
@@ -64,7 +64,7 @@ pub async fn run_eth_payments_test_scenario() {
     info!("Namespaces setup: {res:?}");
 
     info!("Starting root server!");
-    spawn_exit_root();
+    spawn_exit_root_of_trust();
 
     let rita_identities =
         thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)

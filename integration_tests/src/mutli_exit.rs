@@ -6,7 +6,7 @@ use crate::{
     registration_server::start_registration_server,
     setup_utils::{
         namespaces::{setup_ns, Namespace, NamespaceInfo, NodeType, PriceId, RouteHop},
-        rita::{spawn_exit_root, thread_spawner},
+        rita::{spawn_exit_root_of_trust, thread_spawner},
     },
     utils::{
         add_exits_contract_exit_list, deploy_contracts, get_default_settings, get_node_id_from_ip,
@@ -52,7 +52,7 @@ pub async fn run_multi_exit_test() {
     let res = setup_ns(namespaces.clone());
 
     info!("Starting root server!");
-    spawn_exit_root();
+    spawn_exit_root_of_trust();
 
     let rita_identities = thread_spawner(
         namespaces.clone(),

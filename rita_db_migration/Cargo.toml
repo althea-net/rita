@@ -17,3 +17,4 @@ serde_json = "1.0"
 exit_trust_root = { path = "../exit_trust_root" }
 clarity = "1.4"
 web30 = "1.4"
+crossbeam = "0.8"

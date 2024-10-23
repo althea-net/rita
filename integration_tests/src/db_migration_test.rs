@@ -1,25 +1,26 @@
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
-
-use althea_types::random_identity;
-use clarity::{Address, PrivateKey};
-use diesel::{PgConnection, RunQueryDsl};
-use exit_trust_root::{
-    client_db::{check_and_add_user_admin, get_all_registered_clients},
-    register_client_batch_loop::register_client_batch_loop,
-};
-use rita_db_migration::{
-    get_database_connection, models::Client, schema::clients::dsl::clients, start_db_migration,
-};
-use web30::client::Web3;
-
 use crate::{
     payments_eth::{TRASACTION_TIMEOUT, WEB3_TIMEOUT},
     setup_utils::database::start_postgres,
     utils::{deploy_contracts, get_eth_node, REGISTRATION_SERVER_KEY},
 };
+use althea_types::random_identity;
+use clarity::{Address, PrivateKey};
+use core::panicking::panic;
+use diesel::{PgConnection, RunQueryDsl};
+use exit_trust_root::{
+    client_db::{check_and_add_user_admin, get_all_registered_clients},
+    register_client_batch_loop::register_client_batch_loop,
+};
+use futures::executor::block_on;
+use futures::future::{select, Either};
+use rita_db_migration::{
+    get_database_connection, models::Client, schema::clients::dsl::clients, start_db_migration,
+};
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
+use web30::client::Web3;
 
 pub const DB_URI: &str = "postgres://postgres@localhost/test";
 
@@ -62,18 +63,29 @@ pub async fn run_db_migration_test() {
 
     thread::sleep(Duration::from_secs(5));
 
+    let queue = Arc::new(SegQueue::new());
+
     info!("Starting registration loop");
-    register_client_batch_loop(get_eth_node(), althea_db_addr, reg_server_key);
+    let reg_loop = register_client_batch_loop(get_eth_node(), reg_server_key, queue.clone());
 
     info!("Running user migration");
-    match start_db_migration(
+    let mig = start_db_migration(
         DB_URI.to_string(),
         get_eth_node(),
         reg_server_key.to_address(),
         althea_db_addr,
-    )
-    .await
-    {
+        queue.clone(),
+    );
+
+    // Wait for either the migration or the registration loop to finish, since the registration loop
+    // will never finish this is effectively the same as waiting for the migration to finish while
+    // still running the registration loop then exiting the registration loop when the migration is done
+    let res = match select(mig, reg_loop).await {
+        Either::Left((result, _)) => result,
+        Either::Right((result, _)) => panic("Registration loop crashed!"),
+    };
+
+    match res {
         Ok(_) => println!("Successfully migrated all clients!"),
         Err(e) => println!("Failed to migrate clients with {}", e),
     }
