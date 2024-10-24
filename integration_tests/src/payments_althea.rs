@@ -1,7 +1,7 @@
 use crate::five_nodes::five_node_config;
 use crate::registration_server::start_registration_server;
 use crate::setup_utils::namespaces::*;
-use crate::setup_utils::rita::{spawn_exit_root, thread_spawner};
+use crate::setup_utils::rita::{spawn_exit_root_of_trust, thread_spawner};
 use crate::utils::{
     add_exits_contract_exit_list, deploy_contracts, generate_traffic, get_althea_grpc,
     get_default_settings, populate_routers_eth, print_althea_balances,
@@ -60,7 +60,7 @@ pub async fn run_althea_payments_test_scenario() {
     info!("Namespaces setup: {res:?}");
 
     info!("Starting root server!");
-    spawn_exit_root();
+    spawn_exit_root_of_trust();
 
     // Modify configs to use Althea chain
     let (client_settings, exit_settings) =
