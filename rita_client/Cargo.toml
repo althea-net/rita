@@ -35,7 +35,7 @@ clarity = {workspace = true}
 openssh-keys = "0.6"
 mac_address = "1.1.7"
 futures = { version = "0.3", features = ["compat"] }
-tokio = "1.40"
+tokio = "1.41"
 actix-web-actors = "4.3"
 crypto_box = "0.9"
 
