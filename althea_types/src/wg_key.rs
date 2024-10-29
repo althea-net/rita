@@ -23,6 +23,27 @@ impl From<WgKey> for [u8; 32] {
     }
 }
 
+impl WgKey {
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    pub fn from_slice(slice: &[u8]) -> Result<WgKey, AltheaTypesError> {
+        if slice.len() != 32 {
+            return Err(AltheaTypesError::InvalidWgKeyLength);
+        }
+
+        let mut key = [0u8; 32];
+        key.copy_from_slice(slice);
+
+        Ok(WgKey(key))
+    }
+}
+
 /// This is somewhat dangerous, since libsodium provides seperate
 /// public and private key types while we don't have those here.
 /// Be very careful not to use this on the public key! That would be bad

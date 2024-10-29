@@ -6,12 +6,30 @@ use std::fmt::Result as FormatResult;
 #[derive(Clone, Debug)]
 pub enum AltheaTypesError {
     WgParseError(DecodeError),
+    BadEthAbiInput(String),
+    InvalidWgKeyLength,
+    InvalidIdentityBytesLength,
+    ClarityError(String),
+}
+
+impl From<clarity::Error> for AltheaTypesError {
+    fn from(e: clarity::Error) -> Self {
+        AltheaTypesError::ClarityError(e.to_string())
+    }
 }
 
 impl fmt::Display for AltheaTypesError {
     fn fmt(&self, f: &mut fmt::Formatter) -> FormatResult {
         match self {
             AltheaTypesError::WgParseError(val) => write!(f, "Failed to parse WgKey with {val}"),
+            AltheaTypesError::BadEthAbiInput(e) => {
+                write!(f, "Failed to parse Eth ABI input with {e}")
+            }
+            AltheaTypesError::InvalidWgKeyLength => write!(f, "Invalid WgKey length"),
+            AltheaTypesError::InvalidIdentityBytesLength => {
+                write!(f, "Invalid identity bytes length")
+            }
+            AltheaTypesError::ClarityError(val) => write!(f, "Clarity error: {}", val),
         }
     }
 }

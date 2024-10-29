@@ -1,3 +1,4 @@
+use crate::error::AltheaTypesError;
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
 use crate::{ClientExtender, UsageTrackerFlat, UsageTrackerTransfer, WifiDevice};
 use arrayvec::ArrayString;
@@ -14,7 +15,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 
@@ -73,17 +74,85 @@ impl Identity {
         AltheaAddress::from_slice(self.eth_address.as_bytes(), ALTHEA_PREFIX).unwrap()
     }
 
+    #[deprecated(
+        since = "0.2.0",
+        note = "This is unstable between rust versions please use `to_bytes` instead"
+    )]
     pub fn get_hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
         hasher.finish()
     }
 
+    #[deprecated(
+        since = "0.2.0",
+        note = "This is unstable between rust versions please use `to_bytes` instead"
+    )]
     pub fn get_hash_array(&self) -> [u8; 8] {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
         let bits = hasher.finish();
         bits.to_be_bytes()
+    }
+
+    /// Returns a byte representation of the identity
+    /// simply the concatenation of the mesh_ip, eth_address and wg_public_key
+    /// in that order ignoring the nickname
+    /// [mesh ip 4 or 16 bytes][eth address 20 bytes][wg public key 32 bytes]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let mesh_ip_bytes = match self.mesh_ip {
+            IpAddr::V4(ip) => ip.octets().to_vec(),
+            IpAddr::V6(ip) => ip.octets().to_vec(),
+        };
+        bytes.extend_from_slice(&mesh_ip_bytes);
+        bytes.extend_from_slice(self.eth_address.as_bytes());
+        bytes.extend_from_slice(self.wg_public_key.as_bytes());
+        bytes
+    }
+
+    /// The inverse of the two bytes function, takes a byte slice and returns an identity
+    /// returns None if the byte slice can not possibly be an identity
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, AltheaTypesError> {
+        const LEN_WITH_IPV4: usize = 56;
+        const LEN_WITH_IPV6: usize = 68;
+        match (bytes.len() == LEN_WITH_IPV4, bytes.len() == LEN_WITH_IPV6) {
+            // true true is impossible but rust doesn't know that (yet)
+            (false, false) | (true, true) => Err(AltheaTypesError::InvalidIdentityBytesLength),
+            (true, false) => {
+                // ipv4 case
+                let mesh_ip = IpAddr::V4(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]));
+                let eth_address = Address::from_slice(&bytes[4..24])?;
+                let wg_public_key = WgKey::from_slice(&bytes[24..56])?;
+                Ok(Identity {
+                    mesh_ip,
+                    eth_address,
+                    wg_public_key,
+                    nickname: None,
+                })
+            }
+            (false, true) => {
+                // ipv6 case
+                let mesh_ip = Ipv6Addr::new(
+                    u16::from_be_bytes([bytes[0], bytes[1]]),
+                    u16::from_be_bytes([bytes[2], bytes[3]]),
+                    u16::from_be_bytes([bytes[4], bytes[5]]),
+                    u16::from_be_bytes([bytes[6], bytes[7]]),
+                    u16::from_be_bytes([bytes[8], bytes[9]]),
+                    u16::from_be_bytes([bytes[10], bytes[11]]),
+                    u16::from_be_bytes([bytes[12], bytes[13]]),
+                    u16::from_be_bytes([bytes[14], bytes[15]]),
+                );
+                let eth_address = Address::from_slice(&bytes[16..36])?;
+                let wg_public_key = WgKey::from_slice(&bytes[36..68])?;
+                Ok(Identity {
+                    mesh_ip: IpAddr::V6(mesh_ip),
+                    eth_address,
+                    wg_public_key,
+                    nickname: None,
+                })
+            }
+        }
     }
 }
 
