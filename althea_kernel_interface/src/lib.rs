@@ -92,6 +92,7 @@ pub enum KernelInterfaceError {
     FailedToGetSystemTime,
     FailedToGetSystemKernelVersion,
     ParseError(String),
+    FromUtf8Error,
 }
 
 impl fmt::Display for KernelInterfaceError {
@@ -134,6 +135,7 @@ impl fmt::Display for KernelInterfaceError {
             KernelInterfaceError::FailedToGetSystemKernelVersion => {
                 write!(f, "Failed to get system kernel version!")
             }
+            KernelInterfaceError::FromUtf8Error => write!(f, "Could not parse from utf8 output"),
         }
     }
 }
