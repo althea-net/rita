@@ -245,10 +245,6 @@ fn manage_gateway() {
     if let Some(external_nic) = settings::get_rita_common().network.external_nic {
         if KI.is_iface_up(&external_nic).unwrap_or(false) {
             if let Ok(interfaces) = get_interfaces() {
-                info!("We are a Gateway");
-                // this flag is used to handle billing around the corner case
-                set_gateway(true);
-
                 // This is used to insert a route for each dns server in /etc/resolv.conf to override
                 // the wg_exit default route, this is needed for bootstrapping as a gateway can not
                 // resolve the exit ip addresses in order to perform peer discovery without these rules
@@ -256,6 +252,9 @@ fn manage_gateway() {
                 // this check
                 if let Some(mode) = interfaces.get(&external_nic) {
                     if matches!(mode, InterfaceMode::Wan | InterfaceMode::StaticWan { .. }) {
+                        info!("We are a Gateway");
+                        // this flag is used to handle billing around the corner case
+                        set_gateway(true);
                         let mut common = settings::get_rita_common();
                         match KI.get_resolv_servers() {
                             Ok(s) => {
