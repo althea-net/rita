@@ -26,7 +26,6 @@ use althea_types::ExitState;
 use antenna_forwarding_client::start_antenna_forwarding_proxy;
 use rita_common::dashboard::interfaces::get_interfaces;
 use rita_common::dashboard::interfaces::InterfaceMode;
-use rita_common::rita_loop::set_gateway;
 use rita_common::tunnel_manager::tm_get_neighbors;
 use rita_common::usage_tracker::get_current_hour;
 use rita_common::usage_tracker::get_last_saved_usage_hour;
@@ -248,10 +247,6 @@ fn manage_gateway() {
     if let Some(external_nic) = settings::get_rita_common().network.external_nic {
         if is_iface_up(&external_nic).unwrap_or(false) {
             if let Ok(interfaces) = get_interfaces() {
-                info!("We are a Gateway");
-                // this flag is used to handle billing around the corner case
-                set_gateway(true);
-
                 // This is used to insert a route for each dns server in /etc/resolv.conf to override
                 // the wg_exit default route, this is needed for bootstrapping as a gateway can not
                 // resolve the exit ip addresses in order to perform peer discovery without these rules
