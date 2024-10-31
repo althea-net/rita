@@ -17,7 +17,6 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::process::Command;
 use std::process::Stdio;
-use std::str::from_utf8;
 use std::time::Duration;
 
 /// Gets the load average and memory of the system from /proc should be plenty
@@ -403,44 +402,42 @@ fn get_conntrack_info() -> Option<ConntrackInfo> {
 
 /// Device names are in the form wlan0, wlan1 etc
 fn parse_wifi_device_names() -> Result<Vec<String>, Error> {
-    // We parse /etc/config/wireless which is an openwrt config. We return an error if not openwrt
-    if KI.is_openwrt() {
-        let mut ret = Vec::new();
-
-        let lines = KI.run_command("uci", &["show", "wireless"])?;
-        let lines: Vec<&str> = from_utf8(&lines.stdout)?.lines().collect();
-
-        // trying to get lines 'wireless.default_radio1.ifname='wlan1''
-        for line in lines {
-            if line.contains("wireless.default_radio") && line.contains("device") {
-                let name = match line.split('=').collect::<Vec<&str>>().last() {
-                    Some(a) => *a,
-                    None => {
-                        error!("Cannot parse wifi string {}", line);
-                        continue;
-                    }
-                };
-                let name = name.replace('\'', "");
-                ret.push(name)
+    // Call iw dev to get a list of wifi interfaces
+    let res = Command::new("iw")
+        .args(["dev"])
+        .stdout(Stdio::piped())
+        .output();
+    match res {
+        Ok(a) => match String::from_utf8(a.stdout) {
+            Ok(a) => Ok(extract_wifi_ifnames(&a)),
+            Err(e) => {
+                error!("Unable to parse iw dev output {:?}", e);
+                Err(Error::FromUtf8Error)
             }
-        }
-        Ok(ret)
-    } else {
-        // Fallback to /proc/ parsing if no openwrt
-        let mut ret = Vec::new();
-        let path = "/proc/net/wireless";
-        let lines = get_lines(path)?;
-        for line in lines {
-            if line.contains(':') {
-                let name: Vec<&str> = line.split(':').collect();
-                let name = name[0];
-                let name = name.replace(' ', "");
-                ret.push(name.to_string());
-            }
-        }
-
-        Ok(ret)
+        },
+        Err(e) => Err(Error::ParseError(e.to_string())),
     }
+}
+
+fn extract_wifi_ifnames(dev_output: &str) -> Vec<String> {
+    let mut ret: Vec<String> = vec![];
+
+    // we are looking for the line "Interface [ifname]"
+    let mut iter = dev_output.split_ascii_whitespace();
+    loop {
+        let to_struct = iter.next();
+        if let Some(to_struct) = to_struct {
+            if to_struct == "Interface" {
+                let ifname = iter.next();
+                if let Some(ifname) = ifname {
+                    ret.push(ifname.to_string());
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    ret
 }
 
 fn get_wifi_survey_info(dev: &str) -> Vec<WifiSurveyData> {
@@ -705,5 +702,39 @@ mod test {
                 .lines()
                 .count()
         );
+    }
+
+    #[test]
+    fn test_parse_wifi_device_names() {
+        // sample output from iw dev
+        let iw_dev_output = "phy#1
+	Interface wlan1
+		ifindex 12
+		wdev 0x100000002
+		addr 12:23:34:45:56:67
+		ssid altheahome-5
+		type AP
+		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
+		txpower 23.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	3991833	0	0	0	0	1112061710		3991837
+phy#0
+	Interface wlan0
+		ifindex 11
+		wdev 0x2
+		addr 76:65:54:43:32:21
+		ssid altheahome-2.4
+		type AP
+		channel 11 (2462 MHz), width: 20 MHz, center1: 2462 MHz
+		txpower 30.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	3991759	0	0	0	3	1112047714		3991791
+";
+        let res = extract_wifi_ifnames(iw_dev_output);
+        assert!(res.len() == 2);
+        assert!(res.contains(&"wlan0".to_string()));
+        assert!(res.contains(&"wlan1".to_string()));
     }
 }
