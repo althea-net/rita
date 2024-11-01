@@ -374,7 +374,7 @@ mod tests {
         let mut history = HashSet::new();
         for _ in 0..1000 {
             let ip = generate_mesh_ip().unwrap();
-            if history.get(&ip).is_some() {
+            if history.contains(&ip) {
                 panic!("Got duplicate ip {}", ip)
             } else {
                 history.insert(ip);

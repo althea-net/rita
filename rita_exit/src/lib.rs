@@ -24,7 +24,6 @@ pub use crate::database::geoip::*;
 pub use crate::database::in_memory_database::*;
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::debts::*;
-use rita_common::dashboard::development::*;
 use rita_common::dashboard::nickname::*;
 use rita_common::dashboard::own_info::READABLE_VERSION;
 use rita_common::dashboard::own_info::*;
@@ -72,7 +71,6 @@ pub fn start_rita_exit_dashboard() {
                     .route("/settings", web::post().to(set_settings))
                     .route("/version", web::get().to(version))
                     .route("/wg_public_key", web::get().to(get_wg_public_key))
-                    .route("/wipe", web::post().to(wipe))
                     .route("/debts", web::get().to(get_debts))
                     .route("/debts/reset", web::post().to(reset_debt))
                     .route("/withdraw/{address}/{amount}", web::post().to(withdraw))

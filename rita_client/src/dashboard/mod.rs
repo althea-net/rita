@@ -54,7 +54,6 @@ use actix_async::System;
 use actix_web_async::{web, App, HttpServer};
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::debts::*;
-use rita_common::dashboard::development::*;
 use rita_common::dashboard::nickname::*;
 use rita_common::dashboard::own_info::*;
 use rita_common::dashboard::settings::*;
@@ -186,7 +185,6 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                         "/remote_access/{status}",
                         web::post().to(set_remote_access_status),
                     )
-                    .route("/wipe", web::post().to(wipe))
                     .route("/localization", web::get().to(get_localization))
                     .route(
                         "/installation_details",
