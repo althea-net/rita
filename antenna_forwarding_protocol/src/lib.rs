@@ -816,7 +816,6 @@ mod tests {
     use super::Identity;
     use super::WgKey;
     use rand::Rng;
-    use std::u16::MAX as U16MAX;
 
     lazy_static! {
         pub static ref FORWARDING_SERVER_PUBLIC_KEY: WgKey =
@@ -859,7 +858,7 @@ mod tests {
         // should be small enough to be fast but long enough
         // to cause issues
         let mut len: u32 = rng.gen();
-        while len > U16MAX as u32 * 4 {
+        while len > u16::MAX as u32 * 4 {
             len = rng.gen();
         }
         let mut out = Vec::new();
@@ -875,7 +874,7 @@ mod tests {
         // should be small enough to be fast but long enough
         // to cause issues
         let mut len: u32 = rng.gen();
-        while len > U16MAX as u32 * 4 || len < U16MAX as u32 {
+        while len > u16::MAX as u32 * 4 || len < u16::MAX as u32 {
             len = rng.gen();
         }
         let mut out = Vec::new();

@@ -41,7 +41,6 @@ pub use error::RitaCommonError;
 
 pub use crate::dashboard::babel::*;
 pub use crate::dashboard::debts::*;
-pub use crate::dashboard::development::*;
 pub use crate::dashboard::nickname::*;
 pub use crate::dashboard::own_info::*;
 pub use crate::dashboard::settings::*;
