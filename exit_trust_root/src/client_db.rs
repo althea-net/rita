@@ -9,7 +9,7 @@ use clarity::{
     abi::{encode_call, AbiToken},
     Address, PrivateKey, Uint256,
 };
-use std::{net::IpAddr, time::Duration, vec};
+use std::{collections::HashSet, net::IpAddr, time::Duration, vec};
 use tokio::time::timeout as future_timeout;
 use web30::{
     client::Web3,
@@ -24,7 +24,7 @@ pub async fn get_all_registered_clients(
     web30: &Web3,
     requester_address: Address,
     contract: Address,
-) -> Result<Vec<Identity>, Web3Error> {
+) -> Result<HashSet<Identity>, Web3Error> {
     let payload = encode_call("getAllRegisteredUsers()", &[])?;
     let res = web30
         .simulate_transaction(
@@ -33,7 +33,8 @@ pub async fn get_all_registered_clients(
         )
         .await?;
 
-    convert_althea_types_to_web3_error(Identity::decode_array_from_eth_abi(res))
+    let val = convert_althea_types_to_web3_error(Identity::decode_array_from_eth_abi(res))?;
+    Ok(val.into_iter().collect())
 }
 
 pub async fn get_registered_client_using_wgkey(

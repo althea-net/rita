@@ -3092,7 +3092,6 @@ dependencies = [
  "exit_trust_root",
  "handlebars",
  "ipnetwork",
- "lazy_static",
  "lettre",
  "log",
  "num256",

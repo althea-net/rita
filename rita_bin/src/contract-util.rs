@@ -16,7 +16,6 @@ use docopt::Docopt;
 use exit_trust_root::client_db::add_exits_to_registration_list;
 use exit_trust_root::client_db::add_users_to_registered_list;
 use exit_trust_root::client_db::get_all_registered_clients;
-use exit_trust_root::register_client_batch_loop::get_clients_hashset;
 use exit_trust_root::register_client_batch_loop::MAX_BATCH_SIZE;
 use log::{error, info};
 use rita_db_migration::{
@@ -78,7 +77,6 @@ async fn main() {
                     panic!("Failed to get list of already registered clients {:?}", e);
                 }
             };
-        let all_contract_clients = get_clients_hashset(all_contract_clients);
 
         let db_conn = get_database_connection(db_url).unwrap();
 

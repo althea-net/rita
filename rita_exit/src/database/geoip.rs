@@ -1,4 +1,4 @@
-use actix::System;
+use crate::RitaExitError;
 use althea_kernel_interface::interface_tools::get_wg_remote_ip;
 use althea_types::regions::Regions;
 use babel_monitor::open_babel_stream;
@@ -8,9 +8,6 @@ use rita_common::utils::ip_increment::is_unicast_link_local;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Duration;
-
-use crate::database::RITA_EXIT_STATE;
-use crate::RitaExitError;
 
 /// gets the gateway ip for a given mesh IP
 pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, Box<RitaExitError>> {
@@ -131,7 +128,10 @@ struct CountryDetails {
 }
 
 /// get ISO country code from ip, consults a in memory cache
-pub fn get_country(ip: IpAddr) -> Result<Regions, Box<RitaExitError>> {
+pub async fn get_country(
+    geoip_cache: &mut HashMap<IpAddr, Regions>,
+    ip: IpAddr,
+) -> Result<Regions, Box<RitaExitError>> {
     trace!("get GeoIP country for {}", ip.to_string());
 
     // if allowed countries is not configured we don't care and will use
@@ -170,12 +170,7 @@ pub fn get_country(ip: IpAddr) -> Result<Regions, Box<RitaExitError>> {
 
     // we have to turn this option into a string in order to avoid
     // the borrow checker trying to keep this lock open for a long period
-    let cache_result = RITA_EXIT_STATE
-        .read()
-        .unwrap()
-        .geoip_cache
-        .get(&ip)
-        .copied();
+    let cache_result = geoip_cache.get(&ip).copied();
 
     match cache_result {
         Some(code) => Ok(code),
@@ -187,55 +182,51 @@ pub fn get_country(ip: IpAddr) -> Result<Regions, Box<RitaExitError>> {
                 ip.to_string()
             );
             // run in async closure and return the result
-            let runner = System::new();
-            runner.block_on(async move {
-                let client = awc::Client::new();
-                if let Ok(mut res) = client
-                    .get(&geo_ip_url)
-                    .basic_auth(api_user, api_key)
-                    .timeout(Duration::from_secs(1))
-                    .send()
-                    .await
-                {
-                    trace!("Got geoip result {:?}", res);
-                    if let Ok(res) = res.json().await {
-                        let value: GeoIpRet = res;
-                        let code = match value.country.iso_code.parse() {
-                            Ok(r) => r,
-                            Err(_) => {
-                                error!(
-                                    "Failed to parse geoip response {:?}",
-                                    value.country.iso_code
-                                );
-                                Regions::UnkownRegion
-                            }
-                        };
-                        trace!("Adding GeoIP value {:?} to cache", code);
-                        RITA_EXIT_STATE
-                            .write()
-                            .unwrap()
-                            .geoip_cache
-                            .insert(ip, code);
-                        trace!("Added to cache, returning");
-                        Ok(code)
-                    } else {
-                        Err(Box::new(RitaExitError::MiscStringError(
-                            "Failed to deserialize geoip response".to_string(),
-                        )))
-                    }
+            let client = awc::Client::new();
+            if let Ok(mut res) = client
+                .get(&geo_ip_url)
+                .basic_auth(api_user, api_key)
+                .timeout(Duration::from_secs(1))
+                .send()
+                .await
+            {
+                trace!("Got geoip result {:?}", res);
+                if let Ok(res) = res.json().await {
+                    let value: GeoIpRet = res;
+                    let code = match value.country.iso_code.parse() {
+                        Ok(r) => r,
+                        Err(_) => {
+                            error!(
+                                "Failed to parse geoip response {:?}",
+                                value.country.iso_code
+                            );
+                            Regions::UnkownRegion
+                        }
+                    };
+                    trace!("Adding GeoIP value {:?} to cache", code);
+                    geoip_cache.insert(ip, code);
+                    trace!("Added to cache, returning");
+                    Ok(code)
                 } else {
                     Err(Box::new(RitaExitError::MiscStringError(
-                        "Request failed".to_string(),
+                        "Failed to deserialize geoip response".to_string(),
                     )))
                 }
-            })
+            } else {
+                Err(Box::new(RitaExitError::MiscStringError(
+                    "Request failed".to_string(),
+                )))
+            }
         }
     }
 }
 
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
-pub fn verify_ip(request_ip: IpAddr) -> Result<bool, Box<RitaExitError>> {
+pub async fn verify_ip(
+    geoip_cache: &mut HashMap<IpAddr, Regions>,
+    request_ip: IpAddr,
+) -> Result<bool, Box<RitaExitError>> {
     // in this case we have a gateway directly attached to the exit, so our
     // peer address for them will be an fe80 linklocal ip address. When we
     // detect this we know that they are in the allowed countries list because
@@ -249,7 +240,7 @@ pub fn verify_ip(request_ip: IpAddr) -> Result<bool, Box<RitaExitError>> {
     if settings::get_rita_exit().allowed_countries.is_empty() {
         Ok(true)
     } else {
-        let country = get_country(request_ip)?;
+        let country = get_country(geoip_cache, request_ip).await?;
         if !settings::get_rita_exit().allowed_countries.is_empty()
             && !settings::get_rita_exit()
                 .allowed_countries
@@ -262,8 +253,45 @@ pub fn verify_ip(request_ip: IpAddr) -> Result<bool, Box<RitaExitError>> {
     }
 }
 
-#[test]
-#[ignore]
-fn test_get_country() {
-    get_country("8.8.8.8".parse().unwrap()).unwrap();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_get_country() {
+        let mut geoip_cache = HashMap::new();
+        let ip = IpAddr::from_str("8.8.8.8").unwrap();
+        let result = get_country(&mut geoip_cache, ip).await;
+        assert!(result.is_ok());
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_get_gateway_ip_single() {
+        let ip = IpAddr::from_str("2001:4860:4860::8888").unwrap();
+        let result = get_gateway_ip_single(ip);
+        assert!(result.is_ok());
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_get_gateway_ip_bulk() {
+        let ips = vec![
+            IpAddr::from_str("2001:4860:4860::8888").unwrap(),
+            IpAddr::from_str("2001:4860:4860::8844").unwrap(),
+        ];
+        let result = get_gateway_ip_bulk(ips, Duration::from_secs(5));
+        assert!(result.is_ok());
+    }
+
+    #[actix_web::test]
+    #[ignore]
+    async fn test_verify_ip() {
+        let mut geoip_cache = HashMap::new();
+        let ip = IpAddr::from_str("8.8.8.8").unwrap();
+        let result = verify_ip(&mut geoip_cache, ip).await;
+        assert!(result.is_ok());
+    }
 }

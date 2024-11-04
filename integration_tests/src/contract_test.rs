@@ -201,7 +201,7 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
     // Try requests when there are no users present
     let res = get_all_registered_clients(&contact, miner_pub_key, db_addr).await;
 
-    assert_eq!(res.unwrap(), vec![]);
+    assert_eq!(res.unwrap(), HashSet::new());
 
     let res =
         get_registered_client_using_wgkey(user_1.wg_public_key, miner_pub_key, db_addr, &contact)
@@ -251,7 +251,9 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
         .await
         .unwrap();
 
-    assert_eq!(vec![user_1], res);
+    let mut set = HashSet::new();
+    set.insert(user_1);
+    assert_eq!(set, res);
 
     let nonce = contact
         .eth_get_transaction_count(miner_pub_key)
@@ -342,7 +344,14 @@ pub async fn validate_contract_user_functionality(db_addr: Address) {
 
     info!("All users are : {:?}", res);
 
-    assert_eq!(vec![user_1, user_2, user_3, user_4, user_5, user_6], res);
+    let mut set = HashSet::new();
+    set.insert(user_1);
+    set.insert(user_2);
+    set.insert(user_3);
+    set.insert(user_4);
+    set.insert(user_5);
+    set.insert(user_6);
+    assert_eq!(set, res);
 
     info!("Trying to retrive user 1");
     let res =

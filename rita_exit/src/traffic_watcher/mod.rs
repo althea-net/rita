@@ -8,7 +8,6 @@
 //!
 //! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
 
-use crate::rita_loop::ExitLock;
 use crate::rita_loop::EXIT_INTERFACE;
 use crate::rita_loop::LEGACY_INTERFACE;
 use crate::RitaExitError;
@@ -151,12 +150,10 @@ fn debts_logging(debts: &HashMap<Identity, i128>) {
 
 /// This traffic watcher watches how much traffic each we send and receive from each client.
 pub fn watch_exit_traffic(
-    usage_history: ExitLock,
+    mut usage_history: HashMap<WgKey, WgUsage>,
     routes: &[Route],
-    clients: &[Identity],
+    clients: Vec<Identity>,
 ) -> Result<(), Box<RitaExitError>> {
-    let mut usage_history = usage_history.write().unwrap();
-
     // Since Althea is a pay per forward network we must add a surcharge for transaction fees
     // to our own price. In the case Exit -> A -> B -> C the exit pays A a lump sum for it's own
     // fees as well as B's fees. This means the exit pays the transaction fee (a percentage) for
@@ -176,7 +173,7 @@ pub fn watch_exit_traffic(
         }
     };
 
-    let ret = generate_helper_maps(&our_id, clients);
+    let ret = generate_helper_maps(&our_id, &clients);
     let identities = ret.wg_to_id;
     let id_from_ip = ret.ip_to_id;
     let destinations = get_babel_info(routes, our_id, id_from_ip);

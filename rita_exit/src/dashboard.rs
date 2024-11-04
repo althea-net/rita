@@ -1,5 +1,5 @@
 pub use crate::database::geoip::*;
-pub use crate::database::in_memory_database::*;
+pub use crate::database::ipddr_assignment::*;
 use actix::System;
 use actix_web::web;
 use actix_web::App;

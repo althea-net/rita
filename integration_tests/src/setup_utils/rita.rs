@@ -36,6 +36,7 @@ use rita_common::rita_loop::{
     write_to_disk::{save_to_disk_loop, SettingsOnDisk},
 };
 use rita_exit::rita_loop::start_rita_exit_list_endpoint;
+use rita_exit::ClientListAnIpAssignmentMap;
 use rita_exit::{
     dashboard::start_rita_exit_dashboard,
     operator_update::update_loop::start_operator_update_loop,
@@ -49,6 +50,7 @@ use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Instant;
+use std::vec;
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -286,14 +288,21 @@ pub fn spawn_rita_exit(
             settings::get_rita_exit(),
         )));
 
+        let client_and_ip_map = Arc::new(RwLock::new(ClientListAnIpAssignmentMap::new(
+            HashSet::new(),
+        )));
+
         let workers = 4;
         start_core_rita_endpoints(workers as usize);
-        start_rita_exit_endpoints(workers as usize);
-        start_rita_exit_list_endpoint(workers as usize);
+        start_rita_exit_endpoints(client_and_ip_map.clone());
+        start_rita_exit_list_endpoint();
         start_rita_exit_dashboard(Arc::new(RwLock::new(None)));
 
         // this one blocks
-        start_rita_exit_loop(vec![]);
+        let system = actix::System::new();
+        system.block_on(async {
+            start_rita_exit_loop(client_and_ip_map).await;
+        });
     });
 
     // wait for the child thread to finish initializing

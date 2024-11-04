@@ -13,22 +13,25 @@
 use crate::database::{
     enforce_exit_clients, setup_clients, validate_clients_region, ExitClientSetupStates,
 };
-use crate::network_endpoints::*;
 use crate::traffic_watcher::watch_exit_traffic;
+use crate::{network_endpoints::*, ClientListAnIpAssignmentMap, RitaExitError};
 use actix::System as AsyncSystem;
 use actix_web::{web, App, HttpServer};
 use althea_kernel_interface::exit_server_tunnel::{one_time_exit_setup, setup_nat};
 use althea_kernel_interface::setup_wg_if::create_blank_wg_interface;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::ExitClient;
+use althea_types::regions::Regions;
 use althea_types::{Identity, SignedExitServerList, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
 use clarity::Address;
 use exit_trust_root::client_db::get_all_registered_clients;
+use ipnetwork::{IpNetwork, Ipv6Network};
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
 use settings::exit::EXIT_LIST_PORT;
 use std::collections::{HashMap, HashSet};
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
@@ -45,70 +48,227 @@ pub const LEGACY_INTERFACE: &str = "wg_exit";
 pub const EXIT_INTERFACE: &str = "wg_exit_v2";
 
 /// Cache of rita exit state to track across ticks
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
-pub struct RitaExitCache {
-    // a cache of what tunnels we had setup last round, used to prevent extra setup ops
+#[derive(Clone, Debug)]
+pub struct RitaExitData {
+    /// a cache of what tunnels we had setup last round, used to prevent extra setup ops
     wg_clients: HashSet<ExitClient>,
-    // a list of client debts from the last round, to prevent extra enforcement ops
+    /// a list of client debts from the last round, to prevent extra enforcement ops
     debt_actions: HashSet<(Identity, DebtAction)>,
-    // if we have successfully setup the wg exit tunnel in the past, if false we have never
-    // setup exit clients and should crash if we fail to do so, otherwise we are preventing
-    // proper failover
+    /// if we have successfully setup the wg exit tunnel in the past, if false we have never
+    /// setup exit clients and should crash if we fail to do so, otherwise we are preventing
+    /// proper failover
     successful_setup: bool,
-    // cache of b19 routers we have successful rules and routes for
+    /// cache of b19 routers we have successful rules and routes for
     wg_exit_clients: HashSet<WgKey>,
-    // cache of b20 routers we have successful rules and routes for
+    /// cache of b20 routers we have successful rules and routes for
     wg_exit_v2_clients: HashSet<WgKey>,
-    // A blacklist of clients that we fail geoip verification for. We tear down these routes
+    /// A blacklist of clients that we fail geoip verification for. We tear down these routes
     geoip_blacklist: Vec<Identity>,
+    /// A list of geoip info that we have already requested since startup, to reduce api usage
+    geoip_cache: HashMap<IpAddr, Regions>,
+    // ip assignments for clients, represented as a locked map so that we can tell clients what ip's they where
+    // assigned in the actix worker threads which also has a copy of this lock
+    client_list_and_ip_assignments: Arc<RwLock<ClientListAnIpAssignmentMap>>,
+    /// A cache of the last usage of the wg tunnels, this must be maintained from when the tunnel for a specific
+    /// client is created to when it is destroyed/recreated otherwise overbilling will occur
+    usage_history: HashMap<WgKey, WgUsage>,
 }
 
-pub type ExitLock = Arc<RwLock<HashMap<WgKey, WgUsage>>>;
+impl RitaExitData {
+    pub fn new(client_list_and_ip_assignments: Arc<RwLock<ClientListAnIpAssignmentMap>>) -> Self {
+        RitaExitData {
+            wg_clients: HashSet::new(),
+            debt_actions: HashSet::new(),
+            successful_setup: false,
+            wg_exit_clients: HashSet::new(),
+            wg_exit_v2_clients: HashSet::new(),
+            geoip_blacklist: Vec::new(),
+            geoip_cache: HashMap::new(),
+            client_list_and_ip_assignments,
+            usage_history: HashMap::new(),
+        }
+    }
+
+    pub fn is_client_registered(&self, client: Identity) -> bool {
+        self.client_list_and_ip_assignments
+            .read()
+            .unwrap()
+            .is_client_registered(client)
+    }
+
+    pub fn get_ipv6_assignments(&self) -> HashMap<Ipv6Network, Identity> {
+        self.client_list_and_ip_assignments
+            .read()
+            .unwrap()
+            .get_ipv6_assignments()
+    }
+
+    pub fn get_internal_ip_assignments(&self) -> HashMap<Ipv4Addr, Identity> {
+        self.client_list_and_ip_assignments
+            .read()
+            .unwrap()
+            .get_internal_ip_assignments()
+    }
+
+    pub fn id_to_exit_client(&self, id: Identity) -> Result<ExitClient, Box<RitaExitError>> {
+        self.client_list_and_ip_assignments
+            .write()
+            .unwrap()
+            .id_to_exit_client(id)
+    }
+
+    pub fn get_or_add_client_internal_ip(
+        &self,
+        their_record: Identity,
+        netmask: u8,
+        gateway_ip: Ipv4Addr,
+    ) -> Result<Ipv4Addr, Box<RitaExitError>> {
+        self.client_list_and_ip_assignments
+            .write()
+            .unwrap()
+            .get_or_add_client_internal_ip(their_record, netmask, gateway_ip)
+    }
+
+    pub fn get_or_add_client_ipv6(
+        &self,
+        their_record: Identity,
+        exit_sub: Option<IpNetwork>,
+        client_subnet_size: u8,
+    ) -> Result<Option<Ipv6Network>, Box<RitaExitError>> {
+        self.client_list_and_ip_assignments
+            .write()
+            .unwrap()
+            .get_or_add_client_ipv6(their_record, exit_sub, client_subnet_size)
+    }
+
+    pub fn get_setup_states(&self) -> ExitClientSetupStates {
+        ExitClientSetupStates {
+            old_clients: self.wg_clients.clone(),
+            wg_exit_clients: self.wg_exit_clients.clone(),
+            wg_exit_v2_clients: self.wg_exit_v2_clients.clone(),
+        }
+    }
+
+    pub fn set_setup_states(&mut self, states: ExitClientSetupStates) {
+        self.wg_clients = states.old_clients;
+        self.wg_exit_clients = states.wg_exit_clients;
+        self.wg_exit_v2_clients = states.wg_exit_v2_clients;
+    }
+
+    pub fn get_all_registered_clients(&self) -> HashSet<Identity> {
+        self.client_list_and_ip_assignments
+            .read()
+            .unwrap()
+            .get_registered_clients()
+    }
+
+    pub fn set_registered_clients(&mut self, clients: HashSet<Identity>) {
+        self.client_list_and_ip_assignments
+            .write()
+            .unwrap()
+            .set_registered_clients(clients);
+    }
+
+    pub fn get_geoip_blacklist(&self) -> Vec<Identity> {
+        self.geoip_blacklist.clone()
+    }
+
+    pub fn get_debt_actions(&self) -> HashSet<(Identity, DebtAction)> {
+        self.debt_actions.clone()
+    }
+
+    pub fn set_debt_actions(&mut self, debt_actions: HashSet<(Identity, DebtAction)>) {
+        self.debt_actions = debt_actions;
+    }
+}
 
 /// Starts the rita exit billing thread, this thread deals with blocking db
-/// calls and performs various tasks required for billing. The tasks interacting
-/// with actix are the most troublesome because the actix system may restart
-/// and crash this thread. To prevent that and other crashes we have a watchdog
-/// thread which simply restarts the internal thread.
-pub fn start_rita_exit_loop(reg_clients_list: Vec<Identity>) {
+/// calls and performs various tasks required for billing. If this thread crashes
+/// due to consistenty requirements the whole application should be restarted
+/// this will cause the wg tunnels to get torn down and rebuilt, putting things back into
+/// a consistent state
+pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpAssignmentMap>>) {
     setup_exit_wg_tunnel();
 
-    // the last usage of the wg tunnels, if an innner thread restarts this must be preserved to prevent
-    // overbilling users
-    let usage_history = Arc::new(RwLock::new(HashMap::new()));
+    let mut rita_exit_cache = RitaExitData::new(client_and_ip_info);
+    loop {
+        let start = Instant::now();
 
-    // this will always be an error, so it's really just a loop statement
-    // with some fancy destructuring, blocking the caller thread as a watchdog
-    while let Err(e) = {
-        let reg_clients_list = reg_clients_list.clone();
-        // ARC will simply clone the same reference
-        let usage_history = usage_history.clone();
-        thread::spawn(move || {
-            // Internal exit cache that store state across multiple ticks
-            let mut rita_exit_cache = RitaExitCache::default();
-            let mut reg_clients_list = reg_clients_list.clone();
-            let runner = AsyncSystem::new();
-            runner.block_on(async move {
-                loop {
-                    reg_clients_list = update_client_list(reg_clients_list).await;
+        // Internal exit cache that store state across multiple ticks
+        rita_exit_cache.set_registered_clients(
+            update_client_list(rita_exit_cache.get_all_registered_clients()).await,
+        );
 
-                    rita_exit_cache = rita_exit_loop(
-                        reg_clients_list.clone(),
-                        rita_exit_cache,
-                        usage_history.clone(),
-                    )
-                    .await;
-                }
-            })
-        })
-        .join()
-    } {
-        error!("Exit loop thread panicked! Respawning {:?}", e);
+        let rita_exit = settings::get_rita_exit();
+        let babel_port = rita_exit.network.babel_port;
+
+        let start_bill_benchmark = Instant::now();
+        // watch and bill for traffic
+        bill(
+            babel_port,
+            start,
+            rita_exit_cache.get_all_registered_clients(),
+            rita_exit_cache.usage_history.clone(),
+        );
+        info!(
+            "Finished Rita billing in {}ms",
+            start_bill_benchmark.elapsed().as_millis()
+        );
+
+        info!("About to setup clients");
+        let start_setup_benchmark = Instant::now();
+        // Create and update client tunnels
+        match setup_clients(&mut rita_exit_cache) {
+            Ok(_) => {
+                rita_exit_cache.successful_setup = true;
+            }
+            Err(e) => error!("Setup clients failed with {:?}", e),
+        }
+        info!(
+            "Finished Rita setting up clients in {}ms",
+            start_setup_benchmark.elapsed().as_millis()
+        );
+
+        // Make sure no one we are setting up is geoip unauthorized
+        let start_region_benchmark = Instant::now();
+        info!("about to check regions");
+        let clients_list = rita_exit_cache.get_all_registered_clients();
+        if let Some(list) = check_regions(
+            &mut rita_exit_cache.geoip_cache,
+            start,
+            clients_list.iter().cloned().collect(),
+        )
+        .await
+        {
+            rita_exit_cache.geoip_blacklist = list;
+        }
+        info!(
+            "Finished Rita checking region in {}ms",
+            start_region_benchmark.elapsed().as_millis()
+        );
+        info!("About to enforce exit clients");
+        // handle enforcement on client tunnels by querying debt keeper
+        // this consumes client list
+        let start_enforce_benchmark = Instant::now();
+        match enforce_exit_clients(&mut rita_exit_cache) {
+            Ok(_) => {}
+            Err(e) => warn!("Failed to enforce exit clients with {:?}", e,),
+        }
+        info!(
+            "Finished Rita enforcement in {}ms ",
+            start_enforce_benchmark.elapsed().as_millis()
+        );
+        info!(
+            "Finished Rita exit loop in {}ms, all vars should be dropped",
+            start.elapsed().as_millis(),
+        );
+
+        thread::sleep(EXIT_LOOP_SPEED_DURATION);
     }
 }
 
 /// Updates the client list, if this is not successful the old client list is used
-async fn update_client_list(reg_clients_list: Vec<Identity>) -> Vec<Identity> {
+async fn update_client_list(reg_clients_list: HashSet<Identity>) -> HashSet<Identity> {
     let payment_settings = settings::get_rita_common().payment;
     let contract_address = settings::get_rita_exit()
         .exit_network
@@ -138,90 +298,21 @@ async fn update_client_list(reg_clients_list: Vec<Identity>) -> Vec<Identity> {
     }
 }
 
-async fn rita_exit_loop(
-    reg_clients_list: Vec<Identity>,
-    rita_exit_cache: RitaExitCache,
-    usage_history: ExitLock,
-) -> RitaExitCache {
-    let mut rita_exit_cache = rita_exit_cache;
-    let start = Instant::now();
-
-    let rita_exit = settings::get_rita_exit();
-    let babel_port = rita_exit.network.babel_port;
-
-    let ids = reg_clients_list.clone();
-    let start_bill_benchmark = Instant::now();
-    // watch and bill for traffic
-    bill(babel_port, start, ids, usage_history);
-    info!(
-        "Finished Rita billing in {}ms",
-        start_bill_benchmark.elapsed().as_millis()
-    );
-
-    info!("About to setup clients");
-    let start_setup_benchmark = Instant::now();
-    // Create and update client tunnels
-    match setup_clients(
-        reg_clients_list.clone(),
-        rita_exit_cache.geoip_blacklist.clone(),
-        ExitClientSetupStates {
-            old_clients: rita_exit_cache.wg_clients.clone(),
-            wg_exit_clients: rita_exit_cache.wg_exit_clients.clone(),
-            wg_exit_v2_clients: rita_exit_cache.wg_exit_v2_clients.clone(),
-        },
-    ) {
-        Ok(client_states) => {
-            rita_exit_cache.successful_setup = true;
-            rita_exit_cache.wg_clients = client_states.old_clients;
-            rita_exit_cache.wg_exit_clients = client_states.wg_exit_clients;
-            rita_exit_cache.wg_exit_v2_clients = client_states.wg_exit_v2_clients;
-        }
-        Err(e) => error!("Setup clients failed with {:?}", e),
-    }
-    info!(
-        "Finished Rita setting up clients in {}ms",
-        start_setup_benchmark.elapsed().as_millis()
-    );
-
-    // Make sure no one we are setting up is geoip unauthorized
-    let start_region_benchmark = Instant::now();
-    info!("about to check regions");
-    if let Some(list) = check_regions(start, reg_clients_list.clone()) {
-        rita_exit_cache.geoip_blacklist = list;
-    }
-    info!(
-        "Finished Rita checking region in {}ms",
-        start_region_benchmark.elapsed().as_millis()
-    );
-    info!("About to enforce exit clients");
-    // handle enforcement on client tunnels by querying debt keeper
-    // this consumes client list
-    let start_enforce_benchmark = Instant::now();
-    match enforce_exit_clients(reg_clients_list, &rita_exit_cache.debt_actions.clone()) {
-        Ok(new_debt_actions) => rita_exit_cache.debt_actions = new_debt_actions,
-        Err(e) => warn!("Failed to enforce exit clients with {:?}", e,),
-    }
-    info!(
-        "Finished Rita enforcement in {}ms ",
-        start_enforce_benchmark.elapsed().as_millis()
-    );
-    info!(
-        "Finished Rita exit loop in {}ms, all vars should be dropped",
-        start.elapsed().as_millis(),
-    );
-
-    thread::sleep(EXIT_LOOP_SPEED_DURATION);
-    rita_exit_cache
-}
-
-fn bill(babel_port: u16, start: Instant, ids: Vec<Identity>, usage_history: ExitLock) {
+fn bill(
+    babel_port: u16,
+    start: Instant,
+    ids: HashSet<Identity>,
+    usage_history: HashMap<WgKey, WgUsage>,
+) {
     trace!("about to try opening babel stream");
 
     match open_babel_stream(babel_port, EXIT_LOOP_TIMEOUT) {
         Ok(mut stream) => match parse_routes(&mut stream) {
             Ok(routes) => {
                 trace!("Sending traffic watcher message?");
-                if let Err(e) = watch_exit_traffic(usage_history, &routes, &ids) {
+                if let Err(e) =
+                    watch_exit_traffic(usage_history, &routes, ids.iter().cloned().collect())
+                {
                     error!(
                         "Watch exit traffic failed with {}, in {} millis",
                         e,
@@ -254,10 +345,14 @@ fn bill(babel_port: u16, start: Instant, ids: Vec<Identity>, usage_history: Exit
 
 /// Run a region validation and return a list of blacklisted clients. This list is later used
 /// in setup clients to teardown blacklisted client tunnels
-fn check_regions(start: Instant, clients_list: Vec<Identity>) -> Option<Vec<Identity>> {
+async fn check_regions(
+    geoip_cache: &mut HashMap<IpAddr, Regions>,
+    start: Instant,
+    clients_list: Vec<Identity>,
+) -> Option<Vec<Identity>> {
     let val = settings::get_rita_exit().allowed_countries.is_empty();
     if !val {
-        let res = validate_clients_region(clients_list);
+        let res = validate_clients_region(geoip_cache, clients_list).await;
         match res {
             Err(e) => {
                 warn!(
@@ -331,19 +426,21 @@ fn setup_exit_wg_tunnel() {
     .unwrap();
 }
 
-pub fn start_rita_exit_endpoints(workers: usize) {
+/// Starts the rita exit endpoints, passing the ip assignments and registered clients lists, these are shared via cross-thread lock
+/// with the main rita exit loop.
+pub fn start_rita_exit_endpoints(ip_assignments: Arc<RwLock<ClientListAnIpAssignmentMap>>) {
+    let web_data = web::Data::new(ip_assignments);
     thread::spawn(move || {
         let runner = AsyncSystem::new();
         runner.block_on(async move {
-            // Exit stuff, huge threadpool to offset Pgsql blocking
-            let _res = HttpServer::new(|| {
+            let _res = HttpServer::new(move || {
                 App::new()
                     .route("/secure_setup", web::post().to(secure_setup_request))
                     .route("/secure_status", web::post().to(secure_status_request))
                     .route("/client_debt", web::post().to(get_client_debt))
                     .route("/time", web::get().to(get_exit_timestamp_http))
+                    .app_data(web_data.clone())
             })
-            .workers(workers)
             .bind(format!(
                 "[::0]:{}",
                 settings::get_rita_exit().exit_network.exit_hello_port
@@ -360,7 +457,7 @@ pub fn start_rita_exit_endpoints(workers: usize) {
 /// instance of this IP due to the way babel handles multihoming. Due to race conditions we don't explicitly
 /// bind to the IP for this listener, we instead bind to all available IPs. As we make tunnels kernel interface
 /// will add the ip to each wg tunnel and then babel will handle the rest.
-pub fn start_rita_exit_list_endpoint(workers: usize) {
+pub fn start_rita_exit_list_endpoint() {
     let exit_contract_data_cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>> =
         Arc::new(RwLock::new(HashMap::new()));
     let web_data = web::Data::new(exit_contract_data_cache.clone());
@@ -372,7 +469,6 @@ pub fn start_rita_exit_list_endpoint(workers: usize) {
                     .route("/exit_list", web::post().to(get_exit_list))
                     .app_data(web_data.clone())
             })
-            .workers(workers)
             .bind(format!("[::0]:{}", EXIT_LIST_PORT,))
             .unwrap()
             .shutdown_timeout(0)

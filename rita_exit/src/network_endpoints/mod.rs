@@ -1,9 +1,8 @@
 //! Network endpoints for rita-exit that are not dashboard or local infromational endpoints
 //! these are called by rita instances to operate the mesh
 
-use crate::database::{client_status, signup_client};
-
-use crate::RitaExitError;
+use crate::database::signup_client;
+use crate::{ClientListAnIpAssignmentMap, RitaExitError};
 use actix_web::web;
 use actix_web::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
 use althea_types::Identity;
@@ -18,14 +17,12 @@ use crypto_box::SecretKey;
 use num256::Int256;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
-use rita_common::rita_loop::get_web3_server;
 use settings::get_rita_exit;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::time::SystemTime;
-use web30::client::Web3;
 
 // Timeout to contact Althea contract and query info about a user
 pub const CLIENT_STATUS_TIMEOUT: Duration = Duration::from_secs(20);
@@ -64,8 +61,10 @@ fn decrypt_exit_client_id_helper(
 
 pub async fn secure_setup_request(
     request: (Json<EncryptedExitClientIdentity>, HttpRequest),
+    client_and_ip_info: web::Data<Arc<RwLock<ClientListAnIpAssignmentMap>>>,
 ) -> HttpResponse {
     let exit_settings = get_rita_exit();
+    let client_and_ip_info = client_and_ip_info.into_inner();
 
     let our_secretkey: WgKey = exit_settings.network.wg_private_key.unwrap();
 
@@ -103,7 +102,7 @@ pub async fn secure_setup_request(
 
     let remote_mesh_ip = remote_mesh_socket.ip();
     if remote_mesh_ip == client_mesh_ip {
-        let result = signup_client(*client).await;
+        let result = signup_client(*client, client_and_ip_info).await;
         match result {
             Ok(exit_state) => HttpResponse::Ok().json(encrypt_setup_return(
                 exit_state,
@@ -128,17 +127,12 @@ pub async fn secure_setup_request(
     }
 }
 
-pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
+pub async fn secure_status_request(
+    request: Json<EncryptedExitClientIdentity>,
+    client_and_ip_info: web::Data<Arc<RwLock<ClientListAnIpAssignmentMap>>>,
+) -> HttpResponse {
     let exit_settings = get_rita_exit();
     let our_secretkey: WgKey = exit_settings.network.wg_private_key.unwrap();
-
-    let our_address = exit_settings
-        .payment
-        .eth_private_key
-        .expect("Why dont we have a private key?")
-        .to_address();
-    let contract_addr = exit_settings.exit_network.registered_users_contract_addr;
-    let contact = Web3::new(&get_web3_server(), CLIENT_STATUS_TIMEOUT);
 
     let their_wg_pubkey = request.pubkey;
     let their_nacl_pubkey = request.pubkey.into();
@@ -156,7 +150,11 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
     trace!("got status request from {}", their_wg_pubkey);
 
     // We use our eth address as the requesting address
-    let state = match client_status(*decrypted_id, our_address, contract_addr, &contact).await {
+    let state = match client_and_ip_info
+        .write()
+        .unwrap()
+        .get_client_status(*decrypted_id)
+    {
         Ok(state) => state,
         Err(e) => match *e {
             RitaExitError::NoClientError => {

@@ -16,7 +16,6 @@ babel_monitor = { path = "../babel_monitor" }
 actix = {workspace = true}
 awc = {workspace = true}
 handlebars = "5.1"
-lazy_static = "1.5"
 ipnetwork = "0.20"
 clarity = {workspace = true}
 serde = "1.0"

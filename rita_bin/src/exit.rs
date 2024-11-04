@@ -19,6 +19,8 @@ use exit_trust_root::client_db::get_all_registered_clients;
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
 use rita_exit::rita_loop::start_rita_exit_list_endpoint;
+use rita_exit::ClientListAnIpAssignmentMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -158,9 +160,12 @@ async fn main() {
         check_startup_balance_and_contract(args.flag_fail_on_startup, startup_status).await;
 
     let workers = settings.workers;
+
+    let client_and_ip_map = Arc::new(RwLock::new(ClientListAnIpAssignmentMap::new(clients)));
+
     start_core_rita_endpoints(workers as usize);
-    start_rita_exit_endpoints(workers as usize);
-    start_rita_exit_list_endpoint(workers as usize);
+    start_rita_exit_endpoints(client_and_ip_map.clone());
+    start_rita_exit_list_endpoint();
 
     start_rita_common_loops();
     start_operator_update_loop();
@@ -169,7 +174,7 @@ async fn main() {
     )));
 
     // this call blocks, transforming this startup thread into the main exit watchdog thread
-    start_rita_exit_loop(clients);
+    start_rita_exit_loop(client_and_ip_map).await;
 }
 
 /// This function performs startup integrity checks on the config and system. It checks that we can reach the internet
@@ -182,7 +187,7 @@ async fn main() {
 async fn check_startup_balance_and_contract(
     fail_on_startup: bool,
     startup_status: Arc<RwLock<Option<String>>>,
-) -> Vec<Identity> {
+) -> HashSet<Identity> {
     let payment_settings = settings::get_rita_common().payment;
     let our_address = payment_settings.eth_address.expect("No address!");
 
@@ -214,7 +219,7 @@ async fn check_startup_balance_and_contract(
     users.unwrap()
 }
 
-async fn get_registered_users() -> Result<Vec<Identity>, Web3Error> {
+async fn get_registered_users() -> Result<HashSet<Identity>, Web3Error> {
     let payment_settings = settings::get_rita_common().payment;
     let our_address = payment_settings.eth_address.expect("No address!");
     let full_node = get_web3_server();

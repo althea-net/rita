@@ -4,15 +4,13 @@
 use crate::database::geoip::get_gateway_ip_bulk;
 use crate::database::geoip::get_gateway_ip_single;
 use crate::database::geoip::verify_ip;
-use crate::database::in_memory_database::display_hashset;
-use crate::database::in_memory_database::get_client_internal_ip;
-use crate::database::in_memory_database::get_client_ipv6;
-use crate::database::in_memory_database::to_exit_client;
-use crate::database::in_memory_database::DEFAULT_CLIENT_SUBNET_SIZE;
+use crate::database::ipddr_assignment::display_hashset;
+use crate::database::ipddr_assignment::DEFAULT_CLIENT_SUBNET_SIZE;
+use crate::rita_loop::RitaExitData;
 use crate::rita_loop::EXIT_INTERFACE;
 use crate::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::rita_loop::LEGACY_INTERFACE;
-use crate::IpAssignmentMap;
+use crate::ClientListAnIpAssignmentMap;
 use crate::RitaExitError;
 use althea_kernel_interface::exit_server_tunnel::set_exit_wg_config;
 use althea_kernel_interface::exit_server_tunnel::setup_individual_client_routes;
@@ -29,10 +27,9 @@ use althea_types::regions::Regions;
 use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
-use clarity::Address;
-use exit_trust_root::client_db::get_registered_client_using_wgkey;
 use exit_trust_root::endpoints::RegisterRequest;
 use exit_trust_root::endpoints::SubmitCodeRequest;
+use ipnetwork::IpNetwork;
 use phonenumber::PhoneNumber;
 use rita_common::blockchain_oracle::calculate_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
@@ -46,23 +43,9 @@ use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
-use web30::client::Web3;
 
 pub mod geoip;
-pub mod in_memory_database;
-
-#[derive(Clone, Debug, Default)]
-pub struct RitaExitState {
-    ip_assignment_map: IpAssignmentMap,
-    geoip_cache: HashMap<IpAddr, Regions>,
-}
-
-lazy_static! {
-    /// Keep track of geoip information as well as ip addrs assigned to clients and ensure collisions dont happen. In worst case
-    /// the exit restarts and loses all this data in which case those client they had collision may get new
-    /// ip addrs and would need to setup wg exit tunnel again
-    static ref RITA_EXIT_STATE: Arc<RwLock<RitaExitState>> = Arc::new(RwLock::new(RitaExitState::default()));
-}
+pub mod ipddr_assignment;
 
 /// one day in seconds
 pub const ONE_DAY: i64 = 86400;
@@ -90,13 +73,20 @@ pub fn get_exit_info() -> ExitDetails {
 /// Handles a new client registration api call. Performs a geoip lookup
 /// on their registration ip to make sure that they are coming from a valid gateway
 /// ip and then sends out an email of phone message
-pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<RitaExitError>> {
+pub async fn signup_client(
+    client: ExitClientIdentity,
+    client_and_ip_info: Arc<Arc<RwLock<ClientListAnIpAssignmentMap>>>,
+) -> Result<ExitState, Box<RitaExitError>> {
     let exit_settings = get_rita_exit();
     info!("got setup request {:?}", client);
     let gateway_ip = get_gateway_ip_single(client.global.mesh_ip)?;
     info!("got gateway ip {:?}", client);
 
-    let verify_status = verify_ip(gateway_ip)?;
+    // dummy empty cache because signups don't happen often enough to bother using a locked unified cache
+    // between the actix worker threads and the main thread. The main thread bulk checks all clients every
+    // 5 seconds so caching goes a lot further there
+    let mut cache = HashMap::new();
+    let verify_status = verify_ip(&mut cache, gateway_ip).await?;
     info!("verified the ip country {:?}", client);
 
     // Is client requesting from a valid country? If so send registration request to ops
@@ -128,7 +118,10 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<
         }
     };
 
-    let exit_client = to_exit_client(client.global)?;
+    let exit_client = client_and_ip_info
+        .write()
+        .unwrap()
+        .id_to_exit_client(client.global)?;
     // if there is a phone registration code, we should submit it for verification
     if let Some(code) = client.reg_details.phone_code.clone() {
         info!("Forwarding client verification request");
@@ -230,60 +223,11 @@ pub async fn forward_client_signup_request(
     }
 }
 
-/// Gets the status of a client and updates it in the database
-pub async fn client_status(
-    client: ExitClientIdentity,
-    our_address: Address,
-    contract_addr: Address,
-    contact: &Web3,
-) -> Result<ExitState, Box<RitaExitError>> {
-    trace!("Checking if record exists for {:?}", client.global.mesh_ip);
-    let exit = get_rita_exit();
-    let exit_network = exit.exit_network.clone();
-    let own_internal_ip = exit_network.internal_ipv4.internal_ip();
-    let internal_netmask = exit_network.internal_ipv4.prefix();
-
-    match get_registered_client_using_wgkey(
-        client.global.wg_public_key,
-        our_address,
-        contract_addr,
-        contact,
-    )
-    .await
-    {
-        Ok(their_record) => {
-            trace!("record exists, updating");
-
-            let current_ip: IpAddr =
-                get_client_internal_ip(their_record, internal_netmask, own_internal_ip)?;
-            let current_internet_ipv6 = get_client_ipv6(
-                their_record,
-                exit_network.get_ipv6_subnet_alt(),
-                exit.get_client_subnet_size()
-                    .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
-            )?;
-
-            Ok(ExitState::Registered {
-                our_details: ExitClientDetails {
-                    client_internal_ip: current_ip,
-                    internet_ipv6_subnet: current_internet_ipv6,
-                },
-                general_details: get_exit_info(),
-                message: "Registration OK".to_string(),
-                identity: Box::new(exit.get_exit_identity()),
-            })
-        }
-        Err(e) => {
-            trace!("Failed to retrieve a client: {}", e);
-            Err(Box::new(RitaExitError::NoClientError))
-        }
-    }
-}
-
 /// Every 5 seconds we validate all online clients to make sure that they are in the right region
 /// we also do this in the client status requests but we want to handle the edge case of a modified
 /// client that doesn't make status requests
-pub fn validate_clients_region(
+pub async fn validate_clients_region(
+    geoip_cache: &mut HashMap<IpAddr, Regions>,
     clients_list: Vec<Identity>,
 ) -> Result<Vec<Identity>, Box<RitaExitError>> {
     info!("Starting exit region validation");
@@ -300,7 +244,7 @@ pub fn validate_clients_region(
     }
     let list = get_gateway_ip_bulk(ip_vec, EXIT_LOOP_TIMEOUT)?;
     for item in list.iter() {
-        let res = verify_ip(item.gateway_ip);
+        let res = verify_ip(geoip_cache, item.gateway_ip).await;
         match res {
             Ok(true) => trace!("{:?} is from an allowed ip", item),
             Ok(false) => {
@@ -349,13 +293,16 @@ pub struct CurrentExitClientState {
 /// into a single very long wg tunnel setup command which is then applied to the
 /// wg_exit tunnel (or created if it's the first run). This is the offically supported
 /// way to update live WireGuard tunnels and should not disrupt traffic
-pub fn setup_clients(
-    clients_list: Vec<Identity>,
-    geoip_blacklist: Vec<Identity>,
-    client_states: ExitClientSetupStates,
-) -> Result<ExitClientSetupStates, Box<RitaExitError>> {
-    let mut client_states = client_states;
+pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitError>> {
     let start = Instant::now();
+    // Note, the data flow in this fuction is strage, we have getters and setters for all
+    // data, but, some functions like id_to_exit_client will assign ip addresses to clients
+    // thus modifying the internal state of the client_data object despite not obviously being
+    // a setter. This is a holdover from the original design of the code and should be cleaned up with
+    // more explicit ip allocation functions
+    let clients_list = client_data.get_all_registered_clients();
+    let mut client_states = client_data.get_setup_states();
+    let geoip_blacklist = client_data.get_geoip_blacklist();
 
     // use hashset to ensure uniqueness and check for duplicate db entries
     let mut wg_clients = HashSet::new();
@@ -369,7 +316,7 @@ pub fn setup_clients(
     );
 
     for c in clients_list.iter() {
-        match to_exit_client(*c) {
+        match client_data.id_to_exit_client(*c) {
             Ok(a) => {
                 if !wg_clients.insert(a) {
                     error!("Duplicate database entry! {}", c.wg_public_key);
@@ -385,7 +332,7 @@ pub fn setup_clients(
     }
 
     for c in geoip_blacklist.iter() {
-        match to_exit_client(*c) {
+        match client_data.id_to_exit_client(*c) {
             Ok(a) => {
                 if !geoip_blacklist_map.insert(a) {
                     error!("Duplicate database entry! {}", c.wg_public_key);
@@ -518,8 +465,12 @@ pub fn setup_clients(
     for c_key in changed_clients_return.new_v1 {
         if let Some(c) = key_to_client_map.get(&c_key) {
             setup_individual_client_routes(
-                match get_client_internal_ip(*c, internal_netmask, internal_ip_v4) {
-                    Ok(a) => a,
+                match client_data.get_or_add_client_internal_ip(
+                    *c,
+                    internal_netmask,
+                    internal_ip_v4,
+                ) {
+                    Ok(a) => std::net::IpAddr::V4(a),
                     Err(e) => {
                         error!(
                             "Received error while trying to retrieve client internal ip {}",
@@ -536,8 +487,12 @@ pub fn setup_clients(
     for c_key in changed_clients_return.new_v2 {
         if let Some(c) = key_to_client_map.get(&c_key) {
             teardown_individual_client_routes(
-                match get_client_internal_ip(*c, internal_netmask, internal_ip_v4) {
-                    Ok(a) => a,
+                match client_data.get_or_add_client_internal_ip(
+                    *c,
+                    internal_netmask,
+                    internal_ip_v4,
+                ) {
+                    Ok(a) => std::net::IpAddr::V4(a),
                     Err(e) => {
                         error!(
                             "Received error while trying to retrieve client internal ip {}",
@@ -550,7 +505,8 @@ pub fn setup_clients(
         }
     }
 
-    Ok(client_states)
+    client_data.set_setup_states(client_states);
+    Ok(())
 }
 
 /// Find all clients that underwent transition from b19 -> 20 or vice versa and need updated rules and routes
@@ -639,16 +595,13 @@ pub fn get_client_interface(
 /// setting the htb class they are assigned to to a maximum speed of the free tier value.
 /// Unlike intermediary enforcement we do not need to subdivide the free tier to prevent
 /// ourselves from exceeding the upstream free tier. As an exit we are the upstream.
-pub fn enforce_exit_clients(
-    clients_list: Vec<Identity>,
-    old_debt_actions: &HashSet<(Identity, DebtAction)>,
-) -> Result<HashSet<(Identity, DebtAction)>, Box<RitaExitError>> {
+pub fn enforce_exit_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitError>> {
     let start = Instant::now();
     let mut clients_by_id = HashMap::new();
     let free_tier_limit = settings::get_rita_exit().payment.free_tier_throughput;
     let close_threshold = calculate_close_thresh();
-    for client_id in clients_list.iter() {
-        if let Ok(exit_client) = to_exit_client(*client_id) {
+    for client_id in client_data.get_all_registered_clients() {
+        if let Ok(exit_client) = client_data.id_to_exit_client(client_id) {
             clients_by_id.insert(client_id, exit_client);
         }
     }
@@ -660,6 +613,7 @@ pub fn enforce_exit_clients(
     );
 
     // build the new debt actions list and see if we need to do anything
+    let old_debt_actions = client_data.get_debt_actions();
     let mut new_debt_actions = HashSet::new();
     for debt_entry in list.iter() {
         new_debt_actions.insert((
@@ -668,12 +622,12 @@ pub fn enforce_exit_clients(
         ));
     }
     if new_debt_actions
-        .symmetric_difference(old_debt_actions)
+        .symmetric_difference(&old_debt_actions)
         .count()
         == 0
     {
         info!("No change in enforcement list found, skipping tc calls");
-        return Ok(new_debt_actions);
+        return Ok(());
     }
 
     for debt_entry in list.iter() {
@@ -713,7 +667,7 @@ pub fn enforce_exit_clients(
                                     error!("Failed to setup flow for wg_exit_v2 {:?}", e);
                                 }
                                 // gets the client ipv6 flow for this exit specifically
-                                let client_ipv6 = get_client_ipv6(
+                                let client_ipv6 = client_data.get_or_add_client_ipv6(
                                     debt_entry.identity,
                                     settings::get_rita_exit().exit_network.get_ipv6_subnet_alt(),
                                     settings::get_rita_exit()
@@ -721,9 +675,11 @@ pub fn enforce_exit_clients(
                                         .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
                                 );
                                 if let Ok(Some(client_ipv6)) = client_ipv6 {
-                                    if let Err(e) =
-                                        create_flow_by_ipv6(EXIT_INTERFACE, client_ipv6, ip)
-                                    {
+                                    if let Err(e) = create_flow_by_ipv6(
+                                        EXIT_INTERFACE,
+                                        IpNetwork::V6(client_ipv6),
+                                        ip,
+                                    ) {
                                         error!("Failed to setup ipv6 flow for wg_exit_v2 {:?}", e);
                                     }
                                 }
@@ -797,5 +753,6 @@ pub fn enforce_exit_clients(
         start.elapsed().as_secs(),
         start.elapsed().subsec_millis(),
     );
-    Ok(new_debt_actions)
+    client_data.set_debt_actions(new_debt_actions);
+    Ok(())
 }

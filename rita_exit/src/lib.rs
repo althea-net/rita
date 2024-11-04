@@ -2,9 +2,6 @@
 extern crate log;
 
 #[macro_use]
-extern crate lazy_static;
-
-#[macro_use]
 extern crate serde_derive;
 
 pub mod dashboard;
@@ -16,7 +13,7 @@ pub mod rita_loop;
 pub mod traffic_watcher;
 
 pub use crate::database::geoip::*;
-pub use crate::database::in_memory_database::*;
+pub use crate::database::ipddr_assignment::*;
 pub use error::RitaExitError;
 use rita_common::dashboard::own_info::READABLE_VERSION;
 use std::path::PathBuf;

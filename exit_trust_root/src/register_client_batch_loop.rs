@@ -21,15 +21,6 @@ pub struct RegistrationRequest {
 
 pub const MAX_BATCH_SIZE: usize = 75;
 
-/// Utility function used to easily perform O(1) lookups against the identities list
-pub fn get_clients_hashset(input: Vec<Identity>) -> HashSet<Identity> {
-    let mut output = HashSet::new();
-    for i in input {
-        output.insert(i);
-    }
-    output
-}
-
 /// This function  monitors the registration queue lock free queue. It will dequeue any new entries and attempt to register them
 /// in a batch sent every REGISTRATION_LOOP_SPEED seconds. This function will also check if the user is already registered before attempting to register them
 pub async fn register_client_batch_loop(
@@ -106,7 +97,6 @@ pub async fn register_client_batch_loop(
                     continue;
                 }
             };
-            let all_clients = get_clients_hashset(all_clients);
 
             let mut clients_to_register = Vec::new();
             for client in list.iter() {
