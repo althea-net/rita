@@ -1,5 +1,5 @@
 use althea_kernel_interface::ExitClient;
-use althea_types::{Identity, WgKey};
+use althea_types::{identity::Identity, WgKey};
 use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
@@ -315,7 +315,7 @@ pub fn display_hashset(input: &HashSet<String>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use althea_types::Identity;
+    use althea_types::identity::Identity;
     use ipnetwork::IpNetwork;
 
     use crate::database::in_memory_database::{

@@ -5,10 +5,10 @@ use crate::database::{client_status, get_exit_info, signup_client};
 
 use crate::RitaExitError;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
+use althea_types::{identity::Identity, EncryptedExitList};
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };
-use althea_types::{EncryptedExitList, Identity};
 use althea_types::{ExitList, WgKey};
 use num256::Int256;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;

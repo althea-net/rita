@@ -5,7 +5,7 @@ use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_client, SettingsError};
 use althea_types::wg_key::WgKey;
-use althea_types::{ContactStorage, ExitState, Identity};
+use althea_types::{identity::Identity, ContactStorage, ExitState};
 use clarity::Address;
 use ipnetwork::IpNetwork;
 use std::collections::{HashMap, HashSet};

@@ -12,7 +12,7 @@ use crate::RitaCommonError;
 use crate::KI;
 use althea_kernel_interface::open_tunnel::is_link_local;
 use althea_kernel_interface::FilterTarget;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;
 

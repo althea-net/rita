@@ -17,7 +17,7 @@ use althea_proto::{
         query_client::QueryClient, Metadata, QueryDenomMetadataRequest,
     },
 };
-use althea_types::{ContactType, Denom, Identity, SystemChain, WgKey};
+use althea_types::{identity::Identity, ContactType, Denom, SystemChain, WgKey};
 use awc::http::StatusCode;
 use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use clarity::{Address, Transaction, Uint256};

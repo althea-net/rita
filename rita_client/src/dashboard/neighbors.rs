@@ -1,6 +1,6 @@
 use actix_web_async::http::StatusCode;
 use actix_web_async::{HttpRequest, HttpResponse};
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use arrayvec::ArrayString;
 use babel_monitor::parsing::get_installed_route;
 use babel_monitor::parsing::get_route_via_neigh;

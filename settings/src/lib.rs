@@ -18,7 +18,9 @@ extern crate log;
 extern crate arrayvec;
 
 use althea_kernel_interface::KI;
-use althea_types::{BillingDetails, ContactType, Identity, InstallationDetails, SystemChain};
+use althea_types::{
+    identity::Identity, BillingDetails, ContactType, InstallationDetails, SystemChain,
+};
 use clarity::Address;
 use network::NetworkSettings;
 use payment::PaymentSettings;

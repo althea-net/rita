@@ -5,11 +5,11 @@ use crate::operator_update::{
 use actix_async::System;
 use actix_web_actors::ws;
 use althea_types::{
+    identity::Identity,
     websockets::{
         OperatorWebsocketResponse, RouterWebsocketMessage, WsConnectionDetailsStruct,
         WsCustomerDetailsStruct, WsOperatorAddressStruct, WsTimeseriesDataStruct,
     },
-    Identity,
 };
 use awc::ws::Frame;
 use crypto_box::{PublicKey, SecretKey};

@@ -248,7 +248,7 @@ fn test_decode_imhere_with_multicast_interface() {
 fn test_hello_serde() {
     use crate::peer_listener::Hello;
     use crate::peer_listener::Peer;
-    use althea_types::Identity;
+    use althea_types::identity::Identity;
     use althea_types::LocalIdentity;
     use althea_types::WgKey;
     use bincode;
@@ -293,7 +293,7 @@ fn test_hello_serde() {
 fn test_encoded_hello_size() {
     use crate::peer_listener::Hello;
     use crate::peer_listener::Peer;
-    use althea_types::Identity;
+    use althea_types::identity::Identity;
     use althea_types::LocalIdentity;
     use althea_types::WgKey;
     use clarity::Address;
@@ -348,7 +348,7 @@ fn test_encoded_hello_size() {
 fn test_hello_encode_decode() {
     use crate::peer_listener::Hello;
     use crate::peer_listener::Peer;
-    use althea_types::Identity;
+    use althea_types::identity::Identity;
     use althea_types::LocalIdentity;
     use althea_types::WgKey;
     use clarity::Address;
@@ -412,7 +412,7 @@ fn test_hello_encode_decode() {
 fn test_deserialize_with_wrong_serialization() {
     use crate::peer_listener::Hello;
     use crate::peer_listener::Peer;
-    use althea_types::Identity;
+    use althea_types::identity::Identity;
     use althea_types::LocalIdentity;
     use althea_types::WgKey;
     use clarity::Address;

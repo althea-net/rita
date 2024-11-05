@@ -1,4 +1,4 @@
-use althea_types::{Identity, IndexedUsageHour, PaymentTx, Usage};
+use althea_types::{identity::Identity, IndexedUsageHour, PaymentTx, Usage};
 use num256::Uint256;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;

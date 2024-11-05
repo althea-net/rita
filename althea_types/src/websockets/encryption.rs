@@ -157,8 +157,9 @@ mod tests {
     use std::net::IpAddr;
 
     use crate::{
+        identity::Identity,
         websockets::{OperatorWebsocketMessage, RouterWebsocketMessage, WsOperatorAddressStruct},
-        Identity, WgKey,
+        WgKey,
     };
 
     // test encryption and decryption of router messages

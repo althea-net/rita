@@ -11,7 +11,7 @@ pub mod test {
     };
     use crate::RitaCommonError;
     use althea_types::{
-        convert_map_to_flat_usage_data, Identity, IndexedUsageHour, UnpublishedPaymentTx,
+        convert_map_to_flat_usage_data, identity::Identity, IndexedUsageHour, UnpublishedPaymentTx,
         UsageTrackerTransfer,
     };
     use flate2::write::ZlibEncoder;

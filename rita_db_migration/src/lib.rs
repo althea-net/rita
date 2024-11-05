@@ -10,7 +10,7 @@ pub mod models;
 pub mod schema;
 
 use crate::schema::clients::dsl::clients;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use diesel::{r2d2::ConnectionManager, PgConnection, RunQueryDsl};
 use error::RitaDBMigrationError;
 use models::Client;

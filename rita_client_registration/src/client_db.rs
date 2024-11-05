@@ -1,6 +1,6 @@
 use std::{net::IpAddr, time::Duration};
 
-use althea_types::{Identity, WgKey};
+use althea_types::{identity::Identity, WgKey};
 use clarity::{
     abi::{encode_call, AbiToken},
     utils::bytes_to_hex_str,

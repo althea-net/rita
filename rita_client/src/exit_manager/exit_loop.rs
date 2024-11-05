@@ -8,9 +8,9 @@ use crate::exit_manager::{
 };
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_async::System as AsyncSystem;
+use althea_types::identity::Identity;
 use althea_types::ExitList;
 use althea_types::ExitState;
-use althea_types::Identity;
 use futures::future::join_all;
 use futures::join;
 use rita_common::blockchain_oracle::low_balance;

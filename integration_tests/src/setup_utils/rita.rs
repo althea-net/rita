@@ -5,7 +5,7 @@ use super::namespaces::get_nsfd;
 use super::namespaces::NamespaceInfo;
 use super::namespaces::NodeType;
 use althea_kernel_interface::KernelInterfaceError;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use clarity::Address;
 use ipnetwork::IpNetwork;
 use ipnetwork::Ipv6Network;

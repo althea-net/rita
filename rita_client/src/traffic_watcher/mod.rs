@@ -23,7 +23,7 @@
 
 use crate::rita_loop::is_gateway_client;
 use crate::RitaClientError;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use babel_monitor::parsing::get_installed_route;
 use babel_monitor::structs::BabelMonitorError;
 use babel_monitor::structs::Route;

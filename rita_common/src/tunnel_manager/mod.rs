@@ -22,7 +22,7 @@ use crate::KI;
 use crate::TUNNEL_HANDSHAKE_TIMEOUT;
 use crate::TUNNEL_TIMEOUT;
 use althea_kernel_interface::open_tunnel::TunnelOpenArgs;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use althea_types::LocalIdentity;
 use babel_monitor::monitor;
 use babel_monitor::open_babel_stream;
@@ -661,7 +661,7 @@ pub mod tests {
     use crate::tunnel_manager::get_test_tunnel;
     use crate::tunnel_manager::Tunnel;
     use crate::tunnel_manager::TunnelManager;
-    use althea_types::Identity;
+    use althea_types::identity::Identity;
 
     /// gets a mutable reference tunnel from the list with the given index
     fn get_mut_tunnel_by_ifidx(ifidx: u32, tunnels: &mut [Tunnel]) -> Option<&mut Tunnel> {

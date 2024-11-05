@@ -1,8 +1,8 @@
 //! This module contains a bunch of dummy functions that are called to populate a dummy exit so that heart beats
 //! send data to op tools without actually being connected to an exit
+use althea_types::identity::Identity;
 use althea_types::ExitDetails;
 use althea_types::FromStr;
-use althea_types::Identity;
 use althea_types::LocalIdentity;
 use althea_types::WgKey;
 use babel_monitor::structs::Neighbor;

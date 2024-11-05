@@ -758,7 +758,7 @@ pub fn get_babel_routes(babel_port: u16) -> Result<Vec<Route>, RitaClientError> 
 #[cfg(test)]
 mod tests {
 
-    use althea_types::{FromStr, Identity, WgKey};
+    use althea_types::{identity::Identity, FromStr, WgKey};
     use clarity::Address;
     use ipnetwork::IpNetwork;
 

@@ -1,6 +1,6 @@
 use super::{Tunnel, TunnelManager};
 use crate::KI;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use babel_monitor::structs::Interface;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};

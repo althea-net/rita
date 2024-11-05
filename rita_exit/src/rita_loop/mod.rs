@@ -20,7 +20,7 @@ use actix_async::System as AsyncSystem;
 use actix_web_async::{web, App, HttpServer};
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::ExitClient;
-use althea_types::{Identity, WgKey};
+use althea_types::{identity::Identity, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
 
 use rita_client_registration::client_db::get_all_regsitered_clients;

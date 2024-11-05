@@ -5,7 +5,7 @@ use crate::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
 use crate::KI;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use althea_types::PaymentTx;
 use num256::Uint256;
 use num_traits::{Signed, Zero};

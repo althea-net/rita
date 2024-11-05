@@ -1,6 +1,6 @@
 use super::get_tunnel_manager;
 use super::PaymentState;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use althea_types::NeighborStatus;
 use std::collections::HashMap;
 

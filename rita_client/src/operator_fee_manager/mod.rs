@@ -14,7 +14,7 @@
 //! will need to be re-written to better reflect a normal billing system at some point, perhaps
 //! querying an API for an individual bill. As this is not designed to be a trustless payment
 
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use althea_types::PaymentTx;
 use num256::Uint256;
 use rita_common::blockchain_oracle::get_oracle_balance;

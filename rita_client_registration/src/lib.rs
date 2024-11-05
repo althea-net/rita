@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use althea_types::{ExitClientIdentity, Identity, WgKey};
+use althea_types::{identity::Identity, ExitClientIdentity, WgKey};
 use awc::error::{JsonPayloadError, SendRequestError};
 use clarity::Address;
 use phonenumber::PhoneNumber;

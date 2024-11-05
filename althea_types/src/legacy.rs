@@ -9,10 +9,11 @@ use std::time::Duration;
 use babel_monitor::structs::BabeldConfig;
 use clarity::Address;
 
+use crate::identity::Identity;
 use crate::{
     websockets::OperatorAction, BillingDetails, ContactType, ExitConnection, HardwareInfo,
-    Identity, InstallationDetails, NeighborStatus, ShaperSettings, SystemChain, UpdateType,
-    UpdateTypeLegacy, UsageTrackerFlat, UsageTrackerTransfer,
+    InstallationDetails, NeighborStatus, ShaperSettings, SystemChain, UpdateType, UpdateTypeLegacy,
+    UsageTrackerFlat, UsageTrackerTransfer,
 };
 
 fn default_ops_last_seen_usage_hour() -> u64 {

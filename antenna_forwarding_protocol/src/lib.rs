@@ -14,7 +14,7 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use althea_types::WgKey;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::Nonce;

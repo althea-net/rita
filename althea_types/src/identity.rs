@@ -192,7 +192,7 @@ impl Identity {
         };
         AbiToken::Struct(vec![
             AbiToken::Uint(u128::from_be_bytes(ip_bytes).into()),
-            AbiToken::Uint(self.wg_public_key.into()),
+            AbiToken::Uint(self.wg_public_key.as_bytes().into()),
             AbiToken::Address(self.eth_address),
         ])
     }
@@ -253,6 +253,7 @@ impl Identity {
                 )))
             }
         })
+        .to_be_bytes()
         .into();
 
         // 3rd entry is the eth address

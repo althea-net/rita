@@ -29,8 +29,8 @@ use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
 
 use crate::exit_manager::get_selected_exit_ip as get_selected_exit_em;
 
+use althea_types::identity::Identity;
 use althea_types::HeartbeatMessage;
-use althea_types::Identity;
 use althea_types::WgKey;
 use babel_monitor::structs::Neighbor;
 use babel_monitor::structs::Route;

@@ -7,8 +7,8 @@ use num256::Uint256;
 pub mod encryption;
 
 use crate::{
-    BillingDetails, ContactType, ExitConnection, HardwareInfo, Identity, InstallationDetails,
-    NeighborStatus, ShaperSettings, SystemChain, UpdateType, UpdateTypeLegacy,
+    identity::Identity, BillingDetails, ContactType, ExitConnection, HardwareInfo,
+    InstallationDetails, NeighborStatus, ShaperSettings, SystemChain, UpdateType, UpdateTypeLegacy,
     UsageTrackerTransfer, WgKey, WifiToken,
 };
 

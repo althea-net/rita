@@ -15,7 +15,7 @@ use crate::RitaExitError;
 use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::KI;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use althea_types::WgKey;
 use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;

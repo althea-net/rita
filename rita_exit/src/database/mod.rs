@@ -15,7 +15,7 @@ use crate::rita_loop::LEGACY_INTERFACE;
 use crate::IpAssignmentMap;
 use crate::RitaExitError;
 use althea_kernel_interface::ExitClient;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use clarity::Address;

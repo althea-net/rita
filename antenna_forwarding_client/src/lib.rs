@@ -9,7 +9,7 @@ extern crate lazy_static;
 
 use althea_kernel_interface::KernelInterface;
 use althea_kernel_interface::LinuxCommandRunner;
-use althea_types::Identity;
+use althea_types::identity::Identity;
 use althea_types::WgKey;
 use antenna_forwarding_protocol::process_streams;
 use antenna_forwarding_protocol::write_all_spinlock;
