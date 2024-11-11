@@ -53,7 +53,7 @@ features = ["std"]
 
 [dev-dependencies]
 env_logger = "0.11"
-serial_test = "3.1.1"
+serial_test = "3.2.0"
 
 [features]
 development = []
