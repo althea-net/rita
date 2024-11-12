@@ -11,6 +11,8 @@ pub enum SettingsError {
     IpNetworkError(ipnetwork::IpNetworkError),
     SerdeJsonError(serde_json::Error),
     FileNotFoundError(String),
+    InvalidIpv6Configuration(String),
+    InvalidIpv4Configuration(String),
 }
 
 impl From<toml::ser::Error> for SettingsError {
@@ -49,6 +51,12 @@ impl Display for SettingsError {
             SettingsError::SerdeJsonError(e) => write!(f, "{e}"),
             SettingsError::FileNotFoundError(e) => {
                 write!(f, "Could not find config file at path {}", e)
+            }
+            SettingsError::InvalidIpv6Configuration(e) => {
+                write!(f, "Invalid IPv6 configuration: {}", e)
+            }
+            SettingsError::InvalidIpv4Configuration(e) => {
+                write!(f, "Invalid IPv4 configuration: {}", e)
             }
         }
     }

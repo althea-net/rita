@@ -26,7 +26,7 @@ use althea_types::{Identity, SignedExitServerList, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
 use clarity::Address;
 use exit_trust_root::client_db::get_all_registered_clients;
-use ipnetwork::{IpNetwork, Ipv6Network};
+use ipnetwork::Ipv6Network;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
 use settings::exit::EXIT_LIST_PORT;
@@ -132,13 +132,11 @@ impl RitaExitData {
     pub fn get_or_add_client_ipv6(
         &self,
         their_record: Identity,
-        exit_sub: Option<IpNetwork>,
-        client_subnet_size: u8,
     ) -> Result<Option<Ipv6Network>, Box<RitaExitError>> {
         self.client_list_and_ip_assignments
             .write()
             .unwrap()
-            .get_or_add_client_ipv6(their_record, exit_sub, client_subnet_size)
+            .get_or_add_client_ipv6(their_record)
     }
 
     pub fn get_setup_states(&self) -> ExitClientSetupStates {

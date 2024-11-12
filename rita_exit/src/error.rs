@@ -22,6 +22,7 @@ pub enum RitaExitError {
     FileError(lettre::transport::file::Error),
     SmtpError(lettre::transport::smtp::Error),
     IpNetworkError(IpNetworkError),
+    IpExhaustionError,
     PhoneParseError(phonenumber::ParseError),
     ClarityError(clarity::error::Error),
     DeepSpaceError(deep_space::error::AddressError),
@@ -115,6 +116,7 @@ impl Display for RitaExitError {
             RitaExitError::AltheaTypesError(a) => write!(f, "{a}",),
             RitaExitError::KernelInterfaceError(a) => write!(f, "{a}",),
             RitaExitError::NoClientError => write!(f, "This client has not registered yet!"),
+            RitaExitError::IpExhaustionError => write!(f, "No more external IPs available!"),
         }
     }
 }

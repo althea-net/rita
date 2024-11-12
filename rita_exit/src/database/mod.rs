@@ -5,7 +5,6 @@ use crate::database::geoip::get_gateway_ip_bulk;
 use crate::database::geoip::get_gateway_ip_single;
 use crate::database::geoip::verify_ip;
 use crate::database::ipddr_assignment::display_hashset;
-use crate::database::ipddr_assignment::DEFAULT_CLIENT_SUBNET_SIZE;
 use crate::rita_loop::RitaExitData;
 use crate::rita_loop::EXIT_INTERFACE;
 use crate::rita_loop::EXIT_LOOP_TIMEOUT;
@@ -44,6 +43,7 @@ use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 
+pub mod dualmap;
 pub mod geoip;
 pub mod ipddr_assignment;
 
@@ -667,13 +667,8 @@ pub fn enforce_exit_clients(client_data: &mut RitaExitData) -> Result<(), Box<Ri
                                     error!("Failed to setup flow for wg_exit_v2 {:?}", e);
                                 }
                                 // gets the client ipv6 flow for this exit specifically
-                                let client_ipv6 = client_data.get_or_add_client_ipv6(
-                                    debt_entry.identity,
-                                    settings::get_rita_exit().exit_network.get_ipv6_subnet_alt(),
-                                    settings::get_rita_exit()
-                                        .get_client_subnet_size()
-                                        .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
-                                );
+                                let client_ipv6 =
+                                    client_data.get_or_add_client_ipv6(debt_entry.identity);
                                 if let Ok(Some(client_ipv6)) = client_ipv6 {
                                     if let Err(e) = create_flow_by_ipv6(
                                         EXIT_INTERFACE,

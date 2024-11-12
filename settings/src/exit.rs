@@ -54,10 +54,63 @@ pub enum ExitIpv4RoutingSettings {
     /// if the subnet is too small and too many clients connect there will be no more addresses to assign. Once that happens
     /// the exit will stop accepting new connections until a client disconnects. Be mindful, in cases where a client can not
     /// find another exit to connect to they will be unable to access the internet.
-    FLAT {
+    SNAT {
         subnet: Ipv4Network,
         static_assignments: Vec<ClientIpv4StaticAssignment>,
     },
+}
+
+impl ExitIpv4RoutingSettings {
+    pub fn validate(&self) -> Result<(), SettingsError> {
+        match self {
+            ExitIpv4RoutingSettings::NAT => Ok(()),
+            ExitIpv4RoutingSettings::CGNAT {
+                subnet,
+                static_assignments,
+            } => {
+                for assignment in static_assignments {
+                    if !subnet.contains(assignment.client_external_ip) {
+                        return Err(SettingsError::InvalidIpv4Configuration(
+                            "Static assignment outside of subnet".to_string(),
+                        ));
+                    }
+                }
+                if static_assignments.len() as u32 > subnet.size() {
+                    return Err(SettingsError::InvalidIpv4Configuration(
+                        "Not enough addresses in subnet for static assignments".to_string(),
+                    ));
+                }
+
+                Ok(())
+            }
+            ExitIpv4RoutingSettings::SNAT {
+                static_assignments,
+                subnet,
+            } => {
+                let mut used_ips = HashSet::new();
+                for assignment in static_assignments {
+                    if used_ips.contains(&assignment.client_external_ip) {
+                        return Err(SettingsError::InvalidIpv4Configuration(
+                            "Duplicate static assignment".to_string(),
+                        ));
+                    }
+                    if !subnet.contains(assignment.client_external_ip) {
+                        return Err(SettingsError::InvalidIpv4Configuration(
+                            "Static assignment outside of subnet".to_string(),
+                        ));
+                    }
+                    used_ips.insert(assignment.client_external_ip);
+                }
+                if static_assignments.len() as u32 > subnet.size() {
+                    return Err(SettingsError::InvalidIpv4Configuration(
+                        "Not enough addresses in subnet for static assignments".to_string(),
+                    ));
+                }
+
+                Ok(())
+            }
+        }
+    }
 }
 
 /// This struct describes the settings for ipv6 routing out of the exit and assignment to clients
@@ -68,10 +121,44 @@ pub struct ExitIpv6RoutingSettings {
     pub client_subnet_size: u8,
     pub static_assignments: Vec<ClientIpv6StaticAssignment>,
 }
+impl ExitIpv6RoutingSettings {
+    pub fn new(
+        subnet: Ipv6Network,
+        client_subnet_size: u8,
+        static_assignments: Vec<ClientIpv6StaticAssignment>,
+    ) -> Self {
+        ExitIpv6RoutingSettings {
+            subnet,
+            client_subnet_size,
+            static_assignments,
+        }
+    }
+}
 
 impl ExitIpv6RoutingSettings {
     pub fn spit_ip_prefix(&self) -> (IpAddr, u8) {
         (self.subnet.ip().into(), self.subnet.prefix())
+    }
+
+    pub fn validate(&self) -> Result<(), SettingsError> {
+        if self.client_subnet_size > self.subnet.prefix() {
+            return Err(SettingsError::InvalidIpv6Configuration(
+                "Client subnet size is larger than the exit subnet".to_string(),
+            ));
+        }
+        for assignment in self.static_assignments.iter() {
+            if !self.subnet.is_supernet_of(assignment.client_subnet) {
+                return Err(SettingsError::InvalidIpv6Configuration(
+                    "Static assignment outside of subnet".to_string(),
+                ));
+            }
+            if assignment.client_subnet.prefix() != self.client_subnet_size {
+                return Err(SettingsError::InvalidIpv6Configuration(
+                    "Static assignment subnet size does not match exit subnet size".to_string(),
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -183,6 +270,14 @@ impl ExitNetworkSettings {
             ipv6_routing: None,
         }
     }
+
+    pub fn validate(&self) -> bool {
+        let ipv6_status = match self.ipv6_routing {
+            Some(ref x) => x.validate().is_ok(),
+            None => true,
+        };
+        ipv6_status && self.ipv4_routing.validate().is_ok()
+    }
 }
 
 fn default_remote_log() -> bool {
@@ -223,7 +318,7 @@ pub struct RitaExitSettingsStruct {
 impl RitaExitSettingsStruct {
     /// Returns true if the settings are valid
     pub fn validate(&self) -> bool {
-        self.payment.validate()
+        self.payment.validate() && self.exit_network.validate()
     }
 
     /// Generates a configuration that can be used in integration tests, does not use the

@@ -161,7 +161,11 @@ async fn main() {
 
     let workers = settings.workers;
 
-    let client_and_ip_map = Arc::new(RwLock::new(ClientListAnIpAssignmentMap::new(clients)));
+    let client_and_ip_map = Arc::new(RwLock::new(ClientListAnIpAssignmentMap::new(
+        clients,
+        settings.exit_network.ipv6_routing,
+        settings.exit_network.ipv4_routing,
+    )));
 
     start_core_rita_endpoints(workers as usize);
     start_rita_exit_endpoints(client_and_ip_map.clone());

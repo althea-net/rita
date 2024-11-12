@@ -290,6 +290,8 @@ pub fn spawn_rita_exit(
 
         let client_and_ip_map = Arc::new(RwLock::new(ClientListAnIpAssignmentMap::new(
             HashSet::new(),
+            settings::get_rita_exit().exit_network.ipv6_routing,
+            settings::get_rita_exit().exit_network.ipv4_routing,
         )));
 
         let workers = 4;
