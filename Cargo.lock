@@ -376,7 +376,7 @@ dependencies = [
  "deep_space",
  "ipnetwork",
  "lettre",
- "num256",
+ "num256 0.5.2",
  "phonenumber",
  "rand",
  "serde",
@@ -529,7 +529,7 @@ dependencies = [
  "futures 0.3.31",
  "log",
  "num",
- "num256",
+ "num256 0.5.2",
  "rand",
  "serde",
  "serde_derive",
@@ -692,6 +692,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitcoin-io"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b47c4ab7a93edb0c7198c5535ed9b52b63095f4e9b45279c6736cec4b856baf"
+
+[[package]]
+name = "bitcoin_hashes"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb18c03d0db0247e147a21a6faafd5a7eb851c743db062de72018b6b7e8e4d16"
+dependencies = [
+ "bitcoin-io",
+ "hex-conservative",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -739,6 +755,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29ed1ec45f6ef6e8d1125cc2c2fec8f8fe7d4fa5b262f15885fdccb9e26f0f15"
 dependencies = [
+ "num-integer",
  "num-traits",
 ]
 
@@ -897,13 +914,13 @@ checksum = "1462739cb27611015575c0c11df5df7601141071f07518d56fcc1be504cbec97"
 
 [[package]]
 name = "clarity"
-version = "1.4.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cc231e36d58a7fc35e59d4177f5579428e3586992f93ebabeafb873ef89eb46"
+checksum = "b8100ba88ab2204050607e86b2265ecb9079f72ac9d0f1ba075f978d74110daa"
 dependencies = [
  "num-traits",
- "num256",
- "secp256k1 0.28.2",
+ "num256 0.6.0",
+ "secp256k1 0.30.0",
  "serde",
  "serde_derive",
  "sha3",
@@ -1150,7 +1167,7 @@ dependencies = [
  "hmac",
  "log",
  "num-traits",
- "num256",
+ "num256 0.5.2",
  "pbkdf2",
  "prost",
  "prost-types",
@@ -1669,6 +1686,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
 
 [[package]]
+name = "hex-conservative"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5313b072ce3c597065a808dbf612c4c8e8590bdbf8b579508bf7a762c5eae6cd"
+dependencies = [
+ "arrayvec",
+]
+
+[[package]]
 name = "hex-literal"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1902,7 +1928,7 @@ dependencies = [
  "log",
  "nix 0.26.4",
  "num-traits",
- "num256",
+ "num256 0.5.2",
  "petgraph",
  "phonenumber",
  "rita_client",
@@ -2372,6 +2398,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac4d0cdb15f1e6bf76376510d4c2c6b059df1449f2e3717367988460f2467404"
 dependencies = [
  "bnum",
+ "num-traits",
+ "serde",
+]
+
+[[package]]
+name = "num256"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85228c87555ed4e5ddf024e9ef1908b27458b97e56b195af0d9cf1d7db890023"
+dependencies = [
+ "bnum",
+ "num-integer",
  "num-traits",
  "serde",
 ]
@@ -2998,7 +3036,7 @@ dependencies = [
  "log",
  "mac_address",
  "num-traits",
- "num256",
+ "num256 0.5.2",
  "openssh-keys",
  "phonenumber",
  "rand",
@@ -3043,7 +3081,7 @@ dependencies = [
  "lettre",
  "log",
  "num-traits",
- "num256",
+ "num256 0.5.2",
  "phonenumber",
  "prost-types",
  "rand",
@@ -3095,7 +3133,7 @@ dependencies = [
  "lazy_static",
  "lettre",
  "log",
- "num256",
+ "num256 0.5.2",
  "phonenumber",
  "rita_common",
  "serde",
@@ -3329,29 +3367,22 @@ checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "secp256k1"
-version = "0.28.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d24b59d129cdadea20aea4fb2352fa053712e5d713eee47d700cd4b2bc002f10"
-dependencies = [
- "secp256k1-sys 0.9.2",
-]
-
-[[package]]
-name = "secp256k1"
 version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
 dependencies = [
- "secp256k1-sys 0.10.1",
+ "secp256k1-sys",
 ]
 
 [[package]]
-name = "secp256k1-sys"
-version = "0.9.2"
+name = "secp256k1"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5d1746aae42c19d583c3c1a8c646bfad910498e2051c551a7f2e3c0c9fbb7eb"
+checksum = "b50c5943d326858130af85e049f2661ba3c78b26589b8ab98e65e80ae44a1252"
 dependencies = [
- "cc",
+ "bitcoin_hashes",
+ "rand",
+ "secp256k1-sys",
 ]
 
 [[package]]
@@ -3493,7 +3524,7 @@ dependencies = [
  "ipnetwork",
  "lazy_static",
  "log",
- "num256",
+ "num256 0.5.2",
  "phonenumber",
  "serde",
  "serde_derive",
@@ -4164,7 +4195,7 @@ dependencies = [
  "lazy_static",
  "log",
  "num-traits",
- "num256",
+ "num256 0.5.2",
  "serde",
  "serde_derive",
  "serde_json",

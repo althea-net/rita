@@ -22,7 +22,7 @@ openssl = {workspace = true}
 openssl-probe = {workspace = true}
 env_logger = "0.11"
 log = "0.4"
-clarity = "1.4"
+clarity = "1.5"
 web30 = "1.4"
 phonenumber = "0.3.6"
 actix = "0.13"
