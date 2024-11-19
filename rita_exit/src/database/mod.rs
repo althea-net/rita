@@ -445,7 +445,6 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
 
     let exit_settings = settings::get_rita_exit();
     let internal_ip_v4 = exit_settings.exit_network.internal_ipv4.internal_ip();
-    let internal_netmask = exit_settings.exit_network.internal_ipv4.prefix();
 
     // Get all new clients that need rule setup for wg_exit_v2 and wg_exit respectively
     let changed_clients_return = find_changed_clients(
@@ -465,11 +464,7 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
     for c_key in changed_clients_return.new_v1 {
         if let Some(c) = key_to_client_map.get(&c_key) {
             setup_individual_client_routes(
-                match client_data.get_or_add_client_internal_ip(
-                    *c,
-                    internal_netmask,
-                    internal_ip_v4,
-                ) {
+                match client_data.get_or_add_client_internal_ip(*c) {
                     Ok(a) => std::net::IpAddr::V4(a),
                     Err(e) => {
                         error!(
@@ -487,11 +482,7 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
     for c_key in changed_clients_return.new_v2 {
         if let Some(c) = key_to_client_map.get(&c_key) {
             teardown_individual_client_routes(
-                match client_data.get_or_add_client_internal_ip(
-                    *c,
-                    internal_netmask,
-                    internal_ip_v4,
-                ) {
+                match client_data.get_or_add_client_internal_ip(*c) {
                     Ok(a) => std::net::IpAddr::V4(a),
                     Err(e) => {
                         error!(

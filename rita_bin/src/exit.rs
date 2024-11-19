@@ -165,6 +165,7 @@ async fn main() {
         clients,
         settings.exit_network.ipv6_routing,
         settings.exit_network.ipv4_routing,
+        settings.exit_network.internal_ipv4,
     )));
 
     start_core_rita_endpoints(workers as usize);

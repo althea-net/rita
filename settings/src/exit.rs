@@ -141,13 +141,13 @@ impl ExitIpv6RoutingSettings {
     }
 
     pub fn validate(&self) -> Result<(), SettingsError> {
-        if self.client_subnet_size > self.subnet.prefix() {
+        if self.client_subnet_size < self.subnet.prefix() {
             return Err(SettingsError::InvalidIpv6Configuration(
                 "Client subnet size is larger than the exit subnet".to_string(),
             ));
         }
         for assignment in self.static_assignments.iter() {
-            if !self.subnet.is_supernet_of(assignment.client_subnet) {
+            if !assignment.client_subnet.is_subnet_of(self.subnet) {
                 return Err(SettingsError::InvalidIpv6Configuration(
                     "Static assignment outside of subnet".to_string(),
                 ));
@@ -179,6 +179,15 @@ impl ExitInternalIpv4Settings {
 
     pub fn prefix(&self) -> u8 {
         self.internal_subnet.prefix()
+    }
+
+    pub fn validate(&self) -> Result<(), SettingsError> {
+        if !self.internal_subnet.network().is_private() {
+            return Err(SettingsError::InvalidIpv4Configuration(
+                "Internal subnet is not private".to_string(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -276,7 +285,7 @@ impl ExitNetworkSettings {
             Some(ref x) => x.validate().is_ok(),
             None => true,
         };
-        ipv6_status && self.ipv4_routing.validate().is_ok()
+        ipv6_status && self.ipv4_routing.validate().is_ok() && self.internal_ipv4.validate().is_ok()
     }
 }
 

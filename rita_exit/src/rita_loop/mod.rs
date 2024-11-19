@@ -120,13 +120,11 @@ impl RitaExitData {
     pub fn get_or_add_client_internal_ip(
         &self,
         their_record: Identity,
-        netmask: u8,
-        gateway_ip: Ipv4Addr,
     ) -> Result<Ipv4Addr, Box<RitaExitError>> {
         self.client_list_and_ip_assignments
             .write()
             .unwrap()
-            .get_or_add_client_internal_ip(their_record, netmask, gateway_ip)
+            .get_or_add_client_internal_ip(their_record)
     }
 
     pub fn get_or_add_client_ipv6(

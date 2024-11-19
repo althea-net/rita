@@ -292,6 +292,7 @@ pub fn spawn_rita_exit(
             HashSet::new(),
             settings::get_rita_exit().exit_network.ipv6_routing,
             settings::get_rita_exit().exit_network.ipv4_routing,
+            settings::get_rita_exit().exit_network.internal_ipv4,
         )));
 
         let workers = 4;
