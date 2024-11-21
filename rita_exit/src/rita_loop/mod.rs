@@ -42,10 +42,8 @@ pub const EXIT_LOOP_SPEED: u64 = 5;
 pub const EXIT_LOOP_SPEED_DURATION: Duration = Duration::from_secs(EXIT_LOOP_SPEED);
 pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
-/// Name of the legacy exit interface
-pub const LEGACY_INTERFACE: &str = "wg_exit";
 /// Name of the primary exit interface through which user traffic is decrypted to be forwarded out to the internet
-pub const EXIT_INTERFACE: &str = "wg_exit_v2";
+pub const EXIT_INTERFACE: &str = "wg_exit";
 
 /// Cache of rita exit state to track across ticks
 #[derive(Clone, Debug)]
@@ -58,10 +56,6 @@ pub struct RitaExitData {
     /// setup exit clients and should crash if we fail to do so, otherwise we are preventing
     /// proper failover
     successful_setup: bool,
-    /// cache of b19 routers we have successful rules and routes for
-    wg_exit_clients: HashSet<WgKey>,
-    /// cache of b20 routers we have successful rules and routes for
-    wg_exit_v2_clients: HashSet<WgKey>,
     /// A blacklist of clients that we fail geoip verification for. We tear down these routes
     geoip_blacklist: Vec<Identity>,
     /// A list of geoip info that we have already requested since startup, to reduce api usage
@@ -80,8 +74,6 @@ impl RitaExitData {
             wg_clients: HashSet::new(),
             debt_actions: HashSet::new(),
             successful_setup: false,
-            wg_exit_clients: HashSet::new(),
-            wg_exit_v2_clients: HashSet::new(),
             geoip_blacklist: Vec::new(),
             geoip_cache: HashMap::new(),
             client_list_and_ip_assignments,
@@ -140,15 +132,11 @@ impl RitaExitData {
     pub fn get_setup_states(&self) -> ExitClientSetupStates {
         ExitClientSetupStates {
             old_clients: self.wg_clients.clone(),
-            wg_exit_clients: self.wg_exit_clients.clone(),
-            wg_exit_v2_clients: self.wg_exit_v2_clients.clone(),
         }
     }
 
     pub fn set_setup_states(&mut self, states: ExitClientSetupStates) {
         self.wg_clients = states.old_clients;
-        self.wg_exit_clients = states.wg_exit_clients;
-        self.wg_exit_v2_clients = states.wg_exit_v2_clients;
     }
 
     pub fn get_all_registered_clients(&self) -> HashSet<Identity> {
@@ -371,11 +359,7 @@ async fn check_regions(
 }
 
 fn setup_exit_wg_tunnel() {
-    // Setup legacy wg_exit
-    if let Err(e) = create_blank_wg_interface(LEGACY_INTERFACE) {
-        warn!("exit setup returned {}", e)
-    }
-    // Setup new wg_exit
+    // Setup wg_exit
     if let Err(e) = create_blank_wg_interface(EXIT_INTERFACE) {
         warn!("new exit setup returned {}", e)
     }
@@ -394,11 +378,7 @@ fn setup_exit_wg_tunnel() {
         .ipv6_routing
         .map(|a| a.spit_ip_prefix());
 
-    // Setup legacy wg_exit
-    one_time_exit_setup(None, None, mesh_ip, LEGACY_INTERFACE, enforcement_enabled)
-        .expect("Failed to setup wg_exit!");
-
-    // Setup wg_exit_v2. Local address added is same as that used by wg_exit
+    // Setup wg_exit. Local address added is same as that used by wg_exit
     one_time_exit_setup(
         Some((local_ip.into(), netmask)),
         external_v6,
@@ -408,12 +388,6 @@ fn setup_exit_wg_tunnel() {
     )
     .expect("Failed to setup wg_exit_v2!");
 
-    setup_nat(
-        &settings::get_rita_exit().network.external_nic.unwrap(),
-        LEGACY_INTERFACE,
-        None,
-    )
-    .unwrap();
     setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
         EXIT_INTERFACE,

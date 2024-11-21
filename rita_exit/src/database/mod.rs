@@ -8,13 +8,9 @@ use crate::database::ipddr_assignment::display_hashset;
 use crate::rita_loop::RitaExitData;
 use crate::rita_loop::EXIT_INTERFACE;
 use crate::rita_loop::EXIT_LOOP_TIMEOUT;
-use crate::rita_loop::LEGACY_INTERFACE;
 use crate::ClientListAnIpAssignmentMap;
 use crate::RitaExitError;
 use althea_kernel_interface::exit_server_tunnel::set_exit_wg_config;
-use althea_kernel_interface::exit_server_tunnel::setup_individual_client_routes;
-use althea_kernel_interface::exit_server_tunnel::teardown_individual_client_routes;
-use althea_kernel_interface::setup_wg_if::get_last_active_handshake_time;
 use althea_kernel_interface::traffic_control::create_flow_by_ip;
 use althea_kernel_interface::traffic_control::create_flow_by_ipv6;
 use althea_kernel_interface::traffic_control::delete_class;
@@ -41,7 +37,6 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
-use std::time::SystemTime;
 
 pub mod dualmap;
 pub mod geoip;
@@ -274,19 +269,12 @@ pub struct ExitClientSetupStates {
     // cache of clients from previous tick. Used to check if we need to
     // rerun some setup code
     pub old_clients: HashSet<ExitClient>,
-    // List of clients we see on wg_exit from previous tick. Used to check for new clients on the
-    // interface
-    pub wg_exit_clients: HashSet<WgKey>,
-    // List of clients on wg_exit_v2 from previous tick
-    pub wg_exit_v2_clients: HashSet<WgKey>,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct CurrentExitClientState {
-    new_v2: HashSet<WgKey>,
-    new_v1: HashSet<WgKey>,
-    all_v2: HashSet<WgKey>,
-    all_v1: HashSet<WgKey>,
+    new: HashSet<WgKey>,
+    all: HashSet<WgKey>,
 }
 
 /// Gets a complete list of clients from the database and transforms that list
@@ -307,7 +295,6 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
     // use hashset to ensure uniqueness and check for duplicate db entries
     let mut wg_clients = HashSet::new();
     let mut geoip_blacklist_map = HashSet::new();
-    let key_to_client_map: HashMap<WgKey, Identity> = HashMap::new();
 
     trace!(
         "got clients from db {:?} {:?}",
@@ -363,13 +350,13 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
         .count()
         != 0
     {
-        info!("Setting up configs for wg_exit and wg_exit_v2");
+        info!("Setting up configs for wg_exit");
         // setup all the tunnels
         let exit_status = set_exit_wg_config(
             &wg_clients,
             settings::get_rita_exit().exit_network.wg_tunnel_port,
             &settings::get_rita_exit().network.wg_private_key_path,
-            LEGACY_INTERFACE,
+            EXIT_INTERFACE,
         );
 
         match exit_status {
@@ -384,25 +371,6 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
             ),
         }
 
-        // Setup new tunnels
-        let exit_status_new = set_exit_wg_config(
-            &wg_clients,
-            settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
-            &settings::get_rita_exit().network.wg_private_key_path,
-            EXIT_INTERFACE,
-        );
-
-        match exit_status_new {
-            Ok(()) => {
-                trace!("Successfully setup Exit wg_exit_v2!");
-            }
-            Err(e) => warn!(
-                "Error in Exit wg_exit_v2 setup {:?}, 
-                        this usually happens when a Rita service is 
-                        trying to auto restart in the background",
-                e
-            ),
-        }
         info!(
             "exit setup loop completed in {}s {}ms with {} clients and {} wg_clients",
             start.elapsed().as_secs(),
@@ -412,173 +380,11 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
         );
     }
 
-    // Setup ipv6 and v4 routes and rules for clients
-    // We optimise by setting up routes/rules only for those routers we see a latest handshake value with.
-    // 1.) Find handshakes on both interfaces
-    // 2.) From these timestamps, determine if client is wg exit v1 or v2
-    // 3.) Compare this to our datastore of previous clients we set up routes for
-    // 4.) Set up routes for v2 or v1 based on this
-    let new_wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> =
-        get_last_active_handshake_time(EXIT_INTERFACE)
-            .expect("There should be a new wg_exit interface")
-            .into_iter()
-            .collect();
-    let wg_exit_clients_timestamps: HashMap<WgKey, SystemTime> =
-        get_last_active_handshake_time(LEGACY_INTERFACE)
-            .expect("There should be a wg_exit interface")
-            .into_iter()
-            .collect();
-
-    let client_list_for_setup: Vec<Identity> = key_to_client_map
-        .clone()
-        .into_iter()
-        .filter_map(|(k, v)| {
-            if new_wg_exit_clients_timestamps.contains_key(&k)
-                || wg_exit_clients_timestamps.contains_key(&k)
-            {
-                Some(v)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let exit_settings = settings::get_rita_exit();
-    let internal_ip_v4 = exit_settings.exit_network.internal_ipv4.internal_ip();
-
-    // Get all new clients that need rule setup for wg_exit_v2 and wg_exit respectively
-    let changed_clients_return = find_changed_clients(
-        client_states.clone(),
-        new_wg_exit_clients_timestamps,
-        wg_exit_clients_timestamps,
-        client_list_for_setup,
-    );
-
     // set previous tick states to current clients on wg interfaces
-    client_states.wg_exit_v2_clients = changed_clients_return.all_v2;
-    client_states.wg_exit_clients = changed_clients_return.all_v1;
-
-    // setup wg_exit routes (downgrade from b20 -> 19 and new b19 routers)
-    // note these are spot routes for routers still on beta19 by default
-    // all traffic will go over wg_exit_v2
-    for c_key in changed_clients_return.new_v1 {
-        if let Some(c) = key_to_client_map.get(&c_key) {
-            setup_individual_client_routes(
-                match client_data.get_or_add_client_internal_ip(*c) {
-                    Ok(a) => std::net::IpAddr::V4(a),
-                    Err(e) => {
-                        error!(
-                            "Received error while trying to retrieve client internal ip {}",
-                            e
-                        );
-                        continue;
-                    }
-                },
-                internal_ip_v4.into(),
-                LEGACY_INTERFACE,
-            );
-        }
-    }
-    for c_key in changed_clients_return.new_v2 {
-        if let Some(c) = key_to_client_map.get(&c_key) {
-            teardown_individual_client_routes(
-                match client_data.get_or_add_client_internal_ip(*c) {
-                    Ok(a) => std::net::IpAddr::V4(a),
-                    Err(e) => {
-                        error!(
-                            "Received error while trying to retrieve client internal ip {}",
-                            e
-                        );
-                        continue;
-                    }
-                },
-            );
-        }
-    }
+    client_states.old_clients = wg_clients;
 
     client_data.set_setup_states(client_states);
     Ok(())
-}
-
-/// Find all clients that underwent transition from b19 -> 20 or vice versa and need updated rules and routes
-/// This function returns (v2_clients to setup, v1_clients to setup, all_v2 clients, all_v1 clients)
-fn find_changed_clients(
-    client_states: ExitClientSetupStates,
-    all_v2: HashMap<WgKey, SystemTime>,
-    all_v1: HashMap<WgKey, SystemTime>,
-    clients_list: Vec<Identity>,
-) -> CurrentExitClientState {
-    let mut v1_clients = HashSet::new();
-
-    let mut v2_clients = HashSet::new();
-
-    // Look at handshakes of each client to determine if they are a V1 or V2 client
-    for c in clients_list {
-        match get_client_interface(c, all_v2.clone(), all_v1.clone()) {
-            Ok(interface) => {
-                if interface == ClientInterfaceType::LegacyInterface {
-                    v1_clients.insert(c.wg_public_key);
-                } else if interface == ClientInterfaceType::ExitInterface {
-                    v2_clients.insert(c.wg_public_key);
-                }
-            }
-            Err(_) => {
-                // There is no handshake on either wg_exit or wg_exit_v2, which can happen during a restart
-                // in this case the client will not have an ipv6 route until they initiate a handshake again
-                continue;
-            }
-        };
-    }
-
-    // All new client (that need rules setup) are Set{clients on wg interface} - Set{clients from previous tick}
-    let new_v2 = &v2_clients - &client_states.wg_exit_v2_clients;
-    let new_v1 = &v1_clients - &client_states.wg_exit_clients;
-
-    CurrentExitClientState {
-        new_v2,
-        new_v1,
-        all_v2: v2_clients,
-        all_v1: v1_clients,
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub enum ClientInterfaceType {
-    LegacyInterface,
-    ExitInterface,
-}
-
-pub fn get_client_interface(
-    c: Identity,
-    new_wg_exit_clients: HashMap<WgKey, SystemTime>,
-    wg_exit_clients: HashMap<WgKey, SystemTime>,
-) -> Result<ClientInterfaceType, Box<RitaExitError>> {
-    trace!(
-        "New list is {:?} \n Old list is {:?}",
-        new_wg_exit_clients,
-        wg_exit_clients
-    );
-    match (
-        new_wg_exit_clients.get(&c.wg_public_key),
-        wg_exit_clients.get(&c.wg_public_key),
-    ) {
-        (Some(_), None) => Ok(ClientInterfaceType::ExitInterface),
-        (None, Some(_)) => Ok(ClientInterfaceType::LegacyInterface),
-        (Some(new), Some(old)) => {
-            if new > old {
-                Ok(ClientInterfaceType::ExitInterface)
-            } else {
-                Ok(ClientInterfaceType::LegacyInterface)
-            }
-        }
-        _ => {
-            error!(
-                "WG EXIT SETUP: Client {}, does not have handshake with any wg exit interface. Setting up routes on wg_exit",
-                c.wg_public_key
-            );
-            Ok(ClientInterfaceType::LegacyInterface)
-        }
-    }
 }
 
 /// Performs enforcement actions on clients by requesting a list of clients from debt keeper
@@ -630,30 +436,16 @@ pub fn enforce_exit_clients(client_data: &mut RitaExitData) -> Result<(), Box<Ri
                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.public_key, debt_entry.payment_details.debt, close_threshold);
                             // setup flows this allows us to classify traffic we then limit the class, we delete the class as part of unenforcment but it's difficult to delete the flows
                             // so a user who has been enforced and unenforced while the exit has been online may already have them setup
-                            let flow_setup_required = match (
-                                has_flow(ip, EXIT_INTERFACE),
-                                has_flow(ip, LEGACY_INTERFACE),
-                            ) {
-                                (Ok(true), Ok(true))
-                                | (Ok(true), Ok(false))
-                                | (Ok(false), Ok(true)) => true,
-                                // skip repeat setup
-                                (Ok(false), Ok(false)) => false,
-                                // in case of error do nothing better for the user not be enforced if we have an issue
-                                (_, Err(e)) => {
-                                    error!("Failed to get flow status with {:?}", e);
-                                    false
-                                }
-                                (Err(e), _) => {
+                            let flow_setup_required = match has_flow(ip, EXIT_INTERFACE) {
+                                Ok(true) => true,
+                                Ok(false) => false,
+                                Err(e) => {
                                     error!("Failed to get flow status with {:?}", e);
                                     false
                                 }
                             };
                             if flow_setup_required {
                                 // create ipv4 and ipv6 flows, which are used to classify traffic, we can then limit the class specifically
-                                if let Err(e) = create_flow_by_ip(LEGACY_INTERFACE, ip) {
-                                    error!("Failed to setup flow for wg_exit {:?}", e);
-                                }
                                 if let Err(e) = create_flow_by_ip(EXIT_INTERFACE, ip) {
                                     error!("Failed to setup flow for wg_exit_v2 {:?}", e);
                                 }
@@ -676,14 +468,6 @@ pub fn enforce_exit_clients(client_data: &mut RitaExitData) -> Result<(), Box<Ri
                             }
 
                             if let Err(e) = set_class_limit(
-                                LEGACY_INTERFACE,
-                                free_tier_limit,
-                                free_tier_limit,
-                                ip,
-                            ) {
-                                error!("Unable to setup enforcement class on wg_exit: {:?}", e);
-                            }
-                            if let Err(e) = set_class_limit(
                                 EXIT_INTERFACE,
                                 free_tier_limit,
                                 free_tier_limit,
@@ -692,15 +476,10 @@ pub fn enforce_exit_clients(client_data: &mut RitaExitData) -> Result<(), Box<Ri
                                 error!("Unable to setup enforcement class on wg_exit_v2: {:?}", e);
                             }
                         } else {
-                            let action_required = match (
-                                has_class(ip, LEGACY_INTERFACE),
-                                has_class(ip, EXIT_INTERFACE),
-                            ) {
-                                (Ok(a), Ok(b)) => a | b,
-                                (Ok(a), Err(_)) => a,
-                                (Err(_), Ok(a)) => a,
-                                (Err(ea), Err(eb)) => {
-                                    error!("Failed to get qdisc class status from both exit interfaces {:?} {:?}", ea, eb);
+                            let action_required = match has_class(ip, EXIT_INTERFACE) {
+                                Ok(a) => a,
+                                Err(e) => {
+                                    error!("Failed to get qdisc class status from both exit interfaces {:?}", e);
                                     false
                                 }
                             };
@@ -708,10 +487,6 @@ pub fn enforce_exit_clients(client_data: &mut RitaExitData) -> Result<(), Box<Ri
                                 // Delete exisiting enforcement class, users who are not enforced are unclassifed becuase
                                 // leaving the class in place reduces their speeds.
                                 info!("Deleting enforcement classes for {}", client.public_key);
-                                if let Err(e) = delete_class(LEGACY_INTERFACE, ip) {
-                                    error!("Unable to delete class on wg_exit, is {} still enforced when they shouldnt be? {:?}", ip, e);
-                                }
-
                                 if let Err(e) = delete_class(EXIT_INTERFACE, ip) {
                                     error!("Unable to delete class on wg_exit_v2, is {} still enforced when they shouldnt be? {:?}", ip, e);
                                 }

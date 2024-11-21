@@ -199,7 +199,6 @@ pub struct ExitNetworkSettings {
     pub exit_hello_port: u16,
     /// This is the port which the exit tunnel listens on
     pub wg_tunnel_port: u16,
-    pub wg_v2_tunnel_port: u16,
     /// Price in wei per byte which is charged to traffic both coming in and out over the internet
     pub exit_price: u64,
     /// Settings controlling the exits external ipv4 network and how traffic is routed there
@@ -262,8 +261,7 @@ impl ExitNetworkSettings {
     pub fn test_default() -> Self {
         ExitNetworkSettings {
             exit_hello_port: 4875,
-            wg_tunnel_port: 59999,
-            wg_v2_tunnel_port: 59998,
+            wg_tunnel_port: 59998,
             exit_price: 10,
             geoip_api_user: None,
             geoip_api_key: None,
@@ -366,7 +364,7 @@ impl RitaExitSettingsStruct {
             wg_key: id.wg_public_key,
             eth_addr: id.eth_address,
             registration_port: self.exit_network.exit_hello_port,
-            wg_exit_listen_port: self.exit_network.wg_v2_tunnel_port,
+            wg_exit_listen_port: self.exit_network.wg_tunnel_port,
             allowed_regions: self.allowed_countries.clone(),
             payment_types: set,
         }

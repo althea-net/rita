@@ -9,7 +9,6 @@
 //! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
 
 use crate::rita_loop::EXIT_INTERFACE;
-use crate::rita_loop::LEGACY_INTERFACE;
 use crate::RitaExitError;
 use althea_kernel_interface::setup_wg_if::get_wg_exit_clients_online;
 use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
@@ -138,12 +137,8 @@ fn debts_logging(debts: &HashMap<Identity, i128>) {
     }
     info!("Total exit income of {:?} Wei this round", total_income);
 
-    match get_wg_exit_clients_online(LEGACY_INTERFACE) {
-        Ok(users) => info!("Total of {} wg_exit users online", users),
-        Err(e) => warn!("Getting clients failed with {:?}", e),
-    }
     match get_wg_exit_clients_online(EXIT_INTERFACE) {
-        Ok(users) => info!("Total of {} wg_exit_v2 users online", users),
+        Ok(users) => info!("Total of {} wg_exit users online", users),
         Err(e) => warn!("Getting clients failed with {:?}", e),
     }
 }
@@ -178,18 +173,7 @@ pub fn watch_exit_traffic(
     let id_from_ip = ret.ip_to_id;
     let destinations = get_babel_info(routes, our_id, id_from_ip);
 
-    let counters = match read_wg_counters(LEGACY_INTERFACE) {
-        Ok(res) => res,
-        Err(e) => {
-            warn!(
-                "Error getting input counters {:?} traffic has gone unaccounted!",
-                e
-            );
-            return Err(Box::new(e.into()));
-        }
-    };
-
-    let new_counters = match read_wg_counters(EXIT_INTERFACE) {
+    let counters = match read_wg_counters(EXIT_INTERFACE) {
         Ok(res) => res,
         Err(e) => {
             warn!(
@@ -207,9 +191,6 @@ pub fn watch_exit_traffic(
         debts.insert(ident, 0i128);
     }
 
-    trace!("Old counters are: {:?}", counters);
-    trace!("New counters are: {:?}", new_counters);
-    let counters: HashMap<WgKey, WgUsage> = merge_counters(&counters, &new_counters);
     trace!("merged counters are : {:?}", counters);
 
     // creates new usage entires does not actualy update the values
@@ -294,26 +275,6 @@ pub fn watch_exit_traffic(
     traffic_update(traffic_vec);
 
     Ok(())
-}
-
-/// This function merges two counter maps for wg_exit and wg_exit_v2 for combined accounting
-fn merge_counters(
-    old_counters: &HashMap<WgKey, WgUsage>,
-    new_counters: &HashMap<WgKey, WgUsage>,
-) -> HashMap<WgKey, WgUsage> {
-    let mut ret: HashMap<WgKey, WgUsage> = HashMap::new();
-    ret.extend(old_counters);
-    for (k, e) in new_counters {
-        if ret.contains_key(k) {
-            let mut usage = *ret.get(k).unwrap();
-            usage.upload += e.upload;
-            usage.download += e.download;
-            ret.insert(*k, usage);
-        } else {
-            ret.insert(*k, *e);
-        }
-    }
-    ret
 }
 
 #[test]

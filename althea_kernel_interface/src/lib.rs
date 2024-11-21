@@ -85,6 +85,7 @@ pub enum KernelInterfaceError {
     FailedToGetSystemKernelVersion,
     ParseError(String),
     FromUtf8Error,
+    WgSetupFailed(String),
 }
 
 impl fmt::Display for KernelInterfaceError {
@@ -128,6 +129,7 @@ impl fmt::Display for KernelInterfaceError {
                 write!(f, "Failed to get system kernel version!")
             }
             KernelInterfaceError::FromUtf8Error => write!(f, "Could not parse from utf8 output"),
+            KernelInterfaceError::WgSetupFailed(val) => write!(f, "Wireguard setup failed: {val}"),
         }
     }
 }

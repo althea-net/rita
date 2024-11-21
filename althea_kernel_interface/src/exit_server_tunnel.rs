@@ -63,10 +63,15 @@ pub fn set_exit_wg_config(
 
     let arg_str: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
-    run_command(&command, &arg_str[..])?;
+    let res = run_command(&command, &arg_str[..])?;
+    if !res.status.success() {
+        return Err(KernelInterfaceError::WgSetupFailed(format!(
+            "failed to set wg config: {}",
+            String::from_utf8(res.stderr)?
+        )));
+    }
 
     let wg_peers = get_peers(if_name)?;
-    info!("{} has {} peers", if_name, wg_peers.len());
     for i in wg_peers {
         if !client_pubkeys.contains(&i) {
             warn!("Removing no longer authorized peer {}", i);
@@ -75,57 +80,6 @@ pub fn set_exit_wg_config(
     }
 
     Ok(())
-}
-
-/// This function adds a route for each client ipv4 subnet to the routing table
-/// this works on the premise of smallest prefix first routing meaning that we can assign
-/// ip route 172.168.0.1/16 to wg_exit_v2 and then individually add /32 routes to wg_exit_v1
-/// and this will produce the same routing outcomes with many less routes than adding individual routes
-/// on both
-pub fn setup_individual_client_routes(
-    client_internal_ip: IpAddr,
-    exit_internal_v4: IpAddr,
-    interface: &str,
-) {
-    let mut interface_cloned = interface.to_string();
-    interface_cloned.push(' ');
-    // Setup ipv4 route
-    // 1.) Select all ipv4 routes with 'client_internal_ip'. This gives us all routes with wg_exit and wg_exit_v2 for the ip
-    //     THere should be only one route
-    // 2.) Does the route contain 'interface'? Yes? we continue
-    // 3.) No? That means either no route exists or there is a route with the other interface name
-    // 4.) Delete route, add new route with the correct interface
-    let output = run_command("ip", &["route", "show", &client_internal_ip.to_string()])
-        .expect("Fix command");
-    let route = String::from_utf8(output.stdout).unwrap();
-    if !route.contains(&interface_cloned) {
-        run_command("ip", &["route", "del", &client_internal_ip.to_string()]).expect("Fix command");
-
-        run_command(
-            "ip",
-            &[
-                "route",
-                "add",
-                &client_internal_ip.to_string(),
-                "dev",
-                interface,
-                "src",
-                &exit_internal_v4.to_string(),
-            ],
-        )
-        .expect("Fix command");
-    }
-}
-
-/// this function performs the teardown step of setup_indvidual_client_routes, when a router upgrades
-/// to beta20 or later this function checks for and deltes the rules
-pub fn teardown_individual_client_routes(client_internal_ip: IpAddr) {
-    let output = run_command("ip", &["route", "show", &client_internal_ip.to_string()])
-        .expect("Fix command");
-    let route = String::from_utf8(output.stdout).unwrap();
-    if !route.is_empty() {
-        run_command("ip", &["route", "del", &client_internal_ip.to_string()]).expect("Fix command");
-    }
 }
 
 /// Performs the one time startup tasks for the rita_exit clients loop

@@ -441,7 +441,7 @@ pub fn get_default_settings(
                     wg_key: exit_id.exit_id.wg_public_key,
                     eth_addr: exit_id.exit_id.eth_address,
                     registration_port: exit.exit_network.exit_hello_port,
-                    wg_exit_listen_port: exit.exit_network.wg_v2_tunnel_port,
+                    wg_exit_listen_port: exit.exit_network.wg_tunnel_port,
                     allowed_regions: HashSet::new(),
                     payment_types,
                 },

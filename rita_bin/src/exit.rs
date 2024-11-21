@@ -60,9 +60,9 @@ fn sanity_check_config() {
     {
         panic!("GEOIP enforcement configured but not api key provided!");
     }
-
-    // check wg_exit_v2 port is valid
-    assert!(exit_settings.exit_network.wg_v2_tunnel_port < 59999);
+    if !exit_settings.validate() {
+        panic!("Invalid settings file!");
+    }
 }
 
 #[actix_rt::main]
