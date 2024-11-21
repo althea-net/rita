@@ -30,9 +30,6 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
 
-/// TODO replace with a component in the exit config struct
-const DEFAULT_WG_LISTEN_PORT: u16 = 59998;
-
 /// Data to use identity whether a clients wg exit tunnel needs to be setup up again across ticks
 #[derive(Clone)]
 pub struct LastExitStates {

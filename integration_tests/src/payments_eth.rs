@@ -62,13 +62,18 @@ pub async fn run_eth_payments_test_scenario() {
     info!("Starting root server!");
     spawn_exit_root_of_trust(db_addr).await;
 
-    let rita_identities =
-        thread_spawner(namespaces.clone(), client_settings, exit_settings, db_addr)
-            .expect("Could not spawn Rita threads");
+    let rita_identities = thread_spawner(
+        namespaces.clone(),
+        client_settings,
+        exit_settings.clone(),
+        db_addr,
+    )
+    .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
     // Add exits to the contract exit list so clients get the propers exits they can migrate to
-    add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
+    add_exits_contract_exit_list(db_addr, exit_settings.exit_network, rita_identities.clone())
+        .await;
 
     populate_routers_eth(rita_identities, exit_root_addr).await;
 

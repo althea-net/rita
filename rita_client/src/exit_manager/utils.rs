@@ -1,5 +1,4 @@
 use super::LastExitStates;
-use crate::exit_manager::DEFAULT_WG_LISTEN_PORT;
 use crate::heartbeat::get_exit_registration_state;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
@@ -21,6 +20,7 @@ use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;
+use rita_common::CLIENT_WG_PORT;
 use std::net::SocketAddr;
 
 pub fn linux_setup_exit_tunnel(
@@ -40,11 +40,15 @@ pub fn linux_setup_exit_tunnel(
         return Err(RitaClientError::MiscStringError(v));
     }
 
+    error!(
+        "Got wg exit listen port as: {}",
+        selected_exit.wg_exit_listen_port
+    );
     let args = ClientExitTunnelConfig {
         endpoint: SocketAddr::new(selected_exit.mesh_ip, selected_exit.wg_exit_listen_port),
         pubkey: selected_exit.wg_key,
         private_key_path: network.wg_private_key_path.clone(),
-        listen_port: DEFAULT_WG_LISTEN_PORT,
+        listen_port: CLIENT_WG_PORT,
         local_ip: our_details.client_internal_ip,
         netmask: general_details.netmask,
         rita_hello_port: network.rita_hello_port,

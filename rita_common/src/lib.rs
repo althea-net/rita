@@ -11,6 +11,11 @@ extern crate arrayvec;
 pub static DROPBEAR_CONFIG: &str = "/etc/config/dropbear";
 pub static DROPBEAR_AUTHORIZED_KEYS: &str = "/etc/dropbear/authorized_keys";
 
+/// Default wg_exit port on the client side, by default the client reaches out to the server on the port
+/// provided in th exit entry. But the exit can reach out to the client provided it knows the port
+/// the client is listening on. Which will be this value.
+pub const CLIENT_WG_PORT: u16 = 59999;
+
 pub mod blockchain_oracle;
 pub mod dashboard;
 pub mod debt_keeper;

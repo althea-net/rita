@@ -1,5 +1,4 @@
 use super::get_current_exit;
-use super::DEFAULT_WG_LISTEN_PORT;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use actix_web::Result;
@@ -9,6 +8,7 @@ use althea_types::ExitIdentity;
 use althea_types::SignedExitServerList;
 use althea_types::WgKey;
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState};
+use rita_common::CLIENT_WG_PORT;
 use settings::exit::EXIT_LIST_IP;
 use settings::exit::EXIT_LIST_PORT;
 use settings::get_registration_details;
@@ -131,7 +131,7 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
                         ));
                     }
                 },
-                wg_port: DEFAULT_WG_LISTEN_PORT,
+                wg_port: CLIENT_WG_PORT,
                 reg_details,
             };
 
@@ -209,7 +209,7 @@ pub async fn exit_status_request(exit: ExitIdentity) -> Result<(), RitaClientErr
                 ));
             }
         },
-        wg_port: DEFAULT_WG_LISTEN_PORT,
+        wg_port: CLIENT_WG_PORT,
         reg_details,
     };
 

@@ -4,14 +4,12 @@ use crate::RitaExitError;
 use althea_kernel_interface::ExitClient;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState, Identity};
 use ipnetwork::{IpNetwork, Ipv6Network};
+use rita_common::CLIENT_WG_PORT;
 use settings::exit::{ExitInternalIpv4Settings, ExitIpv4RoutingSettings, ExitIpv6RoutingSettings};
 use settings::get_rita_exit;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-
-/// Wg exit port on client side
-pub const CLIENT_WG_PORT: u16 = 59999;
 
 /// Max number of time we try to generate a valid ip addr before returning an eror
 pub const MAX_IP_RETRIES: u8 = 10;

@@ -53,14 +53,19 @@ pub async fn run_multi_exit_test() {
     let rita_identities = thread_spawner(
         namespaces.clone(),
         rita_client_settings,
-        rita_exit_settings,
+        rita_exit_settings.clone(),
         db_addr,
     )
     .expect("Could not spawn Rita threads");
     info!("Thread Spawner: {res:?}");
 
     // Add exits to the contract exit list so clients get the propers exits they can migrate to
-    add_exits_contract_exit_list(db_addr, rita_identities.clone()).await;
+    add_exits_contract_exit_list(
+        db_addr,
+        rita_exit_settings.exit_network,
+        rita_identities.clone(),
+    )
+    .await;
 
     populate_routers_eth(rita_identities, exit_root_addr).await;
 

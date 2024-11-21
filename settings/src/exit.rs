@@ -261,7 +261,7 @@ impl ExitNetworkSettings {
     pub fn test_default() -> Self {
         ExitNetworkSettings {
             exit_hello_port: 4875,
-            wg_tunnel_port: 59998,
+            wg_tunnel_port: 59999,
             exit_price: 10,
             geoip_api_user: None,
             geoip_api_key: None,

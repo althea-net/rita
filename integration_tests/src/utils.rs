@@ -1184,7 +1184,11 @@ pub async fn populate_routers_eth(rita_identities: InstanceData, exit_root_addr:
     send_eth_bulk((ONE_ETH * 50).into(), &to_top_up, &web3).await;
 }
 
-pub async fn add_exits_contract_exit_list(db_addr: Address, rita_identities: InstanceData) {
+pub async fn add_exits_contract_exit_list(
+    db_addr: Address,
+    exit_settings: ExitNetworkSettings,
+    rita_identities: InstanceData,
+) {
     let web3 = Web3::new(&get_eth_node(), WEB3_TIMEOUT);
     let miner_private_key: clarity::PrivateKey = REGISTRATION_SERVER_KEY.parse().unwrap();
     let miner_pub_key = miner_private_key.to_address();
@@ -1207,8 +1211,8 @@ pub async fn add_exits_contract_exit_list(db_addr: Address, rita_identities: Ins
             mesh_ip: id.mesh_ip,
             wg_key: id.wg_public_key,
             eth_addr: id.eth_address,
-            registration_port: 4875,
-            wg_exit_listen_port: 59998,
+            registration_port: exit_settings.exit_hello_port,
+            wg_exit_listen_port: exit_settings.wg_tunnel_port,
             allowed_regions: {
                 let mut ret = HashSet::new();
                 ret.insert(Regions::UnitedStates);
