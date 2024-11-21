@@ -9,6 +9,12 @@ pub struct DualMap<K, V> {
     value_to_key: HashMap<V, K>,
 }
 
+impl<K: std::hash::Hash + Eq + Clone, V: std::hash::Hash + Eq + Clone> Default for DualMap<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K: std::hash::Hash + Eq + Clone, V: std::hash::Hash + Eq + Clone> DualMap<K, V> {
     pub fn new() -> DualMap<K, V> {
         DualMap {
