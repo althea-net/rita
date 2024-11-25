@@ -50,7 +50,7 @@
     "solc": "0.8.7-fixed",
     "solhint": "^3.2.1",
     "solhint-plugin-prettier": "^0.0.5",
-    "solidity-coverage": "^0.7.12",
+    "solidity-coverage": "^0.8.14",
     "ts-generator": "^0.1.1",
     "ts-node": "^8.10.2",
     "typechain": "^4.0.1",
