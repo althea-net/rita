@@ -30,7 +30,7 @@ actix-web = { workspace = true }
 docopt = "1.1"
 compressed_log = "0.5"
 settings = { path = "../settings" }
-diesel = { version = "1.4", features = ["postgres", "r2d2"] }
+diesel = { version = "2.2", features = ["postgres", "r2d2"] }
 log = { version = "0.4", features = ["release_max_level_info"] }
 serde = "1.0"
 serde_json = "1.0"
