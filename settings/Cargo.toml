@@ -9,7 +9,7 @@ althea_types = { path = "../althea_types"}
 babel_monitor = { path = "../babel_monitor"}
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 auto-bridge = { path = "../auto_bridge" }
-num256 = "0.5"
+num256 = "0.6"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"

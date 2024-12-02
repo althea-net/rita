@@ -376,7 +376,7 @@ dependencies = [
  "deep_space",
  "ipnetwork",
  "lettre",
- "num256",
+ "num256 0.5.2",
  "phonenumber",
  "rand",
  "serde",
@@ -529,7 +529,7 @@ dependencies = [
  "futures 0.3.31",
  "log",
  "num",
- "num256",
+ "num256 0.6.0",
  "rand",
  "serde",
  "serde_derive",
@@ -739,6 +739,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29ed1ec45f6ef6e8d1125cc2c2fec8f8fe7d4fa5b262f15885fdccb9e26f0f15"
 dependencies = [
+ "num-integer",
  "num-traits",
 ]
 
@@ -902,7 +903,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4cc231e36d58a7fc35e59d4177f5579428e3586992f93ebabeafb873ef89eb46"
 dependencies = [
  "num-traits",
- "num256",
+ "num256 0.5.2",
  "secp256k1 0.28.2",
  "serde",
  "serde_derive",
@@ -1150,7 +1151,7 @@ dependencies = [
  "hmac",
  "log",
  "num-traits",
- "num256",
+ "num256 0.5.2",
  "pbkdf2",
  "prost",
  "prost-types",
@@ -1902,7 +1903,7 @@ dependencies = [
  "log",
  "nix 0.26.4",
  "num-traits",
- "num256",
+ "num256 0.6.0",
  "petgraph",
  "phonenumber",
  "rita_client",
@@ -2372,6 +2373,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac4d0cdb15f1e6bf76376510d4c2c6b059df1449f2e3717367988460f2467404"
 dependencies = [
  "bnum",
+ "num-traits",
+ "serde",
+]
+
+[[package]]
+name = "num256"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85228c87555ed4e5ddf024e9ef1908b27458b97e56b195af0d9cf1d7db890023"
+dependencies = [
+ "bnum",
+ "num-integer",
  "num-traits",
  "serde",
 ]
@@ -2998,7 +3011,7 @@ dependencies = [
  "log",
  "mac_address",
  "num-traits",
- "num256",
+ "num256 0.6.0",
  "openssh-keys",
  "phonenumber",
  "rand",
@@ -3043,7 +3056,7 @@ dependencies = [
  "lettre",
  "log",
  "num-traits",
- "num256",
+ "num256 0.6.0",
  "phonenumber",
  "prost-types",
  "rand",
@@ -3094,7 +3107,7 @@ dependencies = [
  "ipnetwork",
  "lettre",
  "log",
- "num256",
+ "num256 0.6.0",
  "phonenumber",
  "rita_common",
  "serde",
@@ -3492,7 +3505,7 @@ dependencies = [
  "ipnetwork",
  "lazy_static",
  "log",
- "num256",
+ "num256 0.6.0",
  "phonenumber",
  "serde",
  "serde_derive",
@@ -4163,7 +4176,7 @@ dependencies = [
  "lazy_static",
  "log",
  "num-traits",
- "num256",
+ "num256 0.5.2",
  "serde",
  "serde_derive",
  "serde_json",

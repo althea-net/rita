@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 web30 = {workspace = true}
-num256 = "0.5"
+num256 = "0.6"
 clarity = {workspace = true}
 rand = "0.8"
 num = "0.4"

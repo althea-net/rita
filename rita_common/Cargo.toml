@@ -24,7 +24,7 @@ log = { version = "0.4", features = ["release_max_level_info"] }
 settings = { path = "../settings" }
 clarity = {workspace = true}
 futures = { version = "0.3", features = ["compat"] }
-num256 = "0.5"
+num256 = "0.6"
 num-traits = "0.2"
 bincode = "1.3"
 serde_cbor = "0.11"
