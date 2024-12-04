@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 web30 = {workspace = true}
-num256 = "0.5"
+num256 = {workspace = true}
 clarity = {workspace = true}
 rand = "0.8"
 num = "0.4"
