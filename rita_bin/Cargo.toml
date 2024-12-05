@@ -14,10 +14,6 @@ name = "rita"
 path = "src/client.rs"
 
 [[bin]]
-name = "contract-util"
-path = "src/contract-util.rs"
-
-[[bin]]
 name = "rita_extender"
 path = "src/extender.rs"
 
@@ -30,7 +26,6 @@ actix-web = { workspace = true }
 docopt = "1.1"
 compressed_log = "0.5"
 settings = { path = "../settings" }
-diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 log = { version = "0.4", features = ["release_max_level_info"] }
 serde = "1.0"
 serde_json = "1.0"
@@ -42,7 +37,6 @@ r2d2 = "0.8"
 ctrlc = { version = "3.4.5", features = ["termination"] }
 rita_common = { path = "../rita_common", default-features = false }
 rita_client = { path = "../rita_client", default-features = false }
-rita_db_migration = { path = "../rita_db_migration", default-features = false }
 rita_exit = { path = "../rita_exit", default-features = false }
 rita_extender = { path = "../rita_extender", default-features = false }
 exit_trust_root = { path = "../exit_trust_root" }

@@ -1156,7 +1156,7 @@ pub async fn validate_debt_entry(
 
 pub async fn register_all_namespaces_to_exit(namespaces: NamespaceInfo) {
     for r in namespaces.names.clone() {
-        if let NodeType::Client { exit_name } = r.node_type.clone() {
+        if let NodeType::Client { exit_name, .. } = r.node_type.clone() {
             let res = register_to_exit(r.get_name()).await;
             if !res {
                 panic!("Failed to register {} to exit with {}", r.get_name(), res);

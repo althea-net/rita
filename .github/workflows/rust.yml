@@ -124,13 +124,3 @@ jobs:
           cache-on-failure: true
       - name: Run integration test
         run:  bash scripts/integration_tests/all-up-test-ci.sh CONTRACT_TEST
-  integration-test-db-migration:
-    needs: check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - name: Run integration test
-        run:  bash scripts/integration_tests/all-up-test-ci.sh MIGRATION_TEST

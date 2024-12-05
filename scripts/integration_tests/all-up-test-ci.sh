@@ -12,11 +12,6 @@ sudo apt install -y sudo \
           jq \
           vim \
           netcat-traditional \
-          default-libmysqlclient-dev \
-          libsqlite3-dev \
-          postgresql-client-14 \
-          postgresql-server-dev-14 \
-          libpq-dev \
           python3-pip \
           bridge-utils \
           wireguard \

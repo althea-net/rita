@@ -26,19 +26,19 @@ Rita supports either [Althea L1](https://github.com/althea-net/althea-L1) or any
 
 Debian:
 
-    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all automake liboping-dev libtool perl clang
+    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config automake liboping-dev libtool perl clang
 
 Ubuntu:
 
-    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all automake liboping-dev libtool perl clang
+    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config automake liboping-dev libtool perl clang
 
 Centos:
 
-    sudo yum install gcc gcc-c++ openssl-devel sqlite-devel make postgresql-devel automake liboping-devel libtool perl clang
+    sudo yum install gcc gcc-c++ openssl-devel sqlite-devel make automake liboping-devel libtool perl clang
 
 Fedora:
 
-    sudo dnf install gcc gcc-c++ openssl-devel sqlite-devel make postgresql-devel automake liboping-devel libtool perl clang
+    sudo dnf install gcc gcc-c++ openssl-devel sqlite-devel make automake liboping-devel libtool perl clang
 
 Arch:
 
