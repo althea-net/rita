@@ -27,8 +27,6 @@ use std::time::SystemTime;
 // Timeout to contact Althea contract and query info about a user
 pub const CLIENT_STATUS_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// helper function for returning from secure_setup_request()
-
 enum DecryptResult {
     Success(Box<ExitClientIdentity>),
     Failure(Result<EncryptedExitState, RitaExitError>),

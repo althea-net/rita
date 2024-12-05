@@ -423,7 +423,6 @@ pub fn ethernet_transform_mode(
 /// instead we provide a toggle interface.
 /// For example 'toggle user wlan off' or 'toggle phone sale network on' or 'toggle router
 /// to router wireless meshing'.
-
 fn wlan_toggle_get(uci_spec: &str) -> Result<bool, RitaCommonError> {
     if !is_openwrt() {
         return Err(RitaCommonError::MiscStringError(

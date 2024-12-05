@@ -8,6 +8,8 @@ pub fn set_system_password(password: String) -> Result<(), KernelInterfaceError>
     let mut password_with_newline = password.as_bytes().to_vec();
     password_with_newline.push(b'\n');
 
+    // note that wait_with_output is used, this is a clippy bug
+    #[allow(clippy::zombie_processes)]
     let mut passwd = Command::new("passwd")
         .args(["-a sha512"])
         .stdout(Stdio::piped())
