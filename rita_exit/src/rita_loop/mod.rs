@@ -11,13 +11,15 @@
 //! wakes up to restart the inner thread if anything goes wrong.
 
 use crate::database::{
-    enforce_exit_clients, setup_clients, validate_clients_region, ExitClientSetupStates,
+    enforce_exit_clients, setup_clients, teardown_inactive_clients, validate_clients_region,
+    ExitClientSetupStates,
 };
 use crate::traffic_watcher::watch_exit_traffic;
 use crate::{network_endpoints::*, ClientListAnIpAssignmentMap, RitaExitError};
 use actix::System as AsyncSystem;
 use actix_web::{web, App, HttpServer};
-use althea_kernel_interface::exit_server_tunnel::{one_time_exit_setup, setup_nat};
+use althea_kernel_interface::exit_server_tunnel::{one_time_exit_setup, setup_nat, setup_snat};
+use althea_kernel_interface::netfilter::{init_filter_chain, masquerade_nat_setup};
 use althea_kernel_interface::setup_wg_if::create_blank_wg_interface;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::ExitClient;
@@ -26,10 +28,10 @@ use althea_types::{Identity, SignedExitServerList, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
 use clarity::Address;
 use exit_trust_root::client_db::get_all_registered_clients;
-use ipnetwork::Ipv6Network;
+use ipnetwork::{Ipv4Network, Ipv6Network};
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
-use settings::exit::EXIT_LIST_PORT;
+use settings::exit::{ExitIpv4RoutingSettings, EXIT_LIST_PORT};
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, RwLock};
@@ -95,6 +97,14 @@ impl RitaExitData {
             .get_ipv6_assignments()
     }
 
+    pub fn get_ipv4_nat_mode(&self) -> ExitIpv4RoutingSettings {
+        self.client_list_and_ip_assignments
+            .read()
+            .unwrap()
+            .get_ipv4_nat_mode()
+            .clone()
+    }
+
     pub fn get_internal_ip_assignments(&self) -> HashMap<Ipv4Addr, Identity> {
         self.client_list_and_ip_assignments
             .read()
@@ -117,6 +127,16 @@ impl RitaExitData {
             .write()
             .unwrap()
             .get_or_add_client_internal_ip(their_record)
+    }
+
+    pub fn get_or_add_client_external_ip(
+        &self,
+        their_record: Identity,
+    ) -> Result<Option<Ipv4Addr>, Box<RitaExitError>> {
+        self.client_list_and_ip_assignments
+            .write()
+            .unwrap()
+            .get_or_add_client_external_ip(their_record)
     }
 
     pub fn get_or_add_client_ipv6(
@@ -164,6 +184,28 @@ impl RitaExitData {
     pub fn set_debt_actions(&mut self, debt_actions: HashSet<(Identity, DebtAction)>) {
         self.debt_actions = debt_actions;
     }
+
+    pub fn get_inactive_list(&self) -> HashMap<Identity, Instant> {
+        self.client_list_and_ip_assignments
+            .read()
+            .unwrap()
+            .get_inactive_list()
+    }
+
+    pub fn set_inactive_list(&mut self, inactive_list: HashMap<Identity, Instant>) {
+        self.client_list_and_ip_assignments
+            .write()
+            .unwrap()
+            .set_inactive_list(inactive_list);
+    }
+
+    pub fn get_external_ip_assignments(&self) -> HashMap<Ipv4Addr, HashSet<Identity>> {
+        self.client_list_and_ip_assignments
+            .read()
+            .unwrap()
+            .get_external_ip_assignments()
+            .clone()
+    }
 }
 
 /// Starts the rita exit billing thread, this thread deals with blocking db
@@ -174,14 +216,18 @@ impl RitaExitData {
 pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpAssignmentMap>>) {
     setup_exit_wg_tunnel();
 
-    let mut rita_exit_cache = RitaExitData::new(client_and_ip_info);
+    let mut rita_exit_cache = RitaExitData::new(client_and_ip_info.clone());
     loop {
         let start = Instant::now();
 
+        let (reg_clients_list, inactive_list) = update_client_list(
+            rita_exit_cache.get_all_registered_clients(),
+            rita_exit_cache.get_inactive_list(),
+        )
+        .await;
         // Internal exit cache that store state across multiple ticks
-        rita_exit_cache.set_registered_clients(
-            update_client_list(rita_exit_cache.get_all_registered_clients()).await,
-        );
+        rita_exit_cache.set_registered_clients(reg_clients_list);
+        rita_exit_cache.set_inactive_list(inactive_list);
 
         let rita_exit = settings::get_rita_exit();
         let babel_port = rita_exit.network.babel_port;
@@ -202,6 +248,7 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
         info!("About to setup clients");
         let start_setup_benchmark = Instant::now();
         // Create and update client tunnels
+        // is clone doing what I think it will here? TODO look up how the lock moves when cloned
         match setup_clients(&mut rita_exit_cache) {
             Ok(_) => {
                 rita_exit_cache.successful_setup = true;
@@ -212,6 +259,8 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
             "Finished Rita setting up clients in {}ms",
             start_setup_benchmark.elapsed().as_millis()
         );
+
+        teardown_inactive_clients(&mut rita_exit_cache);
 
         // Make sure no one we are setting up is geoip unauthorized
         let start_region_benchmark = Instant::now();
@@ -252,7 +301,10 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
 }
 
 /// Updates the client list, if this is not successful the old client list is used
-async fn update_client_list(reg_clients_list: HashSet<Identity>) -> HashSet<Identity> {
+async fn update_client_list(
+    reg_clients_list: HashSet<Identity>,
+    mut inactive_list: HashMap<Identity, Instant>,
+) -> (HashSet<Identity>, HashMap<Identity, Instant>) {
     let payment_settings = settings::get_rita_common().payment;
     let contract_address = settings::get_rita_exit()
         .exit_network
@@ -266,18 +318,36 @@ async fn update_client_list(reg_clients_list: HashSet<Identity>) -> HashSet<Iden
         Ok(list) => {
             info!(
                 "Finished Rita get clients, got {:?} clients in {}ms",
-                reg_clients_list.len(),
+                list.len(),
                 get_clients_benchmark.elapsed().as_millis()
             );
+            // now compare the new list to the old list: if we are missing clients from the old list add those clients
+            // to a separate list to keep track of when they went offline
+            let lost_clients: Vec<Identity> = reg_clients_list.difference(&list).cloned().collect();
+            let gained_clients: Vec<Identity> =
+                list.difference(&reg_clients_list).cloned().collect();
+            // if the inactive list contains a client that has come back online, remove them
+            for client in gained_clients.iter() {
+                if inactive_list.contains_key(client) {
+                    inactive_list.remove(client);
+                }
+            }
 
-            list
+            // if the lost clients don't exist in the inactive list, add them at the current time
+            for client in lost_clients.iter() {
+                if !inactive_list.contains_key(client) {
+                    inactive_list.insert(*client, Instant::now());
+                }
+            }
+
+            (list, inactive_list)
         }
         Err(e) => {
             error!(
                 "Failed to get registered clients this this round, using last successful {:?}",
                 e
             );
-            reg_clients_list
+            (reg_clients_list, inactive_list)
         }
     }
 }
@@ -359,6 +429,7 @@ async fn check_regions(
 }
 
 fn setup_exit_wg_tunnel() {
+    info!("Setting up Rita Exit tunnel");
     // Setup wg_exit
     if let Err(e) = create_blank_wg_interface(EXIT_INTERFACE) {
         warn!("new exit setup returned {}", e)
@@ -394,6 +465,43 @@ fn setup_exit_wg_tunnel() {
         external_v6,
     )
     .unwrap();
+
+    // additional setup that is exit mode specific
+    match exit_settings.exit_network.ipv4_routing {
+        ExitIpv4RoutingSettings::SNAT { subnet, .. } => {
+            // for snat mode we must claim the second ip in the subnet as the exit ip
+            // TODO: these should be getters on the exit settings
+            // we need to set up the second address as the exit to forward out to the first
+            let (first, second, last) = reserved_ips(subnet);
+            setup_snat(
+                second,
+                subnet.prefix(),
+                &settings::get_rita_exit().network.external_nic.unwrap(),
+            )
+            .unwrap();
+        }
+        ExitIpv4RoutingSettings::MASQUERADENAT => {
+            masquerade_nat_setup(&settings::get_rita_exit().network.external_nic.unwrap()).unwrap();
+        }
+        ExitIpv4RoutingSettings::CGNAT {
+            subnet: _,
+            static_assignments: _,
+        } => {
+            //todo
+        }
+    }
+
+    info!("Finished setting up Rita Exit tunnels");
+}
+
+/// first, second, and last ips in the given subnet are reserved for the network upstream, the exit, and the broadcast
+/// address and cannot be assigned to clients. this function returns those ips
+fn reserved_ips(subnet: Ipv4Network) -> (Ipv4Addr, Ipv4Addr, Ipv4Addr) {
+    let first = subnet.nth(1).unwrap();
+    let second = subnet.nth(2).unwrap();
+    let size = subnet.size();
+    let last = subnet.nth(size - 1).unwrap();
+    (first, second, last)
 }
 
 /// Starts the rita exit endpoints, passing the ip assignments and registered clients lists, these are shared via cross-thread lock

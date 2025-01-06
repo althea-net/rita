@@ -38,7 +38,7 @@ mod iptables;
 pub mod is_openwrt;
 pub mod link_local_tools;
 pub mod manipulate_uci;
-mod netfilter;
+pub mod netfilter;
 pub mod netns;
 pub mod open_tunnel;
 pub mod openwrt_ubus;

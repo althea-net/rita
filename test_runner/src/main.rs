@@ -3,6 +3,7 @@ use integration_tests::debts::run_debts_test;
 /// Binary crate for actually running the integration tests
 use integration_tests::five_nodes::run_five_node_test_scenario;
 use integration_tests::mutli_exit::run_multi_exit_test;
+use integration_tests::snat_exit::run_snat_exit_test_scenario;
 use integration_tests::{
     payments_althea::run_althea_payments_test_scenario,
     payments_eth::run_eth_payments_test_scenario, utils::set_sigterm,
@@ -49,7 +50,10 @@ async fn main() {
             run_multi_exit_test().await
         } else if test_type == "CONTRACT_TEST" {
             run_altheadb_contract_test().await
-        } else {
+        } else if test_type == "SNAT_EXIT" {
+            run_snat_exit_test_scenario().await
+        } 
+        else {
             panic!("Error unknown test type {}!", test_type);
         }
     } else {

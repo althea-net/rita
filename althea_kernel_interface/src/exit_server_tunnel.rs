@@ -1,6 +1,10 @@
 use super::KernelInterfaceError;
-use crate::iptables::add_iptables_rule;
-use crate::netfilter::{does_nftables_exist, init_nat_chain, insert_nft_exit_forward_rules};
+use crate::ip_addr::add_ipv4;
+use crate::iptables::{add_iptables_rule, delete_iptables_matching_rules};
+use crate::netfilter::{
+    add_preroute_chain_ipv4, does_nftables_exist, init_filter_chain, init_nat_chain,
+    insert_nft_exit_forward_rules,
+};
 use crate::open_tunnel::to_wg_local;
 use crate::run_command;
 use crate::setup_wg_if::get_peers;
@@ -8,7 +12,7 @@ use crate::traffic_control::{create_root_classful_limit, has_limit};
 use althea_types::WgKey;
 use ipnetwork::IpNetwork;
 use std::collections::HashSet;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use KernelInterfaceError as Error;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -168,7 +172,7 @@ pub fn one_time_exit_setup(
     Ok(())
 }
 
-/// Sets up the natting rules for forwarding ipv4 and ipv6 traffic
+/// Sets up the mode agnostic natting rules for forwarding ipv4 and ipv6 traffic
 pub fn setup_nat(
     external_interface: &str,
     interface: &str,
@@ -176,6 +180,9 @@ pub fn setup_nat(
 ) -> Result<(), Error> {
     // nat masquerade on exit
     if !does_nftables_exist() {
+        error!("nftables does not exist, setting up iptables masquerade nat rules on exit");
+        // TODO: can we assume any exit upgraded to use exit routing modes will have nftables?
+        // otherwise I must duplicate the entire nat setup in iptables for all exit modes
         add_iptables_rule(
             "iptables",
             &[
@@ -191,11 +198,12 @@ pub fn setup_nat(
             ],
         )?;
     } else {
-        init_nat_chain(external_interface)?;
+        init_nat_chain()?;
     }
 
     // Add v4 and v6 forward rules wg_exit <-> ex_nic
     if !does_nftables_exist() {
+        error!("Setting up iptables nat forward rules on exit");
         // v4 wg_exit -> ex_nic
         add_iptables_rule(
             "iptables",
@@ -269,9 +277,198 @@ pub fn setup_nat(
             )?;
         }
     } else {
+        error!("Setting up nftables nat forward rules on exit");
         insert_nft_exit_forward_rules(interface, external_interface, external_v6)?;
     }
 
+    Ok(())
+}
+
+/// Sets up the SNAT rules for the exit server run on startup
+pub fn setup_snat(exit_ip: Ipv4Addr, mask: u8, ex_nic: &str) -> Result<(), Error> {
+    add_preroute_chain_ipv4()?;
+    init_filter_chain()?;
+    let _ = add_ipv4(exit_ip, mask, ex_nic);
+    Ok(())
+}
+
+/// This function sets up the SNAT and DNAT rules for the exit server for a given client after they register
+pub fn setup_client_snat(
+    external_interface: &str,
+    internal_exit_ip: Ipv4Addr,
+    client_external_ip: Ipv4Addr,
+    client_internal_ip: Ipv4Addr,
+) -> Result<(), Error> {
+    // add_iptables_rule checks if a rule already exists before adding it so we won't be rewriting every client
+    // rule passed to this function
+
+    /*
+    # SNAT for outgoing traffic
+    iptables -A POSTROUTING -t nat -s $INTERNAL_IP -o $EXT_IF -j SNAT --to-source $PUBLIC_IP
+
+    # DNAT for incoming traffic
+    iptables -A PREROUTING -t nat -d $PUBLIC_IP -j DNAT --to-destination $INTERNAL_IP
+
+    # Allow forwarded traffic
+    iptables -A FORWARD -d $INTERNAL_IP -j ACCEPT
+    iptables -A FORWARD -s $INTERNAL_IP -j ACCEPT
+
+    */
+
+    if !does_nftables_exist() {
+        error!("Setting up iptables SNAT rules on exit for client: {internal_exit_ip}");
+        add_iptables_rule(
+            "iptables",
+            &[
+                "-A",
+                "POSTROUTING",
+                "-t",
+                "nat",
+                "-s",
+                &format!("{internal_exit_ip}"),
+                "-o",
+                external_interface,
+                "-j",
+                "SNAT",
+                "--to-source",
+                &format!("{}", client_external_ip),
+            ],
+        )?;
+        add_iptables_rule(
+            "iptables",
+            &[
+                "-A",
+                "PREROUTING",
+                "-t",
+                "nat",
+                "-d",
+                &format!("{}", client_external_ip),
+                "-j",
+                "DNAT",
+                "--to-destination",
+                &format!("{}", client_internal_ip),
+            ],
+        )?;
+        add_iptables_rule(
+            "iptables",
+            &[
+                "-A",
+                "FORWARD",
+                "-d",
+                &format!("{}", internal_exit_ip),
+                "-j",
+                "ACCEPT",
+            ],
+        )?;
+        add_iptables_rule(
+            "iptables",
+            &[
+                "-A",
+                "FORWARD",
+                "-s",
+                &format!("{}", internal_exit_ip),
+                "-j",
+                "ACCEPT",
+            ],
+        )?;
+    } else {
+        // equivalent nftables rules
+        /*
+        # SNAT for outgoing traffic
+        nft 'add rule ip nat POSTROUTING oifname $EXT_IF ip saddr $INTERNAL_IP counter snat to $PUBLIC_IP'
+
+        # DNAT for incoming traffic
+        nft 'add rule ip nat PREROUTING ip daddr $PUBLIC_IP counter dnat to $INTERNAL_IP'
+
+        # Allow forwarded traffic
+        nft 'add rule ip filter FORWARD ip daddr $INTERNAL_IP counter accept'
+        nft 'add rule ip filter FORWARD ip saddr $PUBLIC_IP counter accept'
+         */
+        error!("Setting up nftables SNAT rules on exit for client: {client_external_ip} to {client_internal_ip}");
+        run_command(
+            "nft",
+            &[
+                "add",
+                "rule",
+                "ip",
+                "nat",
+                "postrouting",
+                "oifname",
+                external_interface,
+                "ip",
+                "saddr",
+                &format!("{}", client_internal_ip),
+                "counter",
+                "snat",
+                "to",
+                &format!("{}", client_external_ip),
+            ],
+        )?;
+        run_command(
+            "nft",
+            &[
+                "add",
+                "rule",
+                "ip",
+                "nat",
+                "prerouting",
+                "ip",
+                "daddr",
+                &format!("{}", client_external_ip),
+                "counter",
+                "dnat",
+                "to",
+                &format!("{}", client_internal_ip),
+            ],
+        )?;
+        run_command(
+            "nft",
+            &[
+                "add",
+                "rule",
+                "ip",
+                "filter",
+                "forward",
+                "ip",
+                "daddr",
+                &format!("{}", client_external_ip),
+                "counter",
+                "accept",
+            ],
+        )?;
+        run_command(
+            "nft",
+            &[
+                "add",
+                "rule",
+                "ip",
+                "filter",
+                "forward",
+                "ip",
+                "saddr",
+                &format!("{}", client_internal_ip),
+                "counter",
+                "accept",
+            ],
+        )?;
+        run_command(
+            "ip",
+            &[
+                "addr",
+                "add",
+                &format!("{}", client_external_ip),
+                "dev",
+                external_interface,
+            ],
+        )?;
+    }
+
+    Ok(())
+}
+
+pub fn teardown_snat(client_ipv4: Ipv4Addr) -> Result<(), Error> {
+    let ip_str = client_ipv4.to_string();
+    delete_iptables_matching_rules(&ip_str)?;
     Ok(())
 }
 

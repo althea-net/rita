@@ -40,7 +40,7 @@ pub struct ClientIpv6StaticAssignment {
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub enum ExitIpv4RoutingSettings {
     /// The default and simplest option, all clients are NAT'd out of the exit's own IP
-    NAT,
+    MASQUERADENAT,
     /// A provided subnet of ipv4 addresses is split between clients as evenly as possible
     /// the exits own ip is used only for management traffic and the exit's own traffic
     /// IP's from this range can be assigned to specific clients. In that case traffic for other
@@ -63,7 +63,7 @@ pub enum ExitIpv4RoutingSettings {
 impl ExitIpv4RoutingSettings {
     pub fn validate(&self) -> Result<(), SettingsError> {
         match self {
-            ExitIpv4RoutingSettings::NAT => Ok(()),
+            ExitIpv4RoutingSettings::MASQUERADENAT => Ok(()),
             ExitIpv4RoutingSettings::CGNAT {
                 subnet,
                 static_assignments,
@@ -85,8 +85,7 @@ impl ExitIpv4RoutingSettings {
             }
             ExitIpv4RoutingSettings::SNAT {
                 static_assignments,
-                subnet,
-            } => {
+                subnet, .. } => {
                 let mut used_ips = HashSet::new();
                 for assignment in static_assignments {
                     if used_ips.contains(&assignment.client_external_ip) {
@@ -245,7 +244,7 @@ fn enable_enforcement_default() -> bool {
 }
 
 fn default_ipv4_routing() -> ExitIpv4RoutingSettings {
-    ExitIpv4RoutingSettings::NAT
+    ExitIpv4RoutingSettings::MASQUERADENAT
 }
 
 fn default_internal_ipv4() -> ExitInternalIpv4Settings {
@@ -270,7 +269,7 @@ impl ExitNetworkSettings {
                 .parse()
                 .unwrap(),
             allowed_countries: HashSet::new(),
-            ipv4_routing: ExitIpv4RoutingSettings::NAT,
+            ipv4_routing: ExitIpv4RoutingSettings::MASQUERADENAT,
             internal_ipv4: ExitInternalIpv4Settings {
                 internal_subnet: Ipv4Network::new(Ipv4Addr::new(172, 16, 255, 254), 12).unwrap(),
             },

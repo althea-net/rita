@@ -1,6 +1,8 @@
 use super::dualmap::DualMap;
 use crate::database::get_exit_info;
+use crate::rita_loop::RitaExitData;
 use crate::RitaExitError;
+use althea_kernel_interface::exit_server_tunnel::setup_client_snat;
 use althea_kernel_interface::ExitClient;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState, Identity};
 use ipnetwork::{IpNetwork, Ipv6Network};
@@ -10,6 +12,7 @@ use settings::get_rita_exit;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::time::Instant;
 
 /// Max number of time we try to generate a valid ip addr before returning an eror
 pub const MAX_IP_RETRIES: u8 = 10;
@@ -38,6 +41,9 @@ pub struct ClientListAnIpAssignmentMap {
     external_ip_assignemnts: HashMap<Ipv4Addr, HashSet<Identity>>,
     /// A set of all clients that have been registered with the exit
     registered_clients: HashSet<Identity>,
+    /// A map of clients that have been inactive for some time and their last checkin time. These will have their
+    /// routes town down if they hit the downtime threshold in SNAT mode
+    inactive_clients: HashMap<Identity, Instant>,
 }
 
 impl ClientListAnIpAssignmentMap {
@@ -55,6 +61,7 @@ impl ClientListAnIpAssignmentMap {
             ipv4_assignment_settings: ipv4_settings,
             ipv6_assignment_settings: ipv6_settings,
             internal_ipv4_assignment_settings: internal_ipv4_settings,
+            inactive_clients: HashMap::new(),
         }
     }
 
@@ -72,6 +79,10 @@ impl ClientListAnIpAssignmentMap {
 
     pub fn get_ipv6_assignments(&self) -> HashMap<Ipv6Network, Identity> {
         self.ipv6_assignments.clone().into_hashmap()
+    }
+
+    pub fn get_ipv4_nat_mode(&self) -> &ExitIpv4RoutingSettings {
+        &self.ipv4_assignment_settings
     }
 
     pub fn get_internal_ip_assignments(&self) -> HashMap<Ipv4Addr, Identity> {
@@ -125,7 +136,7 @@ impl ClientListAnIpAssignmentMap {
         their_record: Identity,
     ) -> Result<Option<Ipv4Addr>, Box<RitaExitError>> {
         match &self.ipv4_assignment_settings {
-            ExitIpv4RoutingSettings::NAT => {
+            ExitIpv4RoutingSettings::MASQUERADENAT => {
                 // If we are in NAT mode, we don't assign external ips to clients
                 // they will use the ip assigned to the exit
                 Ok(None)
@@ -229,9 +240,10 @@ impl ClientListAnIpAssignmentMap {
 
                 // if we don't have a static assignment, we need to find an open ip and assign it
                 let mut possible_ips: Vec<Ipv4Addr> = subnet.into_iter().collect();
-                // we don't want to assign the first ip in the subnet as it's the gateway
-                possible_ips.remove(0);
-                possible_ips.pop(); // we don't want to assign the last ip in the subnet as it's the broadcast address
+                possible_ips.remove(0); // we don't want to assign the first ip in the subnet as it's the subnet default .0
+                possible_ips.remove(0); // we don't want to assign the first ip in the subnet as it's the gateway .1
+                possible_ips.remove(0); // we don't want to assign the second ip in the subnet as it's the exit's ip .2
+                possible_ips.pop(); // we don't want to assign the last ip in the subnet as it's the broadcast address .254
 
                 let mut target_ip = None;
                 for ip in possible_ips {
@@ -355,6 +367,14 @@ impl ClientListAnIpAssignmentMap {
             internet_ipv6,
         })
     }
+
+    pub fn get_inactive_list(&self) -> HashMap<Identity, Instant> {
+        self.inactive_clients.clone()
+    }
+
+    pub fn set_inactive_list(&mut self, list: HashMap<Identity, Instant>) {
+        self.inactive_clients = list;
+    }
 }
 
 /// quick display function for a neat error
@@ -374,6 +394,37 @@ pub fn ipv6_subnet_iter(input: Ipv6Network, subnet_size: u8) -> Ipv6Network {
     let mut val = input.network().to_bits();
     val += increment;
     Ipv6Network::new(Ipv6Addr::from(val), input.prefix()).unwrap()
+}
+
+// calls the iptables setup for each client in the list, and updates the exit info
+// with the mapping of Identity to Ipv4 address
+pub fn setup_clients_snat(
+    clients_list: &HashSet<Identity>,
+    local_ip: Ipv4Addr,
+    rita_exit_info: &mut RitaExitData,
+) {
+    for client in clients_list {
+        // if we can't unwrap here panic is fine- all ips have been exhausted
+        let client_ext_ipv4 = rita_exit_info
+            .get_or_add_client_external_ip(*client)
+            .unwrap()
+            .unwrap();
+        let client_int_ipv4 = rita_exit_info
+            .get_or_add_client_internal_ip(*client)
+            .unwrap();
+        match setup_client_snat(
+            &settings::get_rita_exit().network.external_nic.unwrap(),
+            local_ip,
+            client_ext_ipv4,
+            client_int_ipv4,
+        ) {
+            Ok(_) => continue,
+            Err(e) => {
+                error!("Error setting up SNAT for client: {:?}", e);
+                // continue on error, we don't want to stop the whole process in case just one client fails for whatever reason
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -417,7 +468,7 @@ mod tests {
         let ipv6_settings =
             ExitIpv6RoutingSettings::new(get_ipv6_external_test_subnet(), 64, static_assignments);
         ipv6_settings.validate().unwrap();
-        let ipv4_settings = ExitIpv4RoutingSettings::NAT;
+        let ipv4_settings = ExitIpv4RoutingSettings::MASQUERADENAT;
         ipv4_settings.validate().unwrap();
         let internal_ipv4_settings = ExitInternalIpv4Settings {
             internal_subnet: get_ipv4_internal_test_subnet(),
@@ -683,7 +734,7 @@ mod tests {
         let mut data = ClientListAnIpAssignmentMap::new(
             HashSet::new(),
             Some(ipv6_settings.clone()),
-            ExitIpv4RoutingSettings::NAT,
+            ExitIpv4RoutingSettings::MASQUERADENAT,
             internal_ipv4_settings,
         );
 
@@ -776,7 +827,7 @@ mod tests {
         let mut data = ClientListAnIpAssignmentMap::new(
             HashSet::new(),
             None,
-            ExitIpv4RoutingSettings::NAT,
+            ExitIpv4RoutingSettings::MASQUERADENAT,
             internal_ipv4_settings,
         );
 

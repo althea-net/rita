@@ -8,9 +8,11 @@ use crate::database::ipddr_assignment::display_hashset;
 use crate::rita_loop::RitaExitData;
 use crate::rita_loop::EXIT_INTERFACE;
 use crate::rita_loop::EXIT_LOOP_TIMEOUT;
+use crate::setup_clients_snat;
 use crate::ClientListAnIpAssignmentMap;
 use crate::RitaExitError;
 use althea_kernel_interface::exit_server_tunnel::set_exit_wg_config;
+use althea_kernel_interface::exit_server_tunnel::teardown_snat;
 use althea_kernel_interface::traffic_control::create_flow_by_ip;
 use althea_kernel_interface::traffic_control::create_flow_by_ipv6;
 use althea_kernel_interface::traffic_control::delete_class;
@@ -29,10 +31,12 @@ use phonenumber::PhoneNumber;
 use rita_common::blockchain_oracle::calculate_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
+use settings::exit::ExitIpv4RoutingSettings;
 use settings::get_rita_exit;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -44,6 +48,10 @@ pub mod ipddr_assignment;
 
 /// one day in seconds
 pub const ONE_DAY: i64 = 86400;
+
+/// the time after which client tunnels will be torn down for inactivity in SNAT mdoe
+/// (one hour in seconds)
+pub const INACTIVE_CLIENT_THRESHOLD: u64 = 3600;
 
 /// Timeout when requesting client registration
 pub const CLIENT_REGISTER_TIMEOUT: Duration = Duration::from_secs(5);
@@ -281,7 +289,9 @@ pub struct CurrentExitClientState {
 /// into a single very long wg tunnel setup command which is then applied to the
 /// wg_exit tunnel (or created if it's the first run). This is the offically supported
 /// way to update live WireGuard tunnels and should not disrupt traffic
+/// TODO: notes for teardown of geoip blacklisted clients- is that already happening?
 pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitError>> {
+    info!("Starting exit setup loop");
     let start = Instant::now();
     // Note, the data flow in this fuction is strage, we have getters and setters for all
     // data, but, some functions like id_to_exit_client will assign ip addresses to clients
@@ -296,56 +306,53 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
     let mut wg_clients = HashSet::new();
     let mut geoip_blacklist_map = HashSet::new();
 
-    trace!(
+    info!(
         "got clients from db {:?} {:?}",
-        clients_list,
-        client_states.old_clients
+        clients_list, client_states.old_clients
     );
 
     for c in clients_list.iter() {
-        match client_data.id_to_exit_client(*c) {
-            Ok(a) => {
-                if !wg_clients.insert(a) {
-                    error!("Duplicate database entry! {}", c.wg_public_key);
-                }
-            }
-            Err(e) => {
-                error!(
-                    "Unable to convert client to ExitClient! {} with error {}",
-                    c.wg_public_key, e
-                );
-            }
+        if !wg_clients.insert(*c) {
+            error!("Duplicate database entry! {}", c.wg_public_key);
         }
     }
 
     for c in geoip_blacklist.iter() {
-        match client_data.id_to_exit_client(*c) {
-            Ok(a) => {
-                if !geoip_blacklist_map.insert(a) {
-                    error!("Duplicate database entry! {}", c.wg_public_key);
-                }
-            }
-            Err(e) => {
-                error!(
-                    "Unable to convert client to ExitClient! {} with error {}",
-                    c.wg_public_key, e
-                );
-            }
+        if !geoip_blacklist_map.insert(*c) {
+            error!("Duplicate database entry! {}", c.wg_public_key);
         }
     }
 
     trace!("converted clients {:?}", wg_clients);
 
     // remove geoip blacklisted clients from wg clients
-    let wg_clients: HashSet<ExitClient> = wg_clients
+    let wg_clients: HashSet<Identity> = wg_clients
         .difference(&geoip_blacklist_map)
         .copied()
         .collect();
 
-    // symetric difference is an iterator of all items in A but not in B
+    let mut wg_clients_exit = HashSet::new();
+    // for each in wg_clients, try id_to_exit_client, if it fails, print an error and continue, else add to wg_clients_exit
+    for c in wg_clients.iter() {
+        match client_data.id_to_exit_client(*c) {
+            Ok(c) => {
+                wg_clients_exit.insert(c);
+            }
+            Err(e) => {
+                error!(
+                    "Unable to convert client to ExitClient! {} with error {}",
+                    c.wg_public_key, e
+                );
+            }
+        }
+    }
+
+    // now wg_clients contains the identities, and wg_clients_exit is the same list in ExitClient form
+
+    // symmetric difference is an iterator of all items in A but not in B
     // or in B but not in A, in short if there's any difference between the two
     // it must be nonzero, since all entires must be unique there can not be duplicates
-    if wg_clients
+    if wg_clients_exit
         .symmetric_difference(&client_states.old_clients)
         .count()
         != 0
@@ -353,11 +360,28 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
         info!("Setting up configs for wg_exit");
         // setup all the tunnels
         let exit_status = set_exit_wg_config(
-            &wg_clients,
+            &wg_clients_exit,
             settings::get_rita_exit().exit_network.wg_tunnel_port,
             &settings::get_rita_exit().network.wg_private_key_path,
             EXIT_INTERFACE,
         );
+
+        // if we are in SNAT mode we need to setup iptables rules
+        if let ExitIpv4RoutingSettings::SNAT {
+            ..
+        } = client_data.get_ipv4_nat_mode()
+        {
+            info!("Setting up iptables rules for SNAT mode");
+            setup_clients_snat(
+                &wg_clients,
+                settings::get_rita_exit()
+                    .exit_network
+                    .internal_ipv4
+                    .internal_ip(),
+                client_data,
+            );
+            info!("Finished setting up iptables rules for SNAT mode");
+        }
 
         match exit_status {
             Ok(_a) => {
@@ -378,10 +402,12 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
             clients_list.len(),
             wg_clients.len(),
         );
+    } else {
+        info!("We got no change in exit clients??");
     }
 
     // set previous tick states to current clients on wg interfaces
-    client_states.old_clients = wg_clients;
+    client_states.old_clients = wg_clients_exit;
 
     client_data.set_setup_states(client_states);
     Ok(())
@@ -516,4 +542,59 @@ pub fn enforce_exit_clients(client_data: &mut RitaExitData) -> Result<(), Box<Ri
     );
     client_data.set_debt_actions(new_debt_actions);
     Ok(())
+}
+
+/// Removes client ip assignments for clients that have not checked in for 1 hour
+/// (should this be SNAT locked?)
+pub fn teardown_inactive_clients(client_data: &mut RitaExitData) {
+    let inactive_list = client_data.get_inactive_list();
+    // check for snat mode
+    let ipv4_mode = client_data.get_ipv4_nat_mode();
+    if let ExitIpv4RoutingSettings::SNAT {
+        subnet: _,
+        static_assignments: _,
+    } = ipv4_mode
+    {
+        info!("Checking for inactive clients in SNAT mode");
+    } else {
+        return;
+    }
+
+    let assignments = client_data.get_external_ip_assignments();
+    // for each client in inactive, find their wg key from clientandipmap, then
+    // remove their iptables rules if their last seen was over threshold
+    for (client, last_seen) in inactive_list.iter() {
+        if last_seen.elapsed().as_secs() > INACTIVE_CLIENT_THRESHOLD {
+            // get this client's assigned external ip
+            let external_ip: Vec<Ipv4Addr> = assignments
+                .iter()
+                .filter(|(_k, v)| v.contains(client))
+                .map(|(&k, _v)| k)
+                .collect();
+            match external_ip.len().cmp(&1) {
+                std::cmp::Ordering::Greater => {
+                    error!(
+                        "Client {} has more than one external ip assigned, this should not happen?",
+                        client
+                    );
+                }
+                std::cmp::Ordering::Equal => {
+                    let external_ip = external_ip.first().unwrap();
+                    // remove the iptables rules for this client
+                    if let Err(e) = teardown_snat(*external_ip) {
+                        error!(
+                            "Failed to delete iptables rules for client {} with error {:?}",
+                            client, e
+                        );
+                    }
+                }
+                std::cmp::Ordering::Less => {
+                    error!(
+                        "Client due for teardown {} has no external ip assigned?",
+                        client
+                    );
+                }
+            }
+        }
+    }
 }

@@ -1,5 +1,5 @@
 use crate::{run_command, KernelInterfaceError};
-use std::net::IpAddr;
+use std::{net::IpAddr, process::Output};
 
 pub fn does_nftables_exist() -> bool {
     let output = match run_command("nft", &["-v"]) {
@@ -57,7 +57,7 @@ fn create_nft_set(set_name: &str) {
     }
 }
 
-fn create_nat_table(ex_nic: &str) -> Result<(), KernelInterfaceError> {
+fn create_nat_table() -> Result<(), KernelInterfaceError> {
     // create the table
     run_command("nft", &["create", "table", "ip", "nat"])?;
 
@@ -85,18 +85,19 @@ fn create_nat_table(ex_nic: &str) -> Result<(), KernelInterfaceError> {
         ],
     )?;
 
-    // Add rule to chain
+    Ok(())
+}
+
+fn create_filter_table() -> Result<(), KernelInterfaceError> {
+    // create the table
+    run_command("nft", &["create", "table", "ip", "filter"])?;
+
+    // Add forward chain to the table
     run_command(
         "nft",
         &[
-            "add",
-            "rule",
-            "ip",
-            "nat",
-            "postrouting",
-            "oifname",
-            ex_nic,
-            "masquerade",
+            "create", "chain", "ip", "filter", "forward", "{", "type", "filter", "hook", "forward",
+            "priority", "100", ";", "}",
         ],
     )?;
 
@@ -148,6 +149,14 @@ fn is_nat_table_present() -> Result<bool, KernelInterfaceError> {
     Ok(false)
 }
 
+fn is_filter_table_present() -> Result<bool, KernelInterfaceError> {
+    let out = run_command("nft", &["list", "table", "ip", "filter"])?;
+    if out.status.success() {
+        return Ok(true);
+    }
+    Ok(false)
+}
+
 pub fn insert_reject_rule() -> Result<(), KernelInterfaceError> {
     if get_reject_rule_handle()?.is_none() {
         run_command(
@@ -176,9 +185,16 @@ pub fn delete_reject_rule() -> Result<(), KernelInterfaceError> {
     Ok(())
 }
 
-pub fn init_nat_chain(ex_nic: &str) -> Result<(), KernelInterfaceError> {
+pub fn init_nat_chain() -> Result<(), KernelInterfaceError> {
     if !is_nat_table_present()? {
-        create_nat_table(ex_nic)?;
+        create_nat_table()?;
+    }
+    Ok(())
+}
+
+pub fn init_filter_chain() -> Result<(), KernelInterfaceError> {
+    if !is_filter_table_present()? {
+        create_filter_table()?;
     }
     Ok(())
 }
@@ -348,4 +364,50 @@ fn create_nft_insert_chain(set_name: &str, chain: &str, interface: &str) {
     ) {
         error!("Unable to setup counters: {}", e);
     }
+}
+
+/// Add masquerade rule to external nic. used on both exit and client
+pub fn masquerade_nat_setup(ex_nic: &str) -> Result<Output, KernelInterfaceError> {
+    run_command(
+        "nft",
+        &[
+            "add",
+            "rule",
+            "ip",
+            "nat",
+            "postrouting",
+            "oifname",
+            ex_nic,
+            "masquerade",
+        ],
+    )
+}
+
+/// Adds a prerouting chain to the ipv4 nat table
+pub fn add_preroute_chain_ipv4() -> Result<(), KernelInterfaceError> {
+    // prerouting only needed in snat mode
+    // nft add chain ip nat prerouting '{ type nat hook prerouting priority 100 ; policy accept ; }'
+    run_command(
+        "nft",
+        &[
+            "create",
+            "chain",
+            "ip",
+            "nat",
+            "prerouting",
+            "{",
+            "type",
+            "nat",
+            "hook",
+            "prerouting",
+            "priority",
+            "100",
+            ";",
+            "policy",
+            "accept",
+            ";",
+            "}",
+        ],
+    )?;
+    Ok(())
 }
