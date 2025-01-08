@@ -11,6 +11,7 @@ use althea_types::SensorReading;
 use althea_types::WifiDevice;
 use althea_types::WifiStationData;
 use althea_types::WifiSurveyData;
+use std::collections::HashSet;
 use std::fs;
 use std::fs::File;
 use std::io::BufRead;
@@ -334,18 +335,24 @@ fn get_ethernet_stats() -> Option<Vec<EthernetStats>> {
     }
 }
 
+/// wifi device info is gathered through either uci or iw and sent back to ops together
+/// as part of WifiDevice. Names for iterfaces of survey and station data received for
+/// iw data may not match their iw interface names on the router.
 fn get_wifi_devices() -> Vec<WifiDevice> {
     match parse_wifi_device_names() {
         Ok(devices) => {
             let mut wifi_devices = Vec::new();
-            for dev in devices {
+            // iterate over the uci names and for each, get the next iw name
+            let mut iw_names = devices.1.iter();
+            for uci_dev in devices.0 {
+                let iw_dev = iw_names.next().map_or("", |v| v);
                 let wifi_device = WifiDevice {
-                    name: dev.clone(),
-                    survey_data: get_wifi_survey_info(&dev),
-                    station_data: get_wifi_station_info(&dev),
-                    ssid: get_radio_ssid(&dev),
-                    channel: get_radio_channel(&dev),
-                    enabled: get_radio_enabled(&dev),
+                    name: uci_dev.clone(),
+                    survey_data: get_wifi_survey_info(iw_dev),
+                    station_data: get_wifi_station_info(iw_dev),
+                    ssid: get_radio_ssid(&uci_dev),
+                    channel: get_radio_channel(&uci_dev),
+                    enabled: get_radio_enabled(&uci_dev),
                 };
                 wifi_devices.push(wifi_device);
                 info!("wifi {:?}", wifi_devices); // Log output at each iteration
@@ -400,8 +407,20 @@ fn get_conntrack_info() -> Option<ConntrackInfo> {
     Some(ret)
 }
 
-/// Device names are in the form wlan0, wlan1 etc
-fn parse_wifi_device_names() -> Result<Vec<String>, Error> {
+/// this function parses the iw names and the uci names for the wifi interfaces.
+/// The iface names are not necessarily the same between the two, which caused the data
+/// sent to ops to be incomplete on either the wifi settings modal or the radios &
+/// wifi devices section of the router details page before both sets of names were
+/// gathered. The returned tuple is (uci names, iw names)
+fn parse_wifi_device_names() -> Result<(HashSet<String>, HashSet<String>), Error> {
+    let iw_ifnames = parse_iw_wifi_device_names()?;
+    let uci_ifnames = parse_uci_wifi_device_names()?;
+    Ok((uci_ifnames, iw_ifnames))
+}
+
+/// Device names are in the form wlan0, wlan1 etc when set by etc/config/wireless but can vary otherwise.
+/// This function returns a map of radio names to their respective channel allocations as seen by 'iw dev'
+fn parse_iw_wifi_device_names() -> Result<HashSet<String>, Error> {
     // Call iw dev to get a list of wifi interfaces
     let res = Command::new("iw")
         .args(["dev"])
@@ -409,7 +428,7 @@ fn parse_wifi_device_names() -> Result<Vec<String>, Error> {
         .output();
     match res {
         Ok(a) => match String::from_utf8(a.stdout) {
-            Ok(a) => Ok(extract_wifi_ifnames(&a)),
+            Ok(a) => Ok(extract_iw_ifnames(&a)),
             Err(e) => {
                 error!("Unable to parse iw dev output {:?}", e);
                 Err(Error::FromUtf8Error)
@@ -419,22 +438,67 @@ fn parse_wifi_device_names() -> Result<Vec<String>, Error> {
     }
 }
 
-fn extract_wifi_ifnames(dev_output: &str) -> Vec<String> {
-    let mut ret: Vec<String> = vec![];
-
-    // we are looking for the line "Interface [ifname]"
-    let mut iter = dev_output.split_ascii_whitespace();
-    loop {
-        let to_struct = iter.next();
-        if let Some(to_struct) = to_struct {
-            if to_struct == "Interface" {
-                let ifname = iter.next();
-                if let Some(ifname) = ifname {
-                    ret.push(ifname.to_string());
+/// Returns a set of radio names as seen by 'uci show wireless'
+fn parse_uci_wifi_device_names() -> Result<HashSet<String>, Error> {
+    // We parse /etc/config/wireless which is an openwrt config. We return an error if not openwrt
+    if KI.is_openwrt() {
+        let res = Command::new("uci")
+            .args(["show", "wireless"])
+            .stdout(Stdio::piped())
+            .output();
+        match res {
+            Ok(a) => match String::from_utf8(a.stdout) {
+                Ok(a) => Ok(extract_uci_ifnames(&a)),
+                Err(e) => {
+                    error!("Unable to parse uci show wireless output {:?}", e);
+                    Err(Error::FromUtf8Error)
                 }
+            },
+            Err(e) => Err(Error::ParseError(e.to_string())),
+        }
+    } else {
+        // Fallback to /proc/ parsing if no openwrt
+        let mut ret = HashSet::new();
+        let path = "/proc/net/wireless";
+        let lines = get_lines(path)?;
+        for line in lines {
+            if line.contains(':') {
+                let name: Vec<&str> = line.split(':').collect();
+                let name = name[0];
+                let name = name.replace(' ', "");
+                ret.insert(name.to_string());
             }
-        } else {
-            break;
+        }
+        Ok(ret)
+    }
+}
+
+fn extract_iw_ifnames(dev_output: &str) -> HashSet<String> {
+    let mut ret: HashSet<String> = HashSet::new();
+    info!("iw {:?}", dev_output);
+    // we are looking for the line "Interface [ifname]"
+    for line in dev_output.lines() {
+        if line.trim_start().contains("Interface") {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if let Some(interface) = parts.get(1) {
+                ret.insert(interface.to_string());
+            }
+        }
+    }
+    ret
+}
+
+fn extract_uci_ifnames(dev_output: &str) -> HashSet<String> {
+    let mut ret: HashSet<String> = HashSet::new();
+    // ex. we are looking for the line "wireless.radio1=wifi-device" to extract "radio1"
+    for line in dev_output.lines() {
+        if let Some((key, value)) = line
+            .strip_prefix("wireless.")
+            .and_then(|line| line.split_once("="))
+        {
+            if value == "wifi-device" {
+                ret.insert(key.to_string());
+            }
         }
     }
     ret
@@ -707,34 +771,100 @@ mod test {
     #[test]
     fn test_parse_wifi_device_names() {
         // sample output from iw dev
-        let iw_dev_output = "phy#1
-	Interface wlan1
-		ifindex 12
-		wdev 0x100000002
-		addr 12:23:34:45:56:67
-		ssid altheahome-5
+        let iw_dev_output = "
+phy#2
+	Interface phy2-ap0
+		ifindex 10
+		wdev 0x200000002
+		addr c4:41:1e:2a:b8:f8
+		ssid AltheaHome-5
 		type AP
 		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
 		txpower 23.00 dBm
 		multicast TXQ:
 			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
-			0	0	3991833	0	0	0	0	1112061710		3991837
-phy#0
-	Interface wlan0
-		ifindex 11
-		wdev 0x2
-		addr 76:65:54:43:32:21
-		ssid altheahome-2.4
+			0	0	0	0	0	0	0	0		0
+phy#1
+	Interface phy1-ap0
+		ifindex 9
+		wdev 0x100000002
+		addr c4:41:1e:2a:b8:f7
+		ssid AltheaHome-2.4
 		type AP
-		channel 11 (2462 MHz), width: 20 MHz, center1: 2462 MHz
+		channel 1 (2412 MHz), width: 20 MHz, center1: 2412 MHz
 		txpower 30.00 dBm
 		multicast TXQ:
 			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
-			0	0	3991759	0	0	0	3	1112047714		3991791
+			0	0	0	0	0	0	0	0		0
+phy#0
+	Interface phy0-ap0
+		ifindex 11
+		wdev 0x2
+		addr c4:41:1e:2a:b8:f9
+		ssid AltheaHome-5
+		type AP
+		channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+		txpower 30.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+
 ";
-        let res = extract_wifi_ifnames(iw_dev_output);
-        assert!(res.len() == 2);
-        assert!(res.contains(&"wlan0".to_string()));
-        assert!(res.contains(&"wlan1".to_string()));
+        // sample output from uci show wireless
+        let uci_dev_output = "
+wireless.radio0=wifi-device
+wireless.radio0.type='mac80211'
+wireless.radio0.path='soc/40000000.pci/pci0000:00/0000:00:00.0/0000:01:00.0'
+wireless.radio0.channel='149'
+wireless.radio0.band='5g'
+wireless.radio0.htmode='VHT80'
+wireless.radio0.disabled='0'
+wireless.default_radio0=wifi-iface
+wireless.default_radio0.device='radio0'
+wireless.default_radio0.network='lan'
+wireless.default_radio0.mode='ap'
+wireless.default_radio0.ssid='AltheaHome-5'
+wireless.default_radio0.encryption='psk2'
+wireless.default_radio0.key='ChangeMe'
+wireless.radio1=wifi-device
+wireless.radio1.type='mac80211'
+wireless.radio1.path='platform/soc/a000000.wifi'
+wireless.radio1.channel='1'
+wireless.radio1.band='2g'
+wireless.radio1.htmode='HT20'
+wireless.radio1.disabled='0'
+wireless.default_radio1=wifi-iface
+wireless.default_radio1.device='radio1'
+wireless.default_radio1.network='lan'
+wireless.default_radio1.mode='ap'
+wireless.default_radio1.ssid='AltheaHome-2.4'
+wireless.default_radio1.encryption='psk2'
+wireless.default_radio1.key='ChangeMe'
+wireless.radio2=wifi-device
+wireless.radio2.type='mac80211'
+wireless.radio2.path='platform/soc/a800000.wifi'
+wireless.radio2.channel='36'
+wireless.radio2.band='5g'
+wireless.radio2.htmode='VHT80'
+wireless.radio2.disabled='0'
+wireless.default_radio2=wifi-iface
+wireless.default_radio2.device='radio2'
+wireless.default_radio2.network='lan'
+wireless.default_radio2.mode='ap'
+wireless.default_radio2.ssid='AltheaHome-5'
+wireless.default_radio2.encryption='psk2'
+wireless.default_radio2.key='ChangeMe'
+        ";
+        let res1 = extract_iw_ifnames(iw_dev_output);
+        assert!(res1.len() == 3);
+        assert_eq!(res1.get("phy1-ap0"), Some(&"phy1-ap0".to_string()));
+        assert_eq!(res1.get("phy2-ap0"), Some(&"phy2-ap0".to_string()));
+        assert_eq!(res1.get("phy0-ap0"), Some(&"phy0-ap0".to_string()));
+
+        let res2 = extract_uci_ifnames(uci_dev_output);
+        assert!(res2.len() == 3);
+        assert_eq!(res2.get("radio0"), Some(&"radio0".to_string()));
+        assert_eq!(res2.get("radio1"), Some(&"radio1".to_string()));
+        assert_eq!(res2.get("radio2"), Some(&"radio2".to_string()));
     }
 }
