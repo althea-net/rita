@@ -105,7 +105,7 @@ impl Serialize for WgKey {
 
 struct WgKeyVisitor;
 
-impl<'de> Visitor<'de> for WgKeyVisitor {
+impl Visitor<'_> for WgKeyVisitor {
     type Value = WgKey;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
