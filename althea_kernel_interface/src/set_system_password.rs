@@ -3,6 +3,8 @@ use crate::KernelInterfaceError;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
+// allow this warning until clippy recognizes wait_with_output as a valid way to wait for a process
+#[allow(clippy::zombie_processes)]
 impl dyn KernelInterface {
     /// Sets the system password on openwrt
     pub fn set_system_password(&self, password: String) -> Result<(), KernelInterfaceError> {
