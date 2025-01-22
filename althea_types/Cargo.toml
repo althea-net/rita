@@ -17,7 +17,7 @@ crypto_box = "0.9"
 clarity = "1.4"
 arrayvec = { version = "0.7", features = ["serde"] }
 phonenumber = "0.3.6"
-lettre = { version = "0.10", features = ["serde"] }
+lettre = {workspace = true}
 ipnetwork = "0.20"
 bincode = "1.3"
 deep_space = { workspace = true }

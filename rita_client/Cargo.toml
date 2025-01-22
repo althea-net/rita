@@ -19,7 +19,7 @@ althea_types = { path = "../althea_types" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 antenna_forwarding_client = { path = "../antenna_forwarding_client" }
 settings = { path = "../settings" }
-lettre = "0.10"
+lettre = {workspace = true}
 rand = "0.8.5"
 phonenumber = "0.3.6"
 babel_monitor = { path = "../babel_monitor" }

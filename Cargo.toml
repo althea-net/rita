@@ -54,3 +54,4 @@ althea_proto = "0.9"
 # our build process for a lot of cross-compile situations
 openssl = {version = "0.10", features = ["vendored"]}
 openssl-probe = "0.1"
+lettre = { version = "0.11", features = ["file-transport", "serde"]}

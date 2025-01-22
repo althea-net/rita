@@ -42,7 +42,7 @@ cosmos-sdk-proto-althea = {package = "cosmos-sdk-proto-althea", version = "0.18"
 althea_proto = {workspace = true}
 crossbeam = "0.8"
 phonenumber = "0.3.6"
-lettre = "0.10"
+lettre = {workspace = true}
 sha3 = "0.10"
 hex-literal = "0.4"
 
