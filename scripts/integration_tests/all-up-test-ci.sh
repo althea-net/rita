@@ -33,7 +33,9 @@ sudo apt install -y sudo \
           locales-all \
           npm \
           linux-source linux-headers-$(uname -r) \
-          build-essential
+          build-essential \
+          sqlite3 \
+          libsqlite3-dev
 sudo modprobe wireguard
 
 cargo install diesel_cli --force
