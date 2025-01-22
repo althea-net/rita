@@ -1359,7 +1359,7 @@ dependencies = [
  "clarity",
  "crossbeam",
  "env_logger",
- "futures 0.1.31",
+ "futures 0.3.31",
  "log",
  "openssl",
  "openssl-probe",
