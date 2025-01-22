@@ -1,7 +1,6 @@
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::{error::AltheaTypesError, ExitClientIdentity};
 use babel_monitor::structs::BabelMonitorError;
-use handlebars::RenderError;
 use ipnetwork::IpNetworkError;
 use rita_common::RitaCommonError;
 use std::{
@@ -17,7 +16,6 @@ pub enum RitaExitError {
     AddrParseError(AddrParseError),
     IpAddrError(IpAddr),
     RitaCommonError(RitaCommonError),
-    RenderError(RenderError),
     EmailError(lettre::error::Error),
     FileError(lettre::transport::file::Error),
     SmtpError(lettre::transport::smtp::Error),
@@ -44,11 +42,6 @@ impl From<RitaCommonError> for RitaExitError {
 impl From<deep_space::error::AddressError> for RitaExitError {
     fn from(error: deep_space::error::AddressError) -> Self {
         RitaExitError::DeepSpaceError(error)
-    }
-}
-impl From<RenderError> for RitaExitError {
-    fn from(error: RenderError) -> Self {
-        RitaExitError::RenderError(error)
     }
 }
 impl From<lettre::error::Error> for RitaExitError {
@@ -106,7 +99,6 @@ impl Display for RitaExitError {
             RitaExitError::IpAddrError(a) => write!(f, "No route found for mesh ip: {a:?}",),
             RitaExitError::RitaCommonError(a) => write!(f, "{a}",),
             RitaExitError::DeepSpaceError(a) => write!(f, "{a}",),
-            RitaExitError::RenderError(a) => write!(f, "{a}",),
             RitaExitError::EmailError(a) => write!(f, "{a}",),
             RitaExitError::FileError(a) => write!(f, "{a}",),
             RitaExitError::SmtpError(a) => write!(f, "{a}",),
