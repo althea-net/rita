@@ -10,7 +10,7 @@ log = "0.4"
 docopt = "1.1"
 actix = { workspace = true }
 nix = "0.26.4"
-petgraph = "0.6.5"
+petgraph = "0.7.1"
 babel_monitor = { path = "../babel_monitor" }
 althea_kernel_interface = { path = "../althea_kernel_interface", features = [
     "integration_test",
