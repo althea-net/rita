@@ -44,7 +44,7 @@ flate2 = { version = "1.0", features = [
     "rust_backend",
 ], default-features = false }
 jemallocator = { version = "0.5", optional = true }
-ipnetwork = "0.20"
+ipnetwork = "0.21"
 actix-rt = "2"
 clarity = {workspace = true}
 web30 = {workspace = true}

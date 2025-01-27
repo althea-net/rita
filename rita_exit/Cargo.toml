@@ -15,7 +15,7 @@ settings = { path = "../settings" }
 babel_monitor = { path = "../babel_monitor" }
 actix = {workspace = true}
 awc = {workspace = true}
-ipnetwork = "0.20"
+ipnetwork = "0.21"
 clarity = {workspace = true}
 serde = "1.0"
 serde_derive = "1.0"

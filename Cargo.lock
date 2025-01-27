@@ -343,7 +343,7 @@ name = "althea_kernel_interface"
 version = "0.1.0"
 dependencies = [
  "althea_types",
- "ipnetwork",
+ "ipnetwork 0.21.1",
  "lazy_static",
  "log",
  "mac_address",
@@ -380,7 +380,7 @@ dependencies = [
  "clarity",
  "crypto_box",
  "deep_space",
- "ipnetwork",
+ "ipnetwork 0.20.0",
  "lettre",
  "num256",
  "phonenumber",
@@ -633,7 +633,7 @@ dependencies = [
 name = "babel_monitor"
 version = "0.1.0"
 dependencies = [
- "ipnetwork",
+ "ipnetwork 0.20.0",
  "log",
  "serde",
  "serde_derive",
@@ -2018,7 +2018,7 @@ dependencies = [
  "env_logger",
  "exit_trust_root",
  "futures 0.3.31",
- "ipnetwork",
+ "ipnetwork 0.21.1",
  "lazy_static",
  "log",
  "nix 0.26.4",
@@ -2041,7 +2041,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2feff90e2d7307100ba887119bfa8bb9b7703670899b001805ccdd9f2ef187d3"
 dependencies = [
  "blake2",
- "ipnetwork",
+ "ipnetwork 0.20.0",
 ]
 
 [[package]]
@@ -2052,6 +2052,12 @@ checksum = "bf466541e9d546596ee94f9f69590f89473455f88372423e0008fc1a7daf100e"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "ipnetwork"
+version = "0.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf370abdafd54d13e54a620e8c3e1145f28e46cc9d704bc6d94414559df41763"
 
 [[package]]
 name = "is_terminal_polyfill"
@@ -2976,7 +2982,7 @@ dependencies = [
  "exit_trust_root",
  "flate2",
  "hex-literal",
- "ipnetwork",
+ "ipnetwork 0.21.1",
  "jemallocator",
  "log",
  "openssl",
@@ -3013,7 +3019,7 @@ dependencies = [
  "compressed_log",
  "crypto_box",
  "futures 0.3.31",
- "ipnetwork",
+ "ipnetwork 0.21.1",
  "lazy_static",
  "lettre",
  "log",
@@ -3059,7 +3065,7 @@ dependencies = [
  "flate2",
  "futures 0.3.31",
  "hex-literal",
- "ipnetwork",
+ "ipnetwork 0.21.1",
  "lazy_static",
  "lettre",
  "log",
@@ -3093,7 +3099,7 @@ dependencies = [
  "crypto_box",
  "deep_space",
  "exit_trust_root",
- "ipnetwork",
+ "ipnetwork 0.21.1",
  "lettre",
  "log",
  "num256",
@@ -3487,7 +3493,7 @@ dependencies = [
  "auto-bridge",
  "babel_monitor",
  "clarity",
- "ipnetwork",
+ "ipnetwork 0.21.1",
  "lazy_static",
  "log",
  "num256",
