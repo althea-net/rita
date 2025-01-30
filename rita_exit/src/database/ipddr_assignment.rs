@@ -592,7 +592,7 @@ mod tests {
         // this way we ensure we always exhaust our test subnet, so that by the end of the test we can
         // check that we can't assign any more ips
         let num_clients =
-            get_ipv4_external_test_subnet().size() - static_assignments.len() as u32 - 2;
+            get_ipv4_external_test_subnet().size() - static_assignments.len() as u32 - 4;
         let mut clients = vec![];
 
         // generate some clients
