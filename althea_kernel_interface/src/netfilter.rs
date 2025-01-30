@@ -1,5 +1,8 @@
 use crate::{run_command, KernelInterfaceError};
-use std::{net::{IpAddr, Ipv4Addr}, process::Output};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    process::Output,
+};
 
 pub fn does_nftables_exist() -> bool {
     let output = match run_command("nft", &["-v"]) {
@@ -205,10 +208,7 @@ pub fn delete_forward_rule(ip: Ipv4Addr) -> Result<(), KernelInterfaceError> {
 }
 
 fn get_forward_rule_handle(str: &str) -> Result<Option<u32>, KernelInterfaceError> {
-    let out = run_command(
-        "nft",
-        &["-a", "list", "chain", "ip", "filter", "forward"],
-    )?;
+    let out = run_command("nft", &["-a", "list", "chain", "ip", "filter", "forward"])?;
     let out = out.stdout;
     let out = String::from_utf8(out).expect("fix command");
     for line in out.lines() {
@@ -248,10 +248,7 @@ pub fn delete_postrouting_rule(ip: Ipv4Addr) -> Result<(), KernelInterfaceError>
 }
 
 fn get_postrouting_rule_handle(str: &str) -> Result<Option<u32>, KernelInterfaceError> {
-    let out = run_command(
-        "nft",
-        &["-a", "list", "chain", "ip", "nat", "postrouting"],
-    )?;
+    let out = run_command("nft", &["-a", "list", "chain", "ip", "nat", "postrouting"])?;
     let out = out.stdout;
     let out = String::from_utf8(out).expect("fix command");
     for line in out.lines() {

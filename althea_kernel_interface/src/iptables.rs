@@ -44,7 +44,7 @@ pub fn delete_iptables_matching_rules(string: &str) -> Result<(), KernelInterfac
         .filter(|line| line.contains(string))
         .map(|line| line.to_string())
         .collect();
-    // for each line in matches, replace -A with -D 
+    // for each line in matches, replace -A with -D
     for line in matches {
         // replace -A with -D
         let rule = line.replace("-A", "-D");

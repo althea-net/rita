@@ -336,7 +336,6 @@ pub fn setup_client_snat(
         # Allow forwarded traffic
         nft 'add rule ip filter FORWARD ip saddr $INTERNAL_CLIENT counter accept'
          */
-        error!("Setting up nftables SNAT rules on exit for client: {client_external_ip} to {client_internal_ip}");
         run_command(
             "nft",
             &[

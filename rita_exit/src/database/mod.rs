@@ -13,10 +13,7 @@ use crate::ClientListAnIpAssignmentMap;
 use crate::RitaExitError;
 use althea_kernel_interface::exit_server_tunnel::set_exit_wg_config;
 use althea_kernel_interface::exit_server_tunnel::teardown_snat;
-use althea_kernel_interface::setup_wg_if::get_last_active_handshake_time;
-use althea_kernel_interface::setup_wg_if::get_list_of_wireguard_interfaces;
 use althea_kernel_interface::setup_wg_if::get_wg_exit_clients_offline;
-use althea_kernel_interface::setup_wg_if::get_wg_exit_clients_online;
 use althea_kernel_interface::traffic_control::create_flow_by_ip;
 use althea_kernel_interface::traffic_control::create_flow_by_ipv6;
 use althea_kernel_interface::traffic_control::delete_class;
@@ -390,8 +387,6 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
             clients_list.len(),
             wg_clients.len(),
         );
-    } else {
-        info!("We got no change in exit clients??");
     }
 
     // set previous tick states to current clients on wg interfaces

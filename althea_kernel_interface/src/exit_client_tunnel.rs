@@ -2,7 +2,8 @@ use crate::hardware_info::{get_kernel_version, parse_kernel_version};
 use crate::iptables::add_iptables_rule;
 use crate::link_local_tools::{get_global_device_ip_v4, get_link_local_device_ip};
 use crate::netfilter::{
-    delete_reject_rule, does_nftables_exist, init_nat_chain, insert_reject_rule, masquerade_nat_setup, set_nft_lan_fwd_rule
+    delete_reject_rule, does_nftables_exist, init_nat_chain, insert_reject_rule,
+    masquerade_nat_setup, set_nft_lan_fwd_rule,
 };
 use crate::run_command;
 use crate::setup_wg_if::get_peers;

@@ -429,7 +429,6 @@ async fn check_regions(
 }
 
 fn setup_exit_wg_tunnel() {
-    info!("Setting up Rita Exit tunnel");
     // Setup wg_exit
     if let Err(e) = create_blank_wg_interface(EXIT_INTERFACE) {
         warn!("new exit setup returned {}", e)
@@ -468,7 +467,11 @@ fn setup_exit_wg_tunnel() {
 
     // additional setup that is exit mode specific
     match exit_settings.exit_network.ipv4_routing {
-        ExitIpv4RoutingSettings::SNAT { subnet, external_ipv4, .. } => {
+        ExitIpv4RoutingSettings::SNAT {
+            subnet,
+            external_ipv4,
+            ..
+        } => {
             // for snat mode we must claim the second ip in the subnet as the exit ip
             setup_snat(
                 external_ipv4,
@@ -487,8 +490,6 @@ fn setup_exit_wg_tunnel() {
             //todo
         }
     }
-
-    info!("Finished setting up Rita Exit tunnels");
 }
 
 /// Starts the rita exit endpoints, passing the ip assignments and registered clients lists, these are shared via cross-thread lock

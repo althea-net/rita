@@ -52,8 +52,7 @@ async fn main() {
             run_altheadb_contract_test().await
         } else if test_type == "SNAT_EXIT" {
             run_snat_exit_test_scenario().await
-        } 
-        else {
+        } else {
             panic!("Error unknown test type {}!", test_type);
         }
     } else {

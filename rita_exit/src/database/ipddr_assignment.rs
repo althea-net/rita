@@ -435,7 +435,9 @@ mod tests {
         ExitIpv4RoutingSettings, ExitIpv6RoutingSettings,
     };
     use std::{
-        collections::{HashMap, HashSet}, net::Ipv4Addr, vec
+        collections::{HashMap, HashSet},
+        net::Ipv4Addr,
+        vec,
     };
 
     pub fn get_ipv4_internal_test_subnet() -> Ipv4Network {
