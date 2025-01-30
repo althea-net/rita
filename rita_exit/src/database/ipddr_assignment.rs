@@ -220,6 +220,9 @@ impl ClientListAnIpAssignmentMap {
             ExitIpv4RoutingSettings::SNAT {
                 subnet,
                 static_assignments,
+                gateway_ipv4,
+                external_ipv4,
+                broadcast_ipv4,
             } => {
                 // unlike in CGNAT mode, in SNAT mode we assign clients an ip and they are exclusively assigned that ip
                 // so we need to make sure the static ip assignments are handled first by building the full list
@@ -241,12 +244,12 @@ impl ClientListAnIpAssignmentMap {
                 // if we don't have a static assignment, we need to find an open ip and assign it
                 let mut possible_ips: Vec<Ipv4Addr> = subnet.into_iter().collect();
                 possible_ips.remove(0); // we don't want to assign the first ip in the subnet as it's the subnet default .0
-                possible_ips.remove(0); // we don't want to assign the first ip in the subnet as it's the gateway .1
-                possible_ips.remove(0); // we don't want to assign the second ip in the subnet as it's the exit's ip .2
-                possible_ips.pop(); // we don't want to assign the last ip in the subnet as it's the broadcast address .254
 
                 let mut target_ip = None;
                 for ip in possible_ips {
+                    if ip == *gateway_ipv4 || ip == *broadcast_ipv4 || ip == *external_ipv4 {
+                        continue;
+                    }
                     if !self.external_ip_assignemnts.contains_key(&ip) {
                         target_ip = Some(ip);
                         break;
@@ -398,11 +401,7 @@ pub fn ipv6_subnet_iter(input: Ipv6Network, subnet_size: u8) -> Ipv6Network {
 
 // calls the iptables setup for each client in the list, and updates the exit info
 // with the mapping of Identity to Ipv4 address
-pub fn setup_clients_snat(
-    clients_list: &HashSet<Identity>,
-    local_ip: Ipv4Addr,
-    rita_exit_info: &mut RitaExitData,
-) {
+pub fn setup_clients_snat(clients_list: &HashSet<Identity>, rita_exit_info: &mut RitaExitData) {
     for client in clients_list {
         // if we can't unwrap here panic is fine- all ips have been exhausted
         let client_ext_ipv4 = rita_exit_info
@@ -414,7 +413,6 @@ pub fn setup_clients_snat(
             .unwrap();
         match setup_client_snat(
             &settings::get_rita_exit().network.external_nic.unwrap(),
-            local_ip,
             client_ext_ipv4,
             client_int_ipv4,
         ) {
@@ -437,8 +435,7 @@ mod tests {
         ExitIpv4RoutingSettings, ExitIpv6RoutingSettings,
     };
     use std::{
-        collections::{HashMap, HashSet},
-        vec,
+        collections::{HashMap, HashSet}, net::Ipv4Addr, vec
     };
 
     pub fn get_ipv4_internal_test_subnet() -> Ipv4Network {
@@ -491,6 +488,9 @@ mod tests {
         let ipv4_settings = ExitIpv4RoutingSettings::SNAT {
             subnet: get_ipv4_external_test_subnet(),
             static_assignments,
+            gateway_ipv4: Ipv4Addr::new(172, 168, 1, 1),
+            external_ipv4: Ipv4Addr::new(172, 168, 1, 2),
+            broadcast_ipv4: Ipv4Addr::new(172, 168, 1, 255),
         };
         ipv4_settings.validate().unwrap();
         let internal_ipv4_settings = ExitInternalIpv4Settings {

@@ -52,7 +52,7 @@ pub async fn run_althea_payments_test_scenario() {
 
     namespaces.validate();
 
-    let res = setup_ns(namespaces.clone());
+    let res = setup_ns(namespaces.clone(), "default");
     info!("Namespaces setup: {res:?}");
 
     info!("Starting root server!");

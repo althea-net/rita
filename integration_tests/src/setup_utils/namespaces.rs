@@ -116,7 +116,7 @@ pub struct PriceId {
     pub id: u16,
 }
 
-pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
+pub fn setup_ns(spaces: NamespaceInfo, exit_mode: &str) -> Result<(), KernelInterfaceError> {
     // arbitrary number for the IP assignment
     let mut counter = 6;
     // clear namespaces
@@ -244,7 +244,14 @@ pub fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
             let veth_native_to_exit = format!("vout-o-{}", name.get_name());
             let veth_exit_to_native = format!("vout-{}-o", name.get_name());
             // todo if snat mode break this out
-            let exit_ip = "10.0.0.2/24".to_string();
+            let exit_ip = match exit_mode {
+                "snat" => "10.0.0.2/24".to_string(),
+                _ => format!(
+                    "10.0.{}.{}/24",
+                    name.id.to_be_bytes()[0],
+                    name.id.to_be_bytes()[1]
+                ),
+            };
             // collect these to attach to the virtual switch later
             links_to_native_namespace.push(veth_native_to_exit.clone());
 

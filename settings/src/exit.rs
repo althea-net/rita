@@ -56,6 +56,12 @@ pub enum ExitIpv4RoutingSettings {
     /// find another exit to connect to they will be unable to access the internet.
     SNAT {
         subnet: Ipv4Network,
+        /// upstream isp's ipv4 addr as seen by the exit
+        gateway_ipv4: Ipv4Addr,
+        /// exit's own external ipv4 addr as seen by the upstream isp
+        external_ipv4: Ipv4Addr,
+        /// broadcast ipv4 addr for the exit's external network
+        broadcast_ipv4: Ipv4Addr,
         static_assignments: Vec<ClientIpv4StaticAssignment>,
     },
 }
@@ -85,7 +91,9 @@ impl ExitIpv4RoutingSettings {
             }
             ExitIpv4RoutingSettings::SNAT {
                 static_assignments,
-                subnet, .. } => {
+                subnet,
+                ..
+            } => {
                 let mut used_ips = HashSet::new();
                 for assignment in static_assignments {
                     if used_ips.contains(&assignment.client_external_ip) {

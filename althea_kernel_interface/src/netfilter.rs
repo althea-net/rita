@@ -1,5 +1,5 @@
 use crate::{run_command, KernelInterfaceError};
-use std::{net::IpAddr, process::Output};
+use std::{net::{IpAddr, Ipv4Addr}, process::Output};
 
 pub fn does_nftables_exist() -> bool {
     let output = match run_command("nft", &["-v"]) {
@@ -183,6 +183,92 @@ pub fn delete_reject_rule() -> Result<(), KernelInterfaceError> {
         )?;
     }
     Ok(())
+}
+
+/// delete the forward rule for the given ip
+pub fn delete_forward_rule(ip: Ipv4Addr) -> Result<(), KernelInterfaceError> {
+    if let Some(handle) = get_forward_rule_handle(&ip.to_string())? {
+        run_command(
+            "nft",
+            &[
+                "delete",
+                "rule",
+                "ip",
+                "filter",
+                "forward",
+                "handle",
+                &handle.to_string(),
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn get_forward_rule_handle(str: &str) -> Result<Option<u32>, KernelInterfaceError> {
+    let out = run_command(
+        "nft",
+        &["-a", "list", "chain", "ip", "filter", "forward"],
+    )?;
+    let out = out.stdout;
+    let out = String::from_utf8(out).expect("fix command");
+    for line in out.lines() {
+        if line.contains(str) {
+            let handle: Vec<&str> = line.split(' ').collect();
+            match handle.last() {
+                Some(a) => match (*a).parse() {
+                    Ok(b) => return Ok(Some(b)),
+                    Err(_) => {
+                        return Ok(None);
+                    }
+                },
+                None => return Ok(None),
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// delete the postrouting rule matching the given ip
+pub fn delete_postrouting_rule(ip: Ipv4Addr) -> Result<(), KernelInterfaceError> {
+    if let Some(handle) = get_postrouting_rule_handle(&ip.to_string())? {
+        run_command(
+            "nft",
+            &[
+                "delete",
+                "rule",
+                "ip",
+                "nat",
+                "postrouting",
+                "handle",
+                &handle.to_string(),
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn get_postrouting_rule_handle(str: &str) -> Result<Option<u32>, KernelInterfaceError> {
+    let out = run_command(
+        "nft",
+        &["-a", "list", "chain", "ip", "nat", "postrouting"],
+    )?;
+    let out = out.stdout;
+    let out = String::from_utf8(out).expect("fix command");
+    for line in out.lines() {
+        if line.contains(str) {
+            let handle: Vec<&str> = line.split(' ').collect();
+            match handle.last() {
+                Some(a) => match (*a).parse() {
+                    Ok(b) => return Ok(Some(b)),
+                    Err(_) => {
+                        return Ok(None);
+                    }
+                },
+                None => return Ok(None),
+            }
+        }
+    }
+    Ok(None)
 }
 
 pub fn init_nat_chain() -> Result<(), KernelInterfaceError> {
@@ -381,33 +467,4 @@ pub fn masquerade_nat_setup(ex_nic: &str) -> Result<Output, KernelInterfaceError
             "masquerade",
         ],
     )
-}
-
-/// Adds a prerouting chain to the ipv4 nat table
-pub fn add_preroute_chain_ipv4() -> Result<(), KernelInterfaceError> {
-    // prerouting only needed in snat mode
-    // nft add chain ip nat prerouting '{ type nat hook prerouting priority 100 ; policy accept ; }'
-    run_command(
-        "nft",
-        &[
-            "create",
-            "chain",
-            "ip",
-            "nat",
-            "prerouting",
-            "{",
-            "type",
-            "nat",
-            "hook",
-            "prerouting",
-            "priority",
-            "100",
-            ";",
-            "policy",
-            "accept",
-            ";",
-            "}",
-        ],
-    )?;
-    Ok(())
 }

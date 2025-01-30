@@ -22,9 +22,8 @@ pub fn is_iface_up(dev: &str) -> Option<bool> {
 /// Adds an ipv4 address to a given interface, true is returned when
 /// the ip is added, false if it is already there and Error if the interface
 /// does not exist or some other error has occured
-pub fn add_ipv4(ip: Ipv4Addr, mask: u8, dev: &str) -> Result<bool, Error> {
-    let ip_str = format!("{ip}/{mask}");
-    let output = run_command("ip", &["addr", "add", &ip_str, "dev", dev])?;
+pub fn add_ipv4(ip: Ipv4Addr, dev: &str) -> Result<bool, Error> {
+    let output = run_command("ip", &["addr", "add", &format!("{ip}/32"), "dev", dev])?;
     // Get the first line, check if it has "file exists"
     match String::from_utf8(output.stderr) {
         Ok(stdout) => match stdout.lines().next() {
@@ -41,6 +40,11 @@ pub fn add_ipv4(ip: Ipv4Addr, mask: u8, dev: &str) -> Result<bool, Error> {
             "Could not decode stderr from ip with {e:?}"
         ))),
     }
+}
+
+pub fn delete_ipv4(ip: Ipv4Addr, dev: &str) -> Result<(), Error> {
+    run_command("ip", &["addr", "del", &format!("{ip}/32"), "dev", dev])?;
+    Ok(())
 }
 
 /// After receiving an ipv6 addr from the exit, this function adds that ip

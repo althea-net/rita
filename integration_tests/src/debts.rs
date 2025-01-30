@@ -53,7 +53,7 @@ pub async fn run_debts_test() {
 
     namespaces.validate();
 
-    let res = setup_ns(namespaces.clone());
+    let res = setup_ns(namespaces.clone(), "default");
     info!("Namespaces setup: {res:?}");
 
     info!("Starting root server!");

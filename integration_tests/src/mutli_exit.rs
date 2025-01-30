@@ -45,7 +45,7 @@ pub async fn run_multi_exit_test() {
 
     namespaces.validate();
 
-    let res = setup_ns(namespaces.clone());
+    let res = setup_ns(namespaces.clone(), "default");
 
     info!("Starting root server!");
     spawn_exit_root_of_trust(db_addr).await;

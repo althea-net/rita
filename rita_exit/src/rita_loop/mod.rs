@@ -19,7 +19,7 @@ use crate::{network_endpoints::*, ClientListAnIpAssignmentMap, RitaExitError};
 use actix::System as AsyncSystem;
 use actix_web::{web, App, HttpServer};
 use althea_kernel_interface::exit_server_tunnel::{one_time_exit_setup, setup_nat, setup_snat};
-use althea_kernel_interface::netfilter::{init_filter_chain, masquerade_nat_setup};
+use althea_kernel_interface::netfilter::masquerade_nat_setup;
 use althea_kernel_interface::setup_wg_if::create_blank_wg_interface;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::ExitClient;
@@ -28,7 +28,7 @@ use althea_types::{Identity, SignedExitServerList, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
 use clarity::Address;
 use exit_trust_root::client_db::get_all_registered_clients;
-use ipnetwork::{Ipv4Network, Ipv6Network};
+use ipnetwork::Ipv6Network;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
 use settings::exit::{ExitIpv4RoutingSettings, EXIT_LIST_PORT};
@@ -468,14 +468,11 @@ fn setup_exit_wg_tunnel() {
 
     // additional setup that is exit mode specific
     match exit_settings.exit_network.ipv4_routing {
-        ExitIpv4RoutingSettings::SNAT { subnet, .. } => {
+        ExitIpv4RoutingSettings::SNAT { subnet, external_ipv4, .. } => {
             // for snat mode we must claim the second ip in the subnet as the exit ip
-            // TODO: these should be getters on the exit settings
-            // we need to set up the second address as the exit to forward out to the first
-            let (first, second, last) = reserved_ips(subnet);
             setup_snat(
-                second,
-                subnet.prefix(),
+                external_ipv4,
+                subnet.prefix().into(),
                 &settings::get_rita_exit().network.external_nic.unwrap(),
             )
             .unwrap();
@@ -492,16 +489,6 @@ fn setup_exit_wg_tunnel() {
     }
 
     info!("Finished setting up Rita Exit tunnels");
-}
-
-/// first, second, and last ips in the given subnet are reserved for the network upstream, the exit, and the broadcast
-/// address and cannot be assigned to clients. this function returns those ips
-fn reserved_ips(subnet: Ipv4Network) -> (Ipv4Addr, Ipv4Addr, Ipv4Addr) {
-    let first = subnet.nth(1).unwrap();
-    let second = subnet.nth(2).unwrap();
-    let size = subnet.size();
-    let last = subnet.nth(size - 1).unwrap();
-    (first, second, last)
 }
 
 /// Starts the rita exit endpoints, passing the ip assignments and registered clients lists, these are shared via cross-thread lock

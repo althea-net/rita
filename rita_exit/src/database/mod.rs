@@ -13,6 +13,10 @@ use crate::ClientListAnIpAssignmentMap;
 use crate::RitaExitError;
 use althea_kernel_interface::exit_server_tunnel::set_exit_wg_config;
 use althea_kernel_interface::exit_server_tunnel::teardown_snat;
+use althea_kernel_interface::setup_wg_if::get_last_active_handshake_time;
+use althea_kernel_interface::setup_wg_if::get_list_of_wireguard_interfaces;
+use althea_kernel_interface::setup_wg_if::get_wg_exit_clients_offline;
+use althea_kernel_interface::setup_wg_if::get_wg_exit_clients_online;
 use althea_kernel_interface::traffic_control::create_flow_by_ip;
 use althea_kernel_interface::traffic_control::create_flow_by_ipv6;
 use althea_kernel_interface::traffic_control::delete_class;
@@ -50,8 +54,8 @@ pub mod ipddr_assignment;
 pub const ONE_DAY: i64 = 86400;
 
 /// the time after which client tunnels will be torn down for inactivity in SNAT mdoe
-/// (one hour in seconds)
-pub const INACTIVE_CLIENT_THRESHOLD: u64 = 3600;
+/// (5 days in seconds)
+pub const INACTIVE_CLIENT_THRESHOLD: u64 = 432000;
 
 /// Timeout when requesting client registration
 pub const CLIENT_REGISTER_TIMEOUT: Duration = Duration::from_secs(5);
@@ -306,11 +310,6 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
     let mut wg_clients = HashSet::new();
     let mut geoip_blacklist_map = HashSet::new();
 
-    info!(
-        "got clients from db {:?} {:?}",
-        clients_list, client_states.old_clients
-    );
-
     for c in clients_list.iter() {
         if !wg_clients.insert(*c) {
             error!("Duplicate database entry! {}", c.wg_public_key);
@@ -367,20 +366,9 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
         );
 
         // if we are in SNAT mode we need to setup iptables rules
-        if let ExitIpv4RoutingSettings::SNAT {
-            ..
-        } = client_data.get_ipv4_nat_mode()
-        {
-            info!("Setting up iptables rules for SNAT mode");
-            setup_clients_snat(
-                &wg_clients,
-                settings::get_rita_exit()
-                    .exit_network
-                    .internal_ipv4
-                    .internal_ip(),
-                client_data,
-            );
-            info!("Finished setting up iptables rules for SNAT mode");
+        if let ExitIpv4RoutingSettings::SNAT { .. } = client_data.get_ipv4_nat_mode() {
+            info!("Setting up rules for SNAT mode");
+            setup_clients_snat(&wg_clients, client_data);
         }
 
         match exit_status {
@@ -545,56 +533,86 @@ pub fn enforce_exit_clients(client_data: &mut RitaExitData) -> Result<(), Box<Ri
 }
 
 /// Removes client ip assignments for clients that have not checked in for 1 hour
-/// (should this be SNAT locked?)
 pub fn teardown_inactive_clients(client_data: &mut RitaExitData) {
     let inactive_list = client_data.get_inactive_list();
     // check for snat mode
     let ipv4_mode = client_data.get_ipv4_nat_mode();
-    if let ExitIpv4RoutingSettings::SNAT {
-        subnet: _,
-        static_assignments: _,
-    } = ipv4_mode
-    {
-        info!("Checking for inactive clients in SNAT mode");
+    if let ExitIpv4RoutingSettings::SNAT { .. } = ipv4_mode {
     } else {
         return;
     }
-
-    let assignments = client_data.get_external_ip_assignments();
+    let ext_nic = &settings::get_rita_exit().network.external_nic.unwrap();
+    let ext_assignments = client_data.get_external_ip_assignments();
+    let int_assignments = client_data.get_internal_ip_assignments();
     // for each client in inactive, find their wg key from clientandipmap, then
     // remove their iptables rules if their last seen was over threshold
     for (client, last_seen) in inactive_list.iter() {
         if last_seen.elapsed().as_secs() > INACTIVE_CLIENT_THRESHOLD {
-            // get this client's assigned external ip
-            let external_ip: Vec<Ipv4Addr> = assignments
-                .iter()
-                .filter(|(_k, v)| v.contains(client))
-                .map(|(&k, _v)| k)
-                .collect();
-            match external_ip.len().cmp(&1) {
-                std::cmp::Ordering::Greater => {
-                    error!(
-                        "Client {} has more than one external ip assigned, this should not happen?",
-                        client
-                    );
-                }
-                std::cmp::Ordering::Equal => {
-                    let external_ip = external_ip.first().unwrap();
-                    // remove the iptables rules for this client
-                    if let Err(e) = teardown_snat(*external_ip) {
-                        error!(
-                            "Failed to delete iptables rules for client {} with error {:?}",
-                            client, e
-                        );
-                    }
-                }
-                std::cmp::Ordering::Less => {
-                    error!(
-                        "Client due for teardown {} has no external ip assigned?",
-                        client
-                    );
-                }
+            try_teardown_client_snat(
+                ext_assignments.clone(),
+                int_assignments.clone(),
+                *client,
+                ext_nic,
+            );
+        }
+    }
+    let all_clients = client_data.get_all_registered_clients();
+    // then, list any clients that have not had a wg handshake recently
+    let wg_clients = get_wg_exit_clients_offline("wg_exit").unwrap();
+    for wg_key in wg_clients.iter() {
+        let client = all_clients
+            .iter()
+            .find(|c| *wg_key == c.wg_public_key)
+            .expect("Client not found in database");
+        try_teardown_client_snat(
+            ext_assignments.clone(),
+            int_assignments.clone(),
+            *client,
+            ext_nic,
+        );
+    }
+}
+
+fn try_teardown_client_snat(
+    ext_assignments: HashMap<Ipv4Addr, HashSet<Identity>>,
+    int_assignments: HashMap<Ipv4Addr, Identity>,
+    client: Identity,
+    ext_nic: &str,
+) {
+    // get this client's assigned external ip
+    let external_ip: Vec<Ipv4Addr> = ext_assignments
+        .iter()
+        .filter(|(_k, v)| v.contains(&client))
+        .map(|(&k, _v)| k)
+        .collect();
+    let internal_ip: Vec<Ipv4Addr> = int_assignments
+        .iter()
+        .filter(|(_k, v)| **v == client)
+        .map(|(&k, _v)| k)
+        .collect();
+    match (external_ip.len().cmp(&1), internal_ip.len().cmp(&1)) {
+        (std::cmp::Ordering::Greater, _) | (_, std::cmp::Ordering::Greater) => {
+            error!(
+            "Client {} has more than one internal or external ip assigned, this should not happen?",
+            client
+        );
+        }
+        (std::cmp::Ordering::Equal, std::cmp::Ordering::Equal) => {
+            let external_ip = external_ip.first().unwrap();
+            let internal_ip = internal_ip.first().unwrap();
+            // remove the iptables rules for this client
+            if let Err(e) = teardown_snat(*external_ip, *internal_ip, ext_nic) {
+                error!(
+                    "Failed to delete iptables rules for client {} with error {:?}",
+                    client, e
+                );
             }
+        }
+        (std::cmp::Ordering::Less, _) | (_, std::cmp::Ordering::Less) => {
+            error!(
+                "Client due for teardown {} has no external or internal ip assigned?",
+                client
+            );
         }
     }
 }

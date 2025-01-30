@@ -74,7 +74,7 @@ pub fn create_blank_wg_interface(name: &str) -> Result<(), KernelInterfaceError>
     Ok(())
 }
 
-/// internal helper function for testing get_wg_exit_clients_online
+/// internal helper function for get_wg_exit_clients_online
 fn get_wg_exit_clients_online_internal(out: String) -> Result<u32, Error> {
     let mut num: u32 = 0;
     for line in out.lines() {
@@ -93,11 +93,49 @@ fn get_wg_exit_clients_online_internal(out: String) -> Result<u32, Error> {
     Ok(num)
 }
 
-/// Returns the number of clients that are active on the wg_exit tunnel
+/// Returns the number of clients that are active(<10m since last handshake) on the wg_exit tunnel
 pub fn get_wg_exit_clients_online(interface: &str) -> Result<u32, Error> {
     let output = run_command("wg", &["show", interface, "latest-handshakes"])?;
     let out = String::from_utf8(output.stdout)?;
     get_wg_exit_clients_online_internal(out)
+}
+
+/// internal helper function for get_wg_exit_clients_offline (last handshake > 10m)
+fn get_wg_exit_clients_offline_internal(out: String) -> Result<Vec<WgKey>, Error> {
+    let mut keys: Vec<WgKey> = Vec::new();
+    for line in out.lines() {
+        let content: Vec<&str> = line.split('\t').collect();
+        let mut itr = content.iter();
+        let key = itr.next().ok_or_else(|| {
+            KernelInterfaceError::RuntimeError("Option did not contain a value.".to_string())
+        })?;
+        let timestamp = itr.next().ok_or_else(|| {
+            KernelInterfaceError::RuntimeError("Option did not contain a value.".to_string())
+        })?;
+        // if timestamp is 0 we have just set up the tunnel, do not include it in the list
+        if *timestamp == "0" {
+            continue;
+        }
+        let d = UNIX_EPOCH + Duration::from_secs(timestamp.parse()?);
+
+        let offline_threshold = if cfg!(feature = "integration_test") {
+            Duration::new(140, 0)
+        } else {
+            // 5 days
+            Duration::new(432_000, 0)
+        };
+        if SystemTime::now().duration_since(d)? > offline_threshold {
+            keys.push(key.parse()?);
+        }
+    }
+    Ok(keys)
+}
+
+/// Returns the wg keys of clients that are inactive(>10m since last handshake) on the wg_exit tunnel
+pub fn get_wg_exit_clients_offline(interface: &str) -> Result<Vec<WgKey>, Error> {
+    let output = run_command("wg", &["show", interface, "latest-handshakes"])?;
+    let out = String::from_utf8(output.stdout)?;
+    get_wg_exit_clients_offline_internal(out)
 }
 
 /// Internal helper function for ci testing get_last_handshake_time
@@ -127,6 +165,7 @@ fn get_last_active_handshake_time_internal(out: String) -> Result<Vec<(WgKey, Sy
     }
     Ok(timestamps)
 }
+// here
 
 /// Returns the last handshake time of every client on this tunnel.
 pub fn get_last_handshake_time(ifname: &str) -> Result<Vec<(WgKey, SystemTime)>, Error> {
