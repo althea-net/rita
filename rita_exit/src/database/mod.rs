@@ -13,7 +13,7 @@ use crate::ClientListAnIpAssignmentMap;
 use crate::RitaExitError;
 use althea_kernel_interface::exit_server_tunnel::set_exit_wg_config;
 use althea_kernel_interface::exit_server_tunnel::teardown_snat;
-use althea_kernel_interface::setup_wg_if::get_wg_exit_clients_offline;
+use althea_kernel_interface::setup_wg_if::get_wg_clients_online_offline;
 use althea_kernel_interface::traffic_control::create_flow_by_ip;
 use althea_kernel_interface::traffic_control::create_flow_by_ipv6;
 use althea_kernel_interface::traffic_control::delete_class;
@@ -299,19 +299,19 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
     // thus modifying the internal state of the client_data object despite not obviously being
     // a setter. This is a holdover from the original design of the code and should be cleaned up with
     // more explicit ip allocation functions
-    let clients_list = client_data.get_all_registered_clients();
+    let reg_clients = client_data.get_all_registered_clients();
     let mut client_states = client_data.get_setup_states();
     let geoip_blacklist = client_data.get_geoip_blacklist();
 
     // use hashset to ensure uniqueness and check for duplicate db entries
-    let mut wg_clients = HashSet::new();
     let mut geoip_blacklist_map = HashSet::new();
 
-    for c in clients_list.iter() {
-        if !wg_clients.insert(*c) {
-            error!("Duplicate database entry! {}", c.wg_public_key);
-        }
-    }
+    // clients list is currently registered only- in snat mode we should also check for wg peers that are
+    // already registered, but have just reconnected after their last snat route was torn down.
+    // in snat mode, when we tear down a client they keep their wg tunnel and exit registration, so we need
+    // a way to determine clients that have reconnected and need to be re-added to the snat table.
+    // for this we will keep a list of clients that have been torn down. if any of these clients suddenly have
+    // a recent handshake, we will re-add them to the snat table.
 
     for c in geoip_blacklist.iter() {
         if !geoip_blacklist_map.insert(*c) {
@@ -319,20 +319,21 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
         }
     }
 
-    trace!("converted clients {:?}", wg_clients);
-
-    // remove geoip blacklisted clients from wg clients
-    let wg_clients: HashSet<Identity> = wg_clients
+    // remove geoip blacklisted clients from registered clients
+    let reg_clients: HashSet<Identity> = reg_clients
         .difference(&geoip_blacklist_map)
         .copied()
         .collect();
 
-    let mut wg_clients_exit = HashSet::new();
-    // for each in wg_clients, try id_to_exit_client, if it fails, print an error and continue, else add to wg_clients_exit
-    for c in wg_clients.iter() {
+    let mut reg_exitclients: HashSet<ExitClient> = HashSet::new();
+    // for each in reg_clients, try id_to_exit_client, if it fails, print an error and continue, else add to reg_exitclients
+    // also create a new mapping of wg keys to identities to cut down on lookups
+    let mut wg_to_registered_id_map = HashMap::new();
+    for c in reg_clients.iter() {
+        wg_to_registered_id_map.insert(c.wg_public_key, *c);
         match client_data.id_to_exit_client(*c) {
             Ok(c) => {
-                wg_clients_exit.insert(c);
+                reg_exitclients.insert(c);
             }
             Err(e) => {
                 error!(
@@ -342,13 +343,12 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
             }
         }
     }
-
-    // now wg_clients contains the identities, and wg_clients_exit is the same list in ExitClient form
+    // now reg_clients contains the identities, and reg_exitclients is the same list in ExitClient form
 
     // symmetric difference is an iterator of all items in A but not in B
     // or in B but not in A, in short if there's any difference between the two
     // it must be nonzero, since all entires must be unique there can not be duplicates
-    if wg_clients_exit
+    if reg_exitclients
         .symmetric_difference(&client_states.old_clients)
         .count()
         != 0
@@ -356,17 +356,11 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
         info!("Setting up configs for wg_exit");
         // setup all the tunnels
         let exit_status = set_exit_wg_config(
-            &wg_clients_exit,
+            &reg_exitclients,
             settings::get_rita_exit().exit_network.wg_tunnel_port,
             &settings::get_rita_exit().network.wg_private_key_path,
             EXIT_INTERFACE,
         );
-
-        // if we are in SNAT mode we need to setup iptables rules
-        if let ExitIpv4RoutingSettings::SNAT { .. } = client_data.get_ipv4_nat_mode() {
-            info!("Setting up rules for SNAT mode");
-            setup_clients_snat(&wg_clients, client_data);
-        }
 
         match exit_status {
             Ok(_a) => {
@@ -379,18 +373,63 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
                 e
             ),
         }
-
         info!(
-            "exit setup loop completed in {}s {}ms with {} clients and {} wg_clients",
+            "exit setup loop completed in {}s {}ms with {} reg_clients",
             start.elapsed().as_secs(),
             start.elapsed().subsec_millis(),
-            clients_list.len(),
-            wg_clients.len(),
+            reg_clients.len(),
         );
     }
 
+    // if we are in SNAT mode we must setup snat for any new registered clients that are online
+    if let ExitIpv4RoutingSettings::SNAT { .. } = client_data.get_ipv4_nat_mode() {
+        let (online_clients, offline_clients) = get_wg_clients_online_offline("wg_exit").unwrap();
+        let external_assignments = client_data.get_external_ipv4_assignments();
+        // if online clients are not in the external assignments, we need to assign them an ip and setup forwarding
+        let mut clients_needing_setup: HashSet<Identity> = HashSet::new();
+        for client in online_clients.iter() {
+            let registered_client_id = match wg_to_registered_id_map.get(client) {
+                Some(client) => client,
+                None => {
+                    error!(
+                        "Client {} is online but not registered, cannot setup SNAT rules",
+                        client
+                    );
+                    continue;
+                }
+            };
+            if !external_assignments
+                .values()
+                .any(|v| v.contains(registered_client_id))
+            {
+                clients_needing_setup.insert(*registered_client_id);
+            }
+        }
+        setup_clients_snat(&clients_needing_setup, client_data);
+        // add any new offline clients to the inactive list and tear down their snat rules
+        let inactive = client_data.get_inactive_list();
+        let mut teardown_list: HashSet<Identity> = HashSet::new();
+        for client in offline_clients.iter() {
+            let registered_client_id = match wg_to_registered_id_map.get(client) {
+                Some(client) => client,
+                None => {
+                    error!(
+                        "Client {} is offline but not registered, cannot ID for teardown!",
+                        client
+                    );
+                    continue;
+                }
+            };
+            if !inactive.contains(registered_client_id) {
+                teardown_list.insert(*registered_client_id);
+            }
+        }
+        client_data.set_inactive_list(teardown_list);
+        teardown_inactive_clients(client_data);
+    }
+
     // set previous tick states to current clients on wg interfaces
-    client_states.old_clients = wg_clients_exit;
+    client_states.old_clients = reg_exitclients;
 
     client_data.set_setup_states(client_states);
     Ok(())
@@ -527,7 +566,8 @@ pub fn enforce_exit_clients(client_data: &mut RitaExitData) -> Result<(), Box<Ri
     Ok(())
 }
 
-/// Removes client ip assignments for clients that have not checked in for 1 hour
+/// Removes client ip assignments for clients that are deemed inactive
+/// todo this must include removal in external ip assignments list
 pub fn teardown_inactive_clients(client_data: &mut RitaExitData) {
     let inactive_list = client_data.get_inactive_list();
     // check for snat mode
@@ -537,35 +577,17 @@ pub fn teardown_inactive_clients(client_data: &mut RitaExitData) {
         return;
     }
     let ext_nic = &settings::get_rita_exit().network.external_nic.unwrap();
-    let ext_assignments = client_data.get_external_ip_assignments();
+    let ext_assignments = client_data.get_external_ipv4_assignments();
     let int_assignments = client_data.get_internal_ip_assignments();
-    // for each client in inactive, find their wg key from clientandipmap, then
-    // remove their iptables rules if their last seen was over threshold
-    for (client, last_seen) in inactive_list.iter() {
-        if last_seen.elapsed().as_secs() > INACTIVE_CLIENT_THRESHOLD {
-            try_teardown_client_snat(
-                ext_assignments.clone(),
-                int_assignments.clone(),
-                *client,
-                ext_nic,
-            );
-        }
-    }
-    let all_clients = client_data.get_all_registered_clients();
-    // then, list any clients that have not had a wg handshake recently
-    let wg_clients = get_wg_exit_clients_offline("wg_exit").unwrap();
-    for wg_key in wg_clients.iter() {
-        let client = all_clients
-            .iter()
-            .find(|c| *wg_key == c.wg_public_key)
-            .expect("Client not found in database");
+    for client in inactive_list.iter() {
         try_teardown_client_snat(
             ext_assignments.clone(),
             int_assignments.clone(),
             *client,
             ext_nic,
         );
-    }
+        client_data.remove_client_external_ip(*client);
+    };
 }
 
 fn try_teardown_client_snat(

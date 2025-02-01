@@ -12,7 +12,7 @@ use settings::get_rita_exit;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::time::Instant;
+use std::time::SystemTime;
 
 /// Max number of time we try to generate a valid ip addr before returning an eror
 pub const MAX_IP_RETRIES: u8 = 10;
@@ -41,9 +41,12 @@ pub struct ClientListAnIpAssignmentMap {
     external_ip_assignemnts: HashMap<Ipv4Addr, HashSet<Identity>>,
     /// A set of all clients that have been registered with the exit
     registered_clients: HashSet<Identity>,
-    /// A map of clients that have been inactive for some time and their last checkin time. These will have their
-    /// routes town down if they hit the downtime threshold in SNAT mode
-    inactive_clients: HashMap<Identity, Instant>,
+    /// A list of clients that have been inactive past threshold todo insert name here. in SNAT mode these
+    /// clients have had their nftables rules removed and ip assignments cleared
+    inactive_clients: HashSet<Identity>,
+    /// A map of clients and the timestamp when they first connected to wg_exit, used to determine if a client is
+    /// actually live and not camping on an ip in SNAT mode
+    client_first_connect: HashMap<Identity, SystemTime>,
 }
 
 impl ClientListAnIpAssignmentMap {
@@ -61,7 +64,8 @@ impl ClientListAnIpAssignmentMap {
             ipv4_assignment_settings: ipv4_settings,
             ipv6_assignment_settings: ipv6_settings,
             internal_ipv4_assignment_settings: internal_ipv4_settings,
-            inactive_clients: HashMap::new(),
+            inactive_clients: HashSet::new(),
+            client_first_connect: HashMap::new(),
         }
     }
 
@@ -273,6 +277,24 @@ impl ClientListAnIpAssignmentMap {
         }
     }
 
+    /// done as part of teardown, removes the client from the external ip assignments
+    pub fn remove_client_external_ip(&mut self, id: Identity) {
+        // find the client in the external ip assignments
+        match self
+            .external_ip_assignemnts
+            .iter()
+            .find(|(_, clients)| clients.contains(&id))
+            .map(|(ip, _)| *ip)
+        {
+            Some(ip) => {
+                self.external_ip_assignemnts.remove(&ip);
+            }
+            None => {
+                // this client doesn't have an external ip assignment
+            }
+        }
+    }
+
     /// Given a client identity, get the clients internal ipv4 addr using the wgkey as a generative seed
     /// this is the ip used for the wg_exit tunnel for the client. Not the clients public ip visible to the internet
     /// which is determined by the NAT settings on the exit
@@ -371,11 +393,11 @@ impl ClientListAnIpAssignmentMap {
         })
     }
 
-    pub fn get_inactive_list(&self) -> HashMap<Identity, Instant> {
+    pub fn get_inactive_list(&self) -> HashSet<Identity> {
         self.inactive_clients.clone()
     }
 
-    pub fn set_inactive_list(&mut self, list: HashMap<Identity, Instant>) {
+    pub fn set_inactive_list(&mut self, list: HashSet<Identity>) {
         self.inactive_clients = list;
     }
 }

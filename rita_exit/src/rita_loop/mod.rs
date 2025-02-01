@@ -11,7 +11,7 @@
 //! wakes up to restart the inner thread if anything goes wrong.
 
 use crate::database::{
-    enforce_exit_clients, setup_clients, teardown_inactive_clients, validate_clients_region,
+    enforce_exit_clients, setup_clients, validate_clients_region,
     ExitClientSetupStates,
 };
 use crate::traffic_watcher::watch_exit_traffic;
@@ -139,6 +139,13 @@ impl RitaExitData {
             .get_or_add_client_external_ip(their_record)
     }
 
+    pub fn remove_client_external_ip(&self, id: Identity) {
+        self.client_list_and_ip_assignments
+            .write()
+            .unwrap()
+            .remove_client_external_ip(id)
+    }
+
     pub fn get_or_add_client_ipv6(
         &self,
         their_record: Identity,
@@ -185,21 +192,21 @@ impl RitaExitData {
         self.debt_actions = debt_actions;
     }
 
-    pub fn get_inactive_list(&self) -> HashMap<Identity, Instant> {
+    pub fn get_inactive_list(&self) -> HashSet<Identity> {
         self.client_list_and_ip_assignments
             .read()
             .unwrap()
             .get_inactive_list()
     }
 
-    pub fn set_inactive_list(&mut self, inactive_list: HashMap<Identity, Instant>) {
+    pub fn set_inactive_list(&mut self, inactive_list: HashSet<Identity>) {
         self.client_list_and_ip_assignments
             .write()
             .unwrap()
             .set_inactive_list(inactive_list);
     }
 
-    pub fn get_external_ip_assignments(&self) -> HashMap<Ipv4Addr, HashSet<Identity>> {
+    pub fn get_external_ipv4_assignments(&self) -> HashMap<Ipv4Addr, HashSet<Identity>> {
         self.client_list_and_ip_assignments
             .read()
             .unwrap()
@@ -220,14 +227,11 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
     loop {
         let start = Instant::now();
 
-        let (reg_clients_list, inactive_list) = update_client_list(
-            rita_exit_cache.get_all_registered_clients(),
-            rita_exit_cache.get_inactive_list(),
-        )
+        let reg_clients_list = update_client_list(
+            rita_exit_cache.get_all_registered_clients())
         .await;
         // Internal exit cache that store state across multiple ticks
         rita_exit_cache.set_registered_clients(reg_clients_list);
-        rita_exit_cache.set_inactive_list(inactive_list);
 
         let rita_exit = settings::get_rita_exit();
         let babel_port = rita_exit.network.babel_port;
@@ -248,7 +252,6 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
         info!("About to setup clients");
         let start_setup_benchmark = Instant::now();
         // Create and update client tunnels
-        // is clone doing what I think it will here? TODO look up how the lock moves when cloned
         match setup_clients(&mut rita_exit_cache) {
             Ok(_) => {
                 rita_exit_cache.successful_setup = true;
@@ -259,8 +262,6 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
             "Finished Rita setting up clients in {}ms",
             start_setup_benchmark.elapsed().as_millis()
         );
-
-        teardown_inactive_clients(&mut rita_exit_cache);
 
         // Make sure no one we are setting up is geoip unauthorized
         let start_region_benchmark = Instant::now();
@@ -303,8 +304,7 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
 /// Updates the client list, if this is not successful the old client list is used
 async fn update_client_list(
     reg_clients_list: HashSet<Identity>,
-    mut inactive_list: HashMap<Identity, Instant>,
-) -> (HashSet<Identity>, HashMap<Identity, Instant>) {
+) -> HashSet<Identity> {
     let payment_settings = settings::get_rita_common().payment;
     let contract_address = settings::get_rita_exit()
         .exit_network
@@ -321,33 +321,14 @@ async fn update_client_list(
                 list.len(),
                 get_clients_benchmark.elapsed().as_millis()
             );
-            // now compare the new list to the old list: if we are missing clients from the old list add those clients
-            // to a separate list to keep track of when they went offline
-            let lost_clients: Vec<Identity> = reg_clients_list.difference(&list).cloned().collect();
-            let gained_clients: Vec<Identity> =
-                list.difference(&reg_clients_list).cloned().collect();
-            // if the inactive list contains a client that has come back online, remove them
-            for client in gained_clients.iter() {
-                if inactive_list.contains_key(client) {
-                    inactive_list.remove(client);
-                }
-            }
-
-            // if the lost clients don't exist in the inactive list, add them at the current time
-            for client in lost_clients.iter() {
-                if !inactive_list.contains_key(client) {
-                    inactive_list.insert(*client, Instant::now());
-                }
-            }
-
-            (list, inactive_list)
+            list
         }
         Err(e) => {
             error!(
                 "Failed to get registered clients this this round, using last successful {:?}",
                 e
             );
-            (reg_clients_list, inactive_list)
+            reg_clients_list
         }
     }
 }

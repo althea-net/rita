@@ -4,6 +4,13 @@ use althea_types::WgKey;
 use std::str::from_utf8;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+// The maximum allowed time for a handshake to be considered active (5 days)
+pub const WG_INACTIVE_THRESHOLD: Duration = if cfg!(feature = "integration_test") {
+    Duration::new(140, 0)
+} else {
+    Duration::from_secs(432_000)
+};
+
 pub fn get_peers(iface_name: &str) -> Result<Vec<WgKey>, Error> {
     let output = run_command("wg", &["show", iface_name, "peers"])?;
 
@@ -100,42 +107,25 @@ pub fn get_wg_exit_clients_online(interface: &str) -> Result<u32, Error> {
     get_wg_exit_clients_online_internal(out)
 }
 
-/// internal helper function for get_wg_exit_clients_offline (last handshake > 10m)
-fn get_wg_exit_clients_offline_internal(out: String) -> Result<Vec<WgKey>, Error> {
-    let mut keys: Vec<WgKey> = Vec::new();
-    for line in out.lines() {
-        let content: Vec<&str> = line.split('\t').collect();
-        let mut itr = content.iter();
-        let key = itr.next().ok_or_else(|| {
-            KernelInterfaceError::RuntimeError("Option did not contain a value.".to_string())
-        })?;
-        let timestamp = itr.next().ok_or_else(|| {
-            KernelInterfaceError::RuntimeError("Option did not contain a value.".to_string())
-        })?;
+/// For all wg clients on an interface, sort them into online and offline clients based on the last handshake time.
+/// returns (online, offline) clients
+pub fn get_wg_clients_online_offline(ifname: &str) -> Result<(Vec<WgKey>, Vec<WgKey>), Error> {
+    let last_handshakes = get_last_handshake_time(ifname)?;
+    let mut online: Vec<WgKey> = Vec::new();
+    let mut offline: Vec<WgKey> = Vec::new();
+    for (key, timestamp) in last_handshakes {
         // if timestamp is 0 we have just set up the tunnel, do not include it in the list
-        if *timestamp == "0" {
+        error!("timestamp: {:?}", timestamp);
+        if timestamp == UNIX_EPOCH {
             continue;
         }
-        let d = UNIX_EPOCH + Duration::from_secs(timestamp.parse()?);
-
-        let offline_threshold = if cfg!(feature = "integration_test") {
-            Duration::new(140, 0)
+        if SystemTime::now().duration_since(timestamp)? > WG_INACTIVE_THRESHOLD {
+            offline.push(key);
         } else {
-            // 5 days
-            Duration::new(432_000, 0)
-        };
-        if SystemTime::now().duration_since(d)? > offline_threshold {
-            keys.push(key.parse()?);
+            online.push(key);
         }
     }
-    Ok(keys)
-}
-
-/// Returns the wg keys of clients that are inactive(>10m since last handshake) on the wg_exit tunnel
-pub fn get_wg_exit_clients_offline(interface: &str) -> Result<Vec<WgKey>, Error> {
-    let output = run_command("wg", &["show", interface, "latest-handshakes"])?;
-    let out = String::from_utf8(output.stdout)?;
-    get_wg_exit_clients_offline_internal(out)
+    Ok((online, offline))
 }
 
 /// Internal helper function for ci testing get_last_handshake_time

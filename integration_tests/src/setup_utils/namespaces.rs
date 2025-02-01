@@ -243,7 +243,6 @@ pub fn setup_ns(spaces: NamespaceInfo, exit_mode: &str) -> Result<(), KernelInte
         if let NodeType::Exit { .. } = name.node_type {
             let veth_native_to_exit = format!("vout-o-{}", name.get_name());
             let veth_exit_to_native = format!("vout-{}-o", name.get_name());
-            // todo if snat mode break this out
             let exit_ip = match exit_mode {
                 "snat" => "10.0.0.2/24".to_string(),
                 _ => format!(

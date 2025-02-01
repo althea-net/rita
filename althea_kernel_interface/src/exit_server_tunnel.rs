@@ -1,6 +1,6 @@
 use super::KernelInterfaceError;
 use crate::ip_addr::{add_ipv4, add_ipv4_mask, delete_ipv4};
-use crate::iptables::{add_iptables_rule, delete_iptables_matching_rules};
+use crate::iptables::add_iptables_rule;
 use crate::netfilter::{
     delete_forward_rule, delete_postrouting_rule, does_nftables_exist, init_filter_chain,
     init_nat_chain, insert_nft_exit_forward_rules,
@@ -293,43 +293,8 @@ pub fn setup_client_snat(
     client_internal_ip: Ipv4Addr,
 ) -> Result<(), Error> {
     if !does_nftables_exist() {
-        /*
-        # SNAT for outgoing traffic
-        iptables -A POSTROUTING -t nat -o $EXT_IF -s $INTERNAL_CLIENT -j SNAT --to-source $PUBLIC_CLIENT
-        # Allow forwarded traffic
-        iptables -A FORWARD -s $INTERNAL_CLIENT -j ACCEPT
-        */
-        info!("Setting up iptables SNAT rules on exit for client: {client_external_ip} to {client_internal_ip}");
-        add_iptables_rule(
-            "iptables",
-            &[
-                "-A",
-                "POSTROUTING",
-                "-t",
-                "nat",
-                "-s",
-                &format!("{client_internal_ip}"),
-                "-o",
-                external_interface,
-                "-j",
-                "SNAT",
-                "--to-source",
-                &format!("{}", client_external_ip),
-            ],
-        )?;
-        add_iptables_rule(
-            "iptables",
-            &[
-                "-A",
-                "FORWARD",
-                "-s",
-                &format!("{}", client_internal_ip),
-                "-j",
-                "ACCEPT",
-            ],
-        )?;
+        panic!("nftables does not exist on exit, cannot set up client snat routes!")
     } else {
-        // equivalent nftables rules
         /*
         # SNAT for outgoing traffic
         nft 'add rule ip nat POSTROUTING oifname $EXT_IF ip saddr $INTERNAL_CLIENT counter snat to $PUBLIC_CLIENT'
@@ -394,8 +359,7 @@ pub fn teardown_snat(
     external_interface: &str,
 ) -> Result<(), Error> {
     if !does_nftables_exist() {
-        delete_iptables_matching_rules(&client_external_ipv4.to_string())?;
-        delete_iptables_matching_rules(&client_internal_ipv4.to_string())?;
+        panic!("nftables does not exist on exit, cannot tear down client snat routes!")
     } else {
         delete_postrouting_rule(client_external_ipv4)?;
         delete_forward_rule(client_internal_ipv4)?;
