@@ -25,7 +25,7 @@ const DEFAULT_DASHBOARD_PORT: u16 = 4877;
 fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
-    openssl_probe::init_ssl_cert_env_vars();
+    openssl_probe::probe();
 
     // Connect to router and get its revevant info. Called here to get logging info
     let setting = get_initial_logging_settings();

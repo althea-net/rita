@@ -133,7 +133,7 @@ fn main() {
 
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
-    openssl_probe::init_ssl_cert_env_vars();
+    openssl_probe::probe();
 
     // we should remote log if there's an operator address or if logging is enabled
     let should_remote_log = settings.log.enabled || settings.operator.operator_address.is_some();
