@@ -19,6 +19,6 @@ lazy_static = "1.5"
 clarity = {workspace = true}
 arrayvec = {version= "0.7", features = ["serde"]}
 phonenumber = "0.3.6"
-ipnetwork = "0.20"
+ipnetwork = "0.21"
 
 [features]

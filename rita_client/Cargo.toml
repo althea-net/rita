@@ -27,7 +27,7 @@ arrayvec = { version = "0.7", features = ["serde"] }
 clu = { path = "../clu" }
 web30 = {workspace = true}
 awc = {workspace = true}
-ipnetwork = "0.20"
+ipnetwork = "0.21"
 actix = {workspace=true}
 actix-web = {workspace = true}
 actix-web-httpauth= {workspace = true}
