@@ -1,6 +1,7 @@
 use crate::interface_tools::get_interfaces;
 use crate::{run_command, KernelInterfaceError, KernelInterfaceError as Error};
 use althea_types::WgKey;
+use std::collections::HashMap;
 use std::str::from_utf8;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -10,6 +11,10 @@ pub const WG_INACTIVE_THRESHOLD: Duration = if cfg!(feature = "integration_test"
 } else {
     Duration::from_secs(432_000)
 };
+// the maximum amount of time we will wait for an active wg peer to handshake after first receiving
+// a public ip in snat mode before we consider it inactive, needed to avoid the 0 timestamp loophole
+// where a route is added before the handshake is received then gets immediately torn down
+pub const SNAT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub fn get_peers(iface_name: &str) -> Result<Vec<WgKey>, Error> {
     let output = run_command("wg", &["show", iface_name, "peers"])?;
@@ -109,17 +114,25 @@ pub fn get_wg_exit_clients_online(interface: &str) -> Result<u32, Error> {
 
 /// For all wg clients on an interface, sort them into online and offline clients based on the last handshake time.
 /// returns (online, offline) clients
-pub fn get_wg_clients_online_offline(ifname: &str) -> Result<(Vec<WgKey>, Vec<WgKey>), Error> {
+pub fn get_wg_clients_online_offline(
+    ifname: &str,
+    client_first_connections: HashMap<WgKey, SystemTime>,
+) -> Result<(Vec<WgKey>, Vec<WgKey>), Error> {
     let last_handshakes = get_last_handshake_time(ifname)?;
     let mut online: Vec<WgKey> = Vec::new();
     let mut offline: Vec<WgKey> = Vec::new();
     for (key, timestamp) in last_handshakes {
-        // if timestamp is 0 we have just set up the tunnel, do not include it in the list
-        error!("timestamp: {:?}", timestamp);
+        // if the timestamp is 0, check its client first connection time
         if timestamp == UNIX_EPOCH {
-            continue;
-        }
-        if SystemTime::now().duration_since(timestamp)? > WG_INACTIVE_THRESHOLD {
+            if let Some(first_connection) = client_first_connections.get(&key) {
+                // if our first connection is within the handshake timeout consider it online
+                if SystemTime::now().duration_since(*first_connection)? < SNAT_HANDSHAKE_TIMEOUT {
+                    online.push(key);
+                } else {
+                    offline.push(key);
+                }
+            }
+        } else if SystemTime::now().duration_since(timestamp)? > WG_INACTIVE_THRESHOLD {
             offline.push(key);
         } else {
             online.push(key);

@@ -4,7 +4,7 @@ use crate::rita_loop::RitaExitData;
 use crate::RitaExitError;
 use althea_kernel_interface::exit_server_tunnel::setup_client_snat;
 use althea_kernel_interface::ExitClient;
-use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState, Identity};
+use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState, Identity, WgKey};
 use ipnetwork::{IpNetwork, Ipv6Network};
 use rita_common::CLIENT_WG_PORT;
 use settings::exit::{ExitInternalIpv4Settings, ExitIpv4RoutingSettings, ExitIpv6RoutingSettings};
@@ -41,12 +41,13 @@ pub struct ClientListAnIpAssignmentMap {
     external_ip_assignemnts: HashMap<Ipv4Addr, HashSet<Identity>>,
     /// A set of all clients that have been registered with the exit
     registered_clients: HashSet<Identity>,
-    /// A list of clients that have been inactive past threshold todo insert name here. in SNAT mode these
+    /// A list of clients that have been inactive past WG_INACTIVE_THRESHOLD. in SNAT mode these
     /// clients have had their nftables rules removed and ip assignments cleared
     inactive_clients: HashSet<Identity>,
-    /// A map of clients and the timestamp when they first connected to wg_exit, used to determine if a client is
-    /// actually live and not camping on an ip in SNAT mode
-    client_first_connect: HashMap<Identity, SystemTime>,
+    /// A map of clients and the timestamp when they first receive an external ip. Indexed by client wg key to
+    /// make lookup faster, this is used to compare wg output to last handshake time to keep clients that connect
+    /// once and never handshake from camping on an ip
+    client_first_connect: HashMap<WgKey, SystemTime>,
 }
 
 impl ClientListAnIpAssignmentMap {
@@ -266,6 +267,8 @@ impl ClientListAnIpAssignmentMap {
                         let mut new_clients = HashSet::new();
                         new_clients.insert(their_record);
                         self.external_ip_assignemnts.insert(ip, new_clients);
+                        self.client_first_connect
+                            .insert(their_record.wg_public_key, SystemTime::now());
                         Ok(Some(ip))
                     }
                     None => {
@@ -399,6 +402,10 @@ impl ClientListAnIpAssignmentMap {
 
     pub fn set_inactive_list(&mut self, list: HashSet<Identity>) {
         self.inactive_clients = list;
+    }
+
+    pub fn get_client_first_connect_list(&self) -> HashMap<WgKey, SystemTime> {
+        self.client_first_connect.clone()
     }
 }
 
@@ -634,6 +641,10 @@ mod tests {
 
         for assignment in data.get_external_ip_assignments() {
             assert_eq!(assignment.1.len(), 1);
+            // make sure we can't receive the gateway, exit external or broadcast ips
+            assert_ne!(assignment.0, &Ipv4Addr::new(172, 168, 1, 1));
+            assert_ne!(assignment.0, &Ipv4Addr::new(172, 168, 1, 2));
+            assert_ne!(assignment.0, &Ipv4Addr::new(172, 168, 1, 255));
         }
 
         // Ensure that assignments fail once the subnet is exhausted

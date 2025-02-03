@@ -81,7 +81,7 @@ pub async fn run_multi_exit_test() {
     register_all_namespaces_to_exit(namespaces.clone()).await;
 
     thread::sleep(Duration::from_secs(10));
-
+    info!("Testing internet connectivity");
     test_all_internet_connectivity(namespaces.clone());
 
     info!("All clients successfully registered!");

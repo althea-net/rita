@@ -50,10 +50,6 @@ pub mod ipddr_assignment;
 /// one day in seconds
 pub const ONE_DAY: i64 = 86400;
 
-/// the time after which client tunnels will be torn down for inactivity in SNAT mdoe
-/// (5 days in seconds)
-pub const INACTIVE_CLIENT_THRESHOLD: u64 = 432000;
-
 /// Timeout when requesting client registration
 pub const CLIENT_REGISTER_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -383,7 +379,9 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
 
     // if we are in SNAT mode we must setup snat for any new registered clients that are online
     if let ExitIpv4RoutingSettings::SNAT { .. } = client_data.get_ipv4_nat_mode() {
-        let (online_clients, offline_clients) = get_wg_clients_online_offline("wg_exit").unwrap();
+        let clients_first_connection = client_data.get_client_first_connect_list();
+        let (online_clients, offline_clients) =
+            get_wg_clients_online_offline("wg_exit", clients_first_connection).unwrap();
         let external_assignments = client_data.get_external_ipv4_assignments();
         // if online clients are not in the external assignments, we need to assign them an ip and setup forwarding
         let mut clients_needing_setup: HashSet<Identity> = HashSet::new();
@@ -567,7 +565,6 @@ pub fn enforce_exit_clients(client_data: &mut RitaExitData) -> Result<(), Box<Ri
 }
 
 /// Removes client ip assignments for clients that are deemed inactive
-/// todo this must include removal in external ip assignments list
 pub fn teardown_inactive_clients(client_data: &mut RitaExitData) {
     let inactive_list = client_data.get_inactive_list();
     // check for snat mode
@@ -580,14 +577,24 @@ pub fn teardown_inactive_clients(client_data: &mut RitaExitData) {
     let ext_assignments = client_data.get_external_ipv4_assignments();
     let int_assignments = client_data.get_internal_ip_assignments();
     for client in inactive_list.iter() {
-        try_teardown_client_snat(
+        let res = try_teardown_client_snat(
             ext_assignments.clone(),
             int_assignments.clone(),
             *client,
             ext_nic,
         );
-        client_data.remove_client_external_ip(*client);
-    };
+        match res {
+            Ok(_) => {
+                client_data.remove_client_external_ip(*client);
+            }
+            Err(e) => {
+                error!(
+                    "Failed to teardown snat for client {} with error {:?}",
+                    client, e
+                );
+            }
+        }
+    }
 }
 
 fn try_teardown_client_snat(
@@ -595,8 +602,8 @@ fn try_teardown_client_snat(
     int_assignments: HashMap<Ipv4Addr, Identity>,
     client: Identity,
     ext_nic: &str,
-) {
-    // get this client's assigned external ip
+) -> Result<(), RitaExitError> {
+    // get this client's assigned external and internal ips
     let external_ip: Vec<Ipv4Addr> = ext_assignments
         .iter()
         .filter(|(_k, v)| v.contains(&client))
@@ -607,29 +614,25 @@ fn try_teardown_client_snat(
         .filter(|(_k, v)| **v == client)
         .map(|(&k, _v)| k)
         .collect();
-    match (external_ip.len().cmp(&1), internal_ip.len().cmp(&1)) {
-        (std::cmp::Ordering::Greater, _) | (_, std::cmp::Ordering::Greater) => {
-            error!(
-            "Client {} has more than one internal or external ip assigned, this should not happen?",
-            client
-        );
-        }
-        (std::cmp::Ordering::Equal, std::cmp::Ordering::Equal) => {
-            let external_ip = external_ip.first().unwrap();
-            let internal_ip = internal_ip.first().unwrap();
-            // remove the iptables rules for this client
-            if let Err(e) = teardown_snat(*external_ip, *internal_ip, ext_nic) {
+    // since ips assignments are stored in hashsets for cgnat compatibility, we need to grab first in snat mode
+    match (external_ip.first(), internal_ip.first()) {
+        (Some(ext), Some(int)) => {
+            info!("Tearing down snat for client {}", client);
+            // remove the snat rules for this client
+            if let Err(e) = teardown_snat(*ext, *int, ext_nic) {
                 error!(
-                    "Failed to delete iptables rules for client {} with error {:?}",
+                    "Failed to delete snat rules for client {} with error {:?}",
                     client, e
                 );
+                Err(RitaExitError::MiscStringError(
+                    "Failed to delete snat rules".to_string(),
+                ))
+            } else {
+                Ok(())
             }
         }
-        (std::cmp::Ordering::Less, _) | (_, std::cmp::Ordering::Less) => {
-            error!(
-                "Client due for teardown {} has no external or internal ip assigned?",
-                client
-            );
-        }
+        _ => Err(RitaExitError::MiscStringError(
+            "Failed to find external or internal ip to teardown".to_string(),
+        )),
     }
 }

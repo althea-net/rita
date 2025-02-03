@@ -11,8 +11,7 @@
 //! wakes up to restart the inner thread if anything goes wrong.
 
 use crate::database::{
-    enforce_exit_clients, setup_clients, validate_clients_region,
-    ExitClientSetupStates,
+    enforce_exit_clients, setup_clients, validate_clients_region, ExitClientSetupStates,
 };
 use crate::traffic_watcher::watch_exit_traffic;
 use crate::{network_endpoints::*, ClientListAnIpAssignmentMap, RitaExitError};
@@ -36,8 +35,8 @@ use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::Duration;
 use std::time::Instant;
+use std::time::{Duration, SystemTime};
 
 // the speed in seconds for the exit loop
 pub const EXIT_LOOP_SPEED: u64 = 5;
@@ -213,6 +212,13 @@ impl RitaExitData {
             .get_external_ip_assignments()
             .clone()
     }
+
+    pub fn get_client_first_connect_list(&self) -> HashMap<WgKey, SystemTime> {
+        self.client_list_and_ip_assignments
+            .read()
+            .unwrap()
+            .get_client_first_connect_list()
+    }
 }
 
 /// Starts the rita exit billing thread, this thread deals with blocking db
@@ -227,9 +233,8 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
     loop {
         let start = Instant::now();
 
-        let reg_clients_list = update_client_list(
-            rita_exit_cache.get_all_registered_clients())
-        .await;
+        let reg_clients_list =
+            update_client_list(rita_exit_cache.get_all_registered_clients()).await;
         // Internal exit cache that store state across multiple ticks
         rita_exit_cache.set_registered_clients(reg_clients_list);
 
@@ -302,9 +307,7 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
 }
 
 /// Updates the client list, if this is not successful the old client list is used
-async fn update_client_list(
-    reg_clients_list: HashSet<Identity>,
-) -> HashSet<Identity> {
+async fn update_client_list(reg_clients_list: HashSet<Identity>) -> HashSet<Identity> {
     let payment_settings = settings::get_rita_common().payment;
     let contract_address = settings::get_rita_exit()
         .exit_network
