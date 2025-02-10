@@ -14,7 +14,7 @@ serde_derive = "1.0"
 serde = "1.0"
 althea_types = { path = "../althea_types" }
 ipnetwork = "0.20"
-mac_address = "1.1.7"
+mac_address = "1.1.8"
 
 [dependencies.regex]
 version = "1.11"
