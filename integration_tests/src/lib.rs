@@ -14,6 +14,7 @@ pub mod payments_althea;
 pub mod payments_eth;
 pub mod setup_utils;
 pub mod snat_exit;
+pub mod cgnat_exit;
 pub mod utils;
 
 /// The amount of time we wait for a network to stabalize before testing

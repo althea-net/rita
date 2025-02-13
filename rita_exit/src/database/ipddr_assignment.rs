@@ -149,6 +149,9 @@ impl ClientListAnIpAssignmentMap {
             ExitIpv4RoutingSettings::CGNAT {
                 subnet,
                 static_assignments,
+                gateway_ipv4,
+                external_ipv4,
+                broadcast_ipv4,
             } => {
                 // check static assignmetns first
                 for id in static_assignments {
@@ -545,6 +548,9 @@ mod tests {
         let ipv4_settings = ExitIpv4RoutingSettings::CGNAT {
             subnet: get_ipv4_external_test_subnet(),
             static_assignments,
+            gateway_ipv4: Ipv4Addr::new(172, 168, 1, 1),
+            external_ipv4: Ipv4Addr::new(172, 168, 1, 2),
+            broadcast_ipv4: Ipv4Addr::new(172, 168, 1, 255),
         };
         ipv4_settings.validate().unwrap();
         let internal_ipv4_settings = ExitInternalIpv4Settings {

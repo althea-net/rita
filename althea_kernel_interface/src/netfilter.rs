@@ -91,6 +91,33 @@ fn create_nat_table() -> Result<(), KernelInterfaceError> {
     Ok(())
 }
 
+pub fn add_prerouting_chain() -> Result<(), KernelInterfaceError> {
+    run_command(
+        "nft",
+        &[
+            "create",
+            "chain",
+            "ip",
+            "nat",
+            "prerouting",
+            "{",
+            "type",
+            "nat",
+            "hook",
+            "prerouting",
+            "priority",
+            "100",
+            ";",
+            "policy",
+            "accept",
+            ";",
+            "}",
+        ],
+    )?;
+
+    Ok(())
+}
+
 fn create_filter_table() -> Result<(), KernelInterfaceError> {
     // create the table
     run_command("nft", &["create", "table", "ip", "filter"])?;

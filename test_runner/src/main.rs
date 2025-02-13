@@ -1,3 +1,4 @@
+use integration_tests::cgnat_exit::run_cgnat_exit_test_scenario;
 use integration_tests::contract_test::run_altheadb_contract_test;
 use integration_tests::debts::run_debts_test;
 /// Binary crate for actually running the integration tests
@@ -52,6 +53,8 @@ async fn main() {
             run_altheadb_contract_test().await
         } else if test_type == "SNAT_EXIT" {
             run_snat_exit_test_scenario().await
+        } else if test_type == "CGNAT_EXIT" {
+            run_cgnat_exit_test_scenario().await
         } else {
             panic!("Error unknown test type {}!", test_type);
         }

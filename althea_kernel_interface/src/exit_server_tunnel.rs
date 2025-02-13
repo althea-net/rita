@@ -2,15 +2,15 @@ use super::KernelInterfaceError;
 use crate::ip_addr::{add_ipv4, add_ipv4_mask, delete_ipv4};
 use crate::iptables::add_iptables_rule;
 use crate::netfilter::{
-    delete_forward_rule, delete_postrouting_rule, does_nftables_exist, init_filter_chain,
-    init_nat_chain, insert_nft_exit_forward_rules,
+    add_prerouting_chain, delete_forward_rule, delete_postrouting_rule, does_nftables_exist,
+    init_filter_chain, init_nat_chain, insert_nft_exit_forward_rules,
 };
 use crate::open_tunnel::to_wg_local;
 use crate::run_command;
 use crate::setup_wg_if::get_peers;
 use crate::traffic_control::{create_root_classful_limit, has_limit};
 use althea_types::WgKey;
-use ipnetwork::IpNetwork;
+use ipnetwork::{IpNetwork, Ipv4Network};
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
 use KernelInterfaceError as Error;
@@ -365,6 +365,71 @@ pub fn teardown_snat(
         delete_forward_rule(client_internal_ipv4)?;
     }
     delete_ipv4(client_external_ipv4, external_interface)?;
+    Ok(())
+}
+
+/// Sets up the CGNAT rules for the exit server run on startup
+pub fn setup_cgnat(
+    exit_ip: Ipv4Addr,
+    mask: u32,
+    ex_nic: &str,
+    possible_ips: Vec<Ipv4Addr>,
+    exit_subnet: Ipv4Network,
+    internal_subnet: Ipv4Network,
+) -> Result<(), Error> {
+    init_filter_chain()?;
+    let _ = add_ipv4_mask(exit_ip, mask, ex_nic);
+    add_prerouting_chain()?;
+    // get the ip range from first and last in possible ips
+    let ip_range = format!(
+        "{}-{}",
+        possible_ips.first().unwrap(),
+        possible_ips.last().unwrap()
+    );
+    /*
+    nft add rule ip nat POSTROUTING oifname $EXT_IF ip saddr $EXIT_SUBNET counter snat to $EXT_RANGE
+    */
+    run_command(
+        "nft",
+        &[
+            "add",
+            "rule",
+            "ip",
+            "nat",
+            "postrouting",
+            "oifname",
+            ex_nic,
+            "ip",
+            "saddr",
+            &format!("{}", internal_subnet),
+            "counter",
+            "snat",
+            "to",
+            ip_range.as_str(),
+        ],
+    )?;
+    // nft add rule ip nat prerouting ip daddr 10.0.0.0/24 dnat to 10.0.0.2
+    run_command(
+        "nft",
+        &[
+            "add",
+            "rule",
+            "ip",
+            "nat",
+            "prerouting",
+            "ip",
+            "daddr",
+            &format!("{}", exit_subnet),
+            "counter",
+            "dnat",
+            "to",
+            &format!("{}", exit_ip),
+        ],
+    )?;
+    // for each ip in the possible ips range, add it to the external interface
+    for ip in possible_ips {
+        add_ipv4(ip, ex_nic)?;
+    }
     Ok(())
 }
 

@@ -48,6 +48,9 @@ pub enum ExitIpv4RoutingSettings {
     CGNAT {
         subnet: Ipv4Network,
         static_assignments: Vec<ClientIpv4StaticAssignment>,
+        gateway_ipv4: Ipv4Addr,
+        external_ipv4: Ipv4Addr,
+        broadcast_ipv4: Ipv4Addr,
     },
     /// A provided subnet of ipv4 addresses is assigned one by one to clients as they connect. With an optional
     /// list of static assignments for clients that will always be assigned the same IP. Use this option with caution
@@ -73,6 +76,7 @@ impl ExitIpv4RoutingSettings {
             ExitIpv4RoutingSettings::CGNAT {
                 subnet,
                 static_assignments,
+                ..
             } => {
                 for assignment in static_assignments {
                     if !subnet.contains(assignment.client_external_ip) {

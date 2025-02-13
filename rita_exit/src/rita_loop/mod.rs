@@ -17,7 +17,9 @@ use crate::traffic_watcher::watch_exit_traffic;
 use crate::{network_endpoints::*, ClientListAnIpAssignmentMap, RitaExitError};
 use actix::System as AsyncSystem;
 use actix_web::{web, App, HttpServer};
-use althea_kernel_interface::exit_server_tunnel::{one_time_exit_setup, setup_nat, setup_snat};
+use althea_kernel_interface::exit_server_tunnel::{
+    one_time_exit_setup, setup_cgnat, setup_nat, setup_snat,
+};
 use althea_kernel_interface::netfilter::masquerade_nat_setup;
 use althea_kernel_interface::setup_wg_if::create_blank_wg_interface;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
@@ -27,7 +29,7 @@ use althea_types::{Identity, SignedExitServerList, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
 use clarity::Address;
 use exit_trust_root::client_db::get_all_registered_clients;
-use ipnetwork::Ipv6Network;
+use ipnetwork::{Ipv4Network, Ipv6Network};
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
 use settings::exit::{ExitIpv4RoutingSettings, EXIT_LIST_PORT};
@@ -468,12 +470,48 @@ fn setup_exit_wg_tunnel() {
             masquerade_nat_setup(&settings::get_rita_exit().network.external_nic.unwrap()).unwrap();
         }
         ExitIpv4RoutingSettings::CGNAT {
-            subnet: _,
-            static_assignments: _,
+            subnet,
+            external_ipv4,
+            static_assignments,
+            gateway_ipv4,
+            broadcast_ipv4,
         } => {
-            //todo
+            // collect the client external ips of static assignments vec
+            let mut static_ips: Vec<Ipv4Addr> = static_assignments
+                .iter()
+                .map(|x| x.client_external_ip)
+                .collect();
+            // todo these should probably just roll into the initial static assignments list...
+            static_ips.push(external_ipv4);
+            static_ips.push(gateway_ipv4);
+            static_ips.push(broadcast_ipv4);
+            let possible_ips = get_possible_ips(static_ips, subnet);
+            
+            // for cgnat mode we must claim the second ip in the subnet as the exit ip
+            setup_cgnat(
+                external_ipv4,
+                subnet.prefix().into(),
+                &settings::get_rita_exit().network.external_nic.unwrap(),
+                possible_ips,
+                subnet,
+                exit_settings.exit_network.internal_ipv4.internal_subnet,
+            )
+            .unwrap();
         }
     }
+}
+
+// gets the range of possible ips for a given subnet
+pub fn get_possible_ips(static_assignments: Vec<Ipv4Addr>, subnet: Ipv4Network) -> Vec<Ipv4Addr> {
+    // if we don't have a static assignment, we need to find an open ip and assign it
+    let mut possible_ips: Vec<Ipv4Addr> = subnet.into_iter().collect();
+    possible_ips.remove(0); // we don't want to assign the first ip in the subnet as it's the subnet default .0
+    // remove any ips listed in static assignments
+    for ip in static_assignments {
+        possible_ips.retain(|&x| x != ip);
+    }
+    info!("Possible ip range is {:?} to {:?}", possible_ips.first().unwrap(), possible_ips.last().unwrap());
+    possible_ips
 }
 
 /// Starts the rita exit endpoints, passing the ip assignments and registered clients lists, these are shared via cross-thread lock
