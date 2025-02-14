@@ -286,7 +286,6 @@ pub struct CurrentExitClientState {
 /// into a single very long wg tunnel setup command which is then applied to the
 /// wg_exit tunnel (or created if it's the first run). This is the offically supported
 /// way to update live WireGuard tunnels and should not disrupt traffic
-/// TODO: notes for teardown of geoip blacklisted clients- is that already happening?
 pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitError>> {
     info!("Starting exit setup loop");
     let start = Instant::now();
@@ -398,7 +397,7 @@ pub fn setup_clients(client_data: &mut RitaExitData) -> Result<(), Box<RitaExitE
             };
             if !external_assignments
                 .values()
-                .any(|v| v.contains(registered_client_id))
+                .any(|v| v == registered_client_id)
             {
                 clients_needing_setup.insert(*registered_client_id);
             }
@@ -598,7 +597,7 @@ pub fn teardown_inactive_clients(client_data: &mut RitaExitData) {
 }
 
 fn try_teardown_client_snat(
-    ext_assignments: HashMap<Ipv4Addr, HashSet<Identity>>,
+    ext_assignments: HashMap<Ipv4Addr, Identity>,
     int_assignments: HashMap<Ipv4Addr, Identity>,
     client: Identity,
     ext_nic: &str,
@@ -606,7 +605,7 @@ fn try_teardown_client_snat(
     // get this client's assigned external and internal ips
     let external_ip: Vec<Ipv4Addr> = ext_assignments
         .iter()
-        .filter(|(_k, v)| v.contains(&client))
+        .filter(|(_k, v)| *v == &client)
         .map(|(&k, _v)| k)
         .collect();
     let internal_ip: Vec<Ipv4Addr> = int_assignments

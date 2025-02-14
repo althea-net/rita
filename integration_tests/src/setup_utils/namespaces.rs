@@ -245,7 +245,7 @@ pub fn setup_ns(spaces: NamespaceInfo, exit_mode: &str) -> Result<(), KernelInte
             let veth_exit_to_native = format!("vout-{}-o", name.get_name());
             let exit_ip = match exit_mode {
                 "snat" => "10.0.0.2/24".to_string(),
-                "cgnat" => "10.0.0.2/24".to_string(),
+                "cgnat" => "10.0.0.2/29".to_string(),
                 _ => format!(
                     "10.0.{}.{}/24",
                     name.id.to_be_bytes()[0],

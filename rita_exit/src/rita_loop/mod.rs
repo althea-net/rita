@@ -207,7 +207,7 @@ impl RitaExitData {
             .set_inactive_list(inactive_list);
     }
 
-    pub fn get_external_ipv4_assignments(&self) -> HashMap<Ipv4Addr, HashSet<Identity>> {
+    pub fn get_external_ipv4_assignments(&self) -> HashMap<Ipv4Addr, Identity> {
         self.client_list_and_ip_assignments
             .read()
             .unwrap()
@@ -481,19 +481,16 @@ fn setup_exit_wg_tunnel() {
                 .iter()
                 .map(|x| x.client_external_ip)
                 .collect();
-            // todo these should probably just roll into the initial static assignments list...
             static_ips.push(external_ipv4);
             static_ips.push(gateway_ipv4);
             static_ips.push(broadcast_ipv4);
-            let possible_ips = get_possible_ips(static_ips, subnet);
-            
-            // for cgnat mode we must claim the second ip in the subnet as the exit ip
+            let possible_ips = get_possible_cgnat_ips(static_ips, subnet);
+
             setup_cgnat(
                 external_ipv4,
                 subnet.prefix().into(),
                 &settings::get_rita_exit().network.external_nic.unwrap(),
                 possible_ips,
-                subnet,
                 exit_settings.exit_network.internal_ipv4.internal_subnet,
             )
             .unwrap();
@@ -501,16 +498,23 @@ fn setup_exit_wg_tunnel() {
     }
 }
 
-// gets the range of possible ips for a given subnet
-pub fn get_possible_ips(static_assignments: Vec<Ipv4Addr>, subnet: Ipv4Network) -> Vec<Ipv4Addr> {
-    // if we don't have a static assignment, we need to find an open ip and assign it
+// gets the range of possible ips for a given subnet. by convention the static assignments in cgnat mode should be
+// on the ends of the assignable range to make random assignment less complex.
+pub fn get_possible_cgnat_ips(
+    static_assignments: Vec<Ipv4Addr>,
+    subnet: Ipv4Network,
+) -> Vec<Ipv4Addr> {
     let mut possible_ips: Vec<Ipv4Addr> = subnet.into_iter().collect();
     possible_ips.remove(0); // we don't want to assign the first ip in the subnet as it's the subnet default .0
     // remove any ips listed in static assignments
     for ip in static_assignments {
         possible_ips.retain(|&x| x != ip);
     }
-    info!("Possible ip range is {:?} to {:?}", possible_ips.first().unwrap(), possible_ips.last().unwrap());
+    info!(
+        "Possible ip range is {:?} to {:?}",
+        possible_ips.first().unwrap(),
+        possible_ips.last().unwrap()
+    );
     possible_ips
 }
 

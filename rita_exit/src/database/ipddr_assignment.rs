@@ -36,9 +36,10 @@ pub struct ClientListAnIpAssignmentMap {
     /// A map of ipv4 addresses assigned to clients, these are used internally for the wg_exit tunnel
     /// and never external, the external ip is determined by the exit's nat settings
     internal_ip_assignments: DualMap<Ipv4Addr, Identity>,
-    /// The external ip for a specific client or set of clients depending on the ipv4 nat mode. Under CGNAT
-    /// each ip will have multiple fixed clients, under SNAT each ip will have one client
-    external_ip_assignemnts: HashMap<Ipv4Addr, HashSet<Identity>>,
+    /// The external ip for a specific client or set of clients depending on the ipv4 nat mode. under SNAT
+    /// each ip will have one client, under CGNAT multiple clients may share an ip but are not explicitly
+    /// assigned to any one.
+    external_ip_assignemnts: HashMap<Ipv4Addr, Identity>,
     /// A set of all clients that have been registered with the exit
     registered_clients: HashSet<Identity>,
     /// A list of clients that have been inactive past WG_INACTIVE_THRESHOLD. in SNAT mode these
@@ -70,7 +71,7 @@ impl ClientListAnIpAssignmentMap {
         }
     }
 
-    pub fn get_external_ip_assignments(&self) -> &HashMap<Ipv4Addr, HashSet<Identity>> {
+    pub fn get_external_ip_assignments(&self) -> &HashMap<Ipv4Addr, Identity> {
         &self.external_ip_assignemnts
     }
 
@@ -147,83 +148,18 @@ impl ClientListAnIpAssignmentMap {
                 Ok(None)
             }
             ExitIpv4RoutingSettings::CGNAT {
-                subnet,
-                static_assignments,
-                gateway_ipv4,
-                external_ipv4,
-                broadcast_ipv4,
+                static_assignments, ..
             } => {
-                // check static assignmetns first
+                // only static assignments have a fixed external ip
                 for id in static_assignments {
                     if their_record == id.client_id {
-                        // make sure we have assigned this clients external ip. in CGNAT mode static clients just get
-                        // the same ip every time, they don't get that ip exclusively assigned to them, so adding to this
-                        // list is mostly a way to load balance the clients across the available ips including any static assignments
-                        // in that count.
-                        match self.external_ip_assignemnts.get_mut(&id.client_external_ip) {
-                            Some(clients) => {
-                                clients.insert(their_record);
-                            }
-                            None => {
-                                let mut new_clients = HashSet::new();
-                                new_clients.insert(their_record);
-                                self.external_ip_assignemnts
-                                    .insert(id.client_external_ip, new_clients);
-                            }
-                        }
-
+                        // in CGNAT mode static clients are assigned an external ip at random from the available ips
+                        // in the exit's external subnet, so only those with explicit static assignments will have a
+                        // fixed ip returned here
                         return Ok(Some(id.client_external_ip));
                     }
                 }
-
-                // check for already assigned ips
-                for (ip, clients) in self.external_ip_assignemnts.iter() {
-                    if clients.contains(&their_record) {
-                        return Ok(Some(*ip));
-                    }
-                }
-
-                // if we don't have a static assignment, we need to assign an ip, we should pick the ip with the fewest clients
-                // note this code is designed for relatively small subnets, but since public ipv4 are so valuable it's improbable
-                // anyone with a /8 is going to show up and use this.
-                let mut possible_ips: Vec<Ipv4Addr> = subnet.into_iter().collect();
-                // we don't want to assign the first ip in the subnet as it's the gateway
-                possible_ips.remove(0);
-                possible_ips.pop(); // we don't want to assign the last ip in the subnet as it's the broadcast address
-
-                let mut target_ip = None;
-                let mut last_num_assigned = usize::MAX;
-                for ip in possible_ips {
-                    match self.external_ip_assignemnts.get(&ip) {
-                        Some(clients) => {
-                            if clients.len() < last_num_assigned {
-                                target_ip = Some(ip);
-                                last_num_assigned = clients.len();
-                            }
-                        }
-                        None => {
-                            target_ip = Some(ip);
-                            // may as well break here, it's impossible to do better than an ip unused
-                            // by any other clients
-                            break;
-                        }
-                    }
-                }
-
-                // finally we add the newly assigned ip to the list of clients
-                let target_ip = target_ip.unwrap();
-                match self.external_ip_assignemnts.get_mut(&target_ip) {
-                    Some(clients) => {
-                        clients.insert(their_record);
-                    }
-                    None => {
-                        let mut new_clients = HashSet::new();
-                        new_clients.insert(their_record);
-                        self.external_ip_assignemnts.insert(target_ip, new_clients);
-                    }
-                }
-
-                Ok(Some(target_ip))
+                Ok(None)
             }
             ExitIpv4RoutingSettings::SNAT {
                 subnet,
@@ -236,15 +172,13 @@ impl ClientListAnIpAssignmentMap {
                 // so we need to make sure the static ip assignments are handled first by building the full list
                 for id in static_assignments {
                     // duplicate static assignments are a configuration error
-                    let mut new_clients = HashSet::new();
-                    new_clients.insert(id.client_id);
                     self.external_ip_assignemnts
-                        .insert(id.client_external_ip, new_clients);
+                        .insert(id.client_external_ip, id.client_id);
                 }
 
                 // check for already assigned ips
-                for (ip, clients) in self.external_ip_assignemnts.iter() {
-                    if clients.contains(&their_record) {
+                for (ip, client) in self.external_ip_assignemnts.iter() {
+                    if client == &their_record {
                         return Ok(Some(*ip));
                     }
                 }
@@ -266,10 +200,7 @@ impl ClientListAnIpAssignmentMap {
 
                 match target_ip {
                     Some(ip) => {
-                        // since this is SNAT we never have to deal with multiple clients on the same ip
-                        let mut new_clients = HashSet::new();
-                        new_clients.insert(their_record);
-                        self.external_ip_assignemnts.insert(ip, new_clients);
+                        self.external_ip_assignemnts.insert(ip, their_record);
                         self.client_first_connect
                             .insert(their_record.wg_public_key, SystemTime::now());
                         Ok(Some(ip))
@@ -289,7 +220,7 @@ impl ClientListAnIpAssignmentMap {
         match self
             .external_ip_assignemnts
             .iter()
-            .find(|(_, clients)| clients.contains(&id))
+            .find(|(_, client)| *client == &id)
             .map(|(ip, _)| *ip)
         {
             Some(ip) => {
@@ -466,11 +397,7 @@ mod tests {
         ClientIpv4StaticAssignment, ClientIpv6StaticAssignment, ExitInternalIpv4Settings,
         ExitIpv4RoutingSettings, ExitIpv6RoutingSettings,
     };
-    use std::{
-        collections::{HashMap, HashSet},
-        net::Ipv4Addr,
-        vec,
-    };
+    use std::{collections::HashSet, net::Ipv4Addr};
 
     pub fn get_ipv4_internal_test_subnet() -> Ipv4Network {
         "10.0.0.0/8".parse().unwrap()
@@ -585,7 +512,7 @@ mod tests {
     fn test_cgnat_external_ip_assignment() {
         let static_assignments = vec![ClientIpv4StaticAssignment {
             client_id: random_identity(),
-            client_external_ip: "172.168.1.12".parse().unwrap(),
+            client_external_ip: "172.168.1.254".parse().unwrap(),
         }];
         let mut data = get_test_config_cgnat(static_assignments.clone());
 
@@ -599,20 +526,14 @@ mod tests {
             clients.push(random_identity());
         }
 
-        let mut assigned_ip_count = HashMap::new();
-
-        // assign everyone an ip, make sure static assignments are respected
+        // make sure static assignments are respected
         for client in clients {
-            let ip = data.get_or_add_client_external_ip(client).unwrap().unwrap();
+            let ip = data.get_or_add_client_external_ip(client).unwrap();
             for assignment in static_assignments.iter() {
                 if assignment.client_id == client {
-                    assert_eq!(ip, assignment.client_external_ip);
+                    assert_eq!(ip.unwrap(), assignment.client_external_ip);
                 }
             }
-            assigned_ip_count
-                .entry(ip)
-                .and_modify(|e| *e += 1)
-                .or_insert(1);
         }
     }
 
@@ -646,7 +567,6 @@ mod tests {
         }
 
         for assignment in data.get_external_ip_assignments() {
-            assert_eq!(assignment.1.len(), 1);
             // make sure we can't receive the gateway, exit external or broadcast ips
             assert_ne!(assignment.0, &Ipv4Addr::new(172, 168, 1, 1));
             assert_ne!(assignment.0, &Ipv4Addr::new(172, 168, 1, 2));

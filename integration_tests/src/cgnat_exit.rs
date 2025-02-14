@@ -1,4 +1,3 @@
-use althea_kernel_interface::run_command;
 use ipnetwork::Ipv4Network;
 use settings::exit::ExitIpv4RoutingSettings;
 
@@ -10,9 +9,7 @@ use crate::utils::{
     register_all_namespaces_to_exit, test_all_internet_connectivity, test_reach_all, test_routes,
 };
 use std::net::Ipv4Addr;
-use std::str::{from_utf8, FromStr};
-use std::thread;
-use std::time::Duration;
+use std::str::FromStr;
 
 /// Runs a five node fixed network map test scenario, this does basic network setup and tests reachability to
 /// all destinations

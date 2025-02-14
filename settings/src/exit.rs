@@ -76,7 +76,9 @@ impl ExitIpv4RoutingSettings {
             ExitIpv4RoutingSettings::CGNAT {
                 subnet,
                 static_assignments,
-                ..
+                gateway_ipv4,
+                external_ipv4,
+                broadcast_ipv4,
             } => {
                 for assignment in static_assignments {
                     if !subnet.contains(assignment.client_external_ip) {
@@ -89,6 +91,39 @@ impl ExitIpv4RoutingSettings {
                     return Err(SettingsError::InvalidIpv4Configuration(
                         "Not enough addresses in subnet for static assignments".to_string(),
                     ));
+                }
+                // also check that all static assignments are at the end of the subnet
+                let mut all_ips: Vec<Ipv4Addr> = subnet.iter().collect();
+                // remove the first ip
+                all_ips.remove(0);
+                // the next 2 ips should be the gateway or external ips
+                for _i in 0..=1 {
+                    if all_ips[0] == *gateway_ipv4 || all_ips[0] == *external_ipv4 {
+                        all_ips.remove(0);
+                    } else {
+                        return Err(SettingsError::InvalidIpv4Configuration(
+                            "Second ip in subnet is not the gateway or external".to_string(),
+                        ));
+                    }
+                }
+                // the last ip should be the broadcast
+                if all_ips.pop().unwrap() != *broadcast_ipv4 {
+                    return Err(SettingsError::InvalidIpv4Configuration(
+                        "Last ip in subnet is not the broadcast".to_string(),
+                    ));
+                }
+                // get just the ips of static assignments
+                let static_assignments_ips: Vec<Ipv4Addr> = static_assignments
+                    .iter()
+                    .map(|x| x.client_external_ip)
+                    .collect();
+                // for however many static assignments, check that they are only assigned at the end of subnet
+                for _i in 0..static_assignments_ips.len() {
+                    if !static_assignments_ips.contains(&all_ips.pop().unwrap()) {
+                        return Err(SettingsError::InvalidIpv4Configuration(
+                            "Static assignment not at the end of subnet".to_string(),
+                        ));
+                    }
                 }
 
                 Ok(())

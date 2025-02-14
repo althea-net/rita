@@ -2,8 +2,8 @@ use super::KernelInterfaceError;
 use crate::ip_addr::{add_ipv4, add_ipv4_mask, delete_ipv4};
 use crate::iptables::add_iptables_rule;
 use crate::netfilter::{
-    add_prerouting_chain, delete_forward_rule, delete_postrouting_rule, does_nftables_exist,
-    init_filter_chain, init_nat_chain, insert_nft_exit_forward_rules,
+    delete_forward_rule, delete_postrouting_rule, does_nftables_exist, init_filter_chain,
+    init_nat_chain, insert_nft_exit_forward_rules,
 };
 use crate::open_tunnel::to_wg_local;
 use crate::run_command;
@@ -368,18 +368,17 @@ pub fn teardown_snat(
     Ok(())
 }
 
-/// Sets up the CGNAT rules for the exit server run on startup
+/// Sets up the CGNAT rules for the exit server run on startup. The actual internal <-> external ip 
+/// allocation is done by the kernel at random, and clients may be assigned any ip in the given range.
 pub fn setup_cgnat(
     exit_ip: Ipv4Addr,
     mask: u32,
     ex_nic: &str,
     possible_ips: Vec<Ipv4Addr>,
-    exit_subnet: Ipv4Network,
     internal_subnet: Ipv4Network,
 ) -> Result<(), Error> {
     init_filter_chain()?;
     let _ = add_ipv4_mask(exit_ip, mask, ex_nic);
-    add_prerouting_chain()?;
     // get the ip range from first and last in possible ips
     let ip_range = format!(
         "{}-{}",
@@ -406,24 +405,6 @@ pub fn setup_cgnat(
             "snat",
             "to",
             ip_range.as_str(),
-        ],
-    )?;
-    // nft add rule ip nat prerouting ip daddr 10.0.0.0/24 dnat to 10.0.0.2
-    run_command(
-        "nft",
-        &[
-            "add",
-            "rule",
-            "ip",
-            "nat",
-            "prerouting",
-            "ip",
-            "daddr",
-            &format!("{}", exit_subnet),
-            "counter",
-            "dnat",
-            "to",
-            &format!("{}", exit_ip),
         ],
     )?;
     // for each ip in the possible ips range, add it to the external interface
