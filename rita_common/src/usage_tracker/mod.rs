@@ -88,20 +88,11 @@ pub struct FormattedPaymentTx {
 }
 
 fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
-    if let Some(txid) = input.txid {
-        FormattedPaymentTx {
-            to: input.to,
-            from: input.from,
-            amount: input.amount,
-            txid: format!("{txid:#066x}"),
-        }
-    } else {
-        FormattedPaymentTx {
-            to: input.to,
-            from: input.from,
-            amount: input.amount,
-            txid: String::new(),
-        }
+    FormattedPaymentTx {
+        to: input.to,
+        from: input.from,
+        amount: input.amount,
+        txid: format!("{:#066x}", input.txid),
     }
 }
 
@@ -485,15 +476,7 @@ fn trim_payments(size: usize, history: &mut VecDeque<PaymentHour>) {
 pub fn update_payments(payment: PaymentTx) {
     let history = &mut (USAGE_TRACKER.write().unwrap());
 
-    // make sure the tx has a txid, transactions without one have not been sent yet and this store
-    // should only contain sent transactions
-    let txid = match payment.txid.clone() {
-        Some(txid) => txid,
-        None => {
-            error!("Tried to store payment without txid?");
-            return;
-        }
-    };
+    let txid = payment.txid.clone();
 
     // This handles the following edge case:
     // Router A is paying router B. Router B reboots and loses all data in

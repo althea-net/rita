@@ -228,6 +228,28 @@ pub struct RitaClientSettings {
 }
 
 impl RitaClientSettings {
+    /// This is a test setup function that returns a default settings object
+    /// and sets the default settings as the current settings object
+    pub fn setup_test(our_id: Identity) -> Self {
+        let mut settings = RitaClientSettings {
+            payment: PaymentSettings::default(),
+            log: LoggingSettings::default(),
+            operator: OperatorSettings::default(),
+            network: NetworkSettings::default(),
+            exit_client: ExitClientSettings::default(),
+            localization: LocalizationSettings::default(),
+            future: false,
+            app_name: APP_NAME.to_string(),
+            save_interval: default_save_interval(),
+        };
+        settings.network.mesh_ip = Some(our_id.mesh_ip);
+        settings.network.wg_public_key = Some(our_id.wg_public_key);
+        settings.payment.eth_address = Some(our_id.eth_address);
+
+        set_rita_client(settings.clone());
+        settings
+    }
+
     /// This is a low level fn that mutates the current settings object, but does not save it.
     /// prefer the higher level settings::merge_config_json(new_settings), which calls this, to actually merge into memory
     pub fn merge(&mut self, changed_settings: serde_json::Value) -> Result<(), SettingsError> {
