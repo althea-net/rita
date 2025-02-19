@@ -1,8 +1,8 @@
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
 use crate::{ClientExtender, UsageTracker, WifiDevice};
 use arrayvec::ArrayString;
-use babel_monitor::structs::{Neighbor, BabeldConfig};
 use babel_monitor::structs::Route;
+use babel_monitor::structs::{BabeldConfig, Neighbor};
 use clarity::Address;
 use ipnetwork::IpNetwork;
 use num256::Uint256;
@@ -306,15 +306,42 @@ pub struct LightClientLocalIdentity {
 }
 
 /// This represents a generic payment that may be to or from us
-/// when completed it contains a txid from a published transaction
+/// it contains a txid from a published transaction
 /// that should be validated against the blockchain
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
     pub amount: Uint256,
-    // populated when transaction is published
-    pub txid: Option<Uint256>,
+    // txhash of the payment this could either be on Ethereum or Althea as both are 256 bit integers
+    pub txid: Uint256,
+}
+
+// Ensure that duplicate txid are always treated as the same object
+impl Hash for PaymentTx {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.txid.hash(state);
+    }
+}
+
+/// This represents a generic payment that may be to or from us, it does not contain a txid meaning it is
+/// unpublished
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct UnpublishedPaymentTx {
+    pub to: Identity,
+    pub from: Identity,
+    pub amount: Uint256,
+}
+
+impl UnpublishedPaymentTx {
+    pub fn publish(&self, txid: Uint256) -> PaymentTx {
+        PaymentTx {
+            to: self.to,
+            from: self.from,
+            amount: self.amount.clone(),
+            txid,
+        }
+    }
 }
 
 /// This enum contains information about what type of update we need to perform on a router initiated from op tools.

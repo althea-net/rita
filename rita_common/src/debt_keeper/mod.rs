@@ -10,15 +10,13 @@
 //! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
 use crate::blockchain_oracle::calculate_close_thresh;
 use crate::blockchain_oracle::get_pay_thresh;
-use crate::blockchain_oracle::potential_payment_issues_detected;
-use crate::payment_controller::queue_payment;
-use crate::payment_validator::PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;
 use crate::tunnel_manager::tm_tunnel_state_change;
 use crate::tunnel_manager::TunnelAction;
 use crate::tunnel_manager::TunnelChange;
 use crate::RitaCommonError;
-use althea_types::{Identity, PaymentTx};
+use althea_types::Identity;
+use althea_types::UnpublishedPaymentTx;
 use num256::{Int256, Uint256};
 use num_traits::identities::Zero;
 use num_traits::Signed;
@@ -36,6 +34,13 @@ lazy_static! {
     /// A locked global ref containing the state for this module. Note that the default implementation
     /// loads saved data from teh disk if it exists.
     static ref DEBT_DATA: Arc<RwLock<DebtKeeper>> = Arc::new(RwLock::new(DebtKeeper::default()));
+}
+
+/// Resets the debt keeper, this is used in tests to ensure that the debt keeper is in a known state
+#[cfg(test)]
+pub fn reset_debt_keeper() {
+    let mut dk = DEBT_DATA.write().unwrap();
+    *dk = DebtKeeper::new();
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -230,12 +235,13 @@ pub enum DebtAction {
     MakePayment { to: Identity, amount: Uint256 },
 }
 
-pub fn send_debt_update() -> Result<(), RitaCommonError> {
+pub fn send_debt_update() -> Result<Vec<UnpublishedPaymentTx>, RitaCommonError> {
     let mut dk = DEBT_DATA.write().unwrap();
 
     // in order to keep from overloading actix when we have thousands of debts to process
     // (mainly on exits) we batch tunnel change operations before sending them over
     let mut debts_message = Vec::new();
+    let mut payments_to_send = Vec::new();
 
     for (k, _) in dk.debt_data.clone() {
         match dk.send_update(&k)? {
@@ -252,13 +258,7 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
                 });
             }
             DebtAction::MakePayment { to, amount } => {
-                if potential_payment_issues_detected() {
-                    warn!("Potential payment issue detected");
-                    return Err(RitaCommonError::MiscStringError(
-                        "Potential payment issue detected".to_string(),
-                    ));
-                }
-                queue_payment(PaymentTx {
+                payments_to_send.push(UnpublishedPaymentTx {
                     to,
                     from: match settings::get_rita_common().get_identity() {
                         Some(id) => id,
@@ -269,7 +269,6 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
                         }
                     },
                     amount,
-                    txid: None, // not yet published
                 });
             }
         }
@@ -280,7 +279,7 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
     if let Err(e) = tm_tunnel_state_change(debts_message) {
         warn!("Error during tunnel state change: {}", e);
     }
-    Ok(())
+    Ok(payments_to_send)
 }
 
 /// deserialize debt data from bincode format
@@ -653,22 +652,9 @@ impl DebtKeeper {
                 Ok(DebtAction::OpenTunnel)
             }
             (false, true, true) => {
-                // In theory it's possible for the payment_failed or payment_succeeded actor calls to fail for
-                // various reasons. In practice this only happens with the system is in a nearly inoperable state.
-                // But for the sake of parinoia we provide a handler here which will time out in such a situation
-                match debt_data.payment_in_flight_start {
-                    Some(start_time) => {
-                        if Instant::now() - start_time > PAYMENT_SEND_TIMEOUT {
-                            error!("Payment in flight for more than payment timeout! Resetting!");
-                            debt_data.payment_in_flight = false;
-                            debt_data.payment_in_flight_start = None;
-                        }
-                    }
-                    None => {
-                        error!("No start time but payment in flight?");
-                        debt_data.payment_in_flight = false;
-                    }
-                }
+                // we have a payment outstanding, we wait for it to complete
+                // if it fails payment_validator will call payment_failed so that
+                // we can try again
                 debt_data.action = DebtAction::OpenTunnel;
                 Ok(DebtAction::OpenTunnel)
             }

@@ -153,7 +153,7 @@ pub async fn tick_operator_payments() {
                     to: operator_identity,
                     from: our_id,
                     amount: amount_to_pay.clone(),
-                    txid: Some(txid),
+                    txid: txid,
                 });
                 add_tx_to_total(amount_to_pay.clone());
                 state.operator_debt -= amount_to_pay;

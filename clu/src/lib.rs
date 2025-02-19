@@ -111,7 +111,7 @@ pub fn del_multiple_interfaces(interfaces: Vec<String>) {
         }
         for thread in threads {
             // we want to wait for these to complete, we don't care that much if they fail
-            let _  = thread.join();
+            let _ = thread.join();
         }
     }
 }
