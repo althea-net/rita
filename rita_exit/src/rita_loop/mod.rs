@@ -506,7 +506,7 @@ pub fn get_possible_cgnat_ips(
 ) -> Vec<Ipv4Addr> {
     let mut possible_ips: Vec<Ipv4Addr> = subnet.into_iter().collect();
     possible_ips.remove(0); // we don't want to assign the first ip in the subnet as it's the subnet default .0
-    // remove any ips listed in static assignments
+                            // remove any ips listed in static assignments
     for ip in static_assignments {
         possible_ips.retain(|&x| x != ip);
     }

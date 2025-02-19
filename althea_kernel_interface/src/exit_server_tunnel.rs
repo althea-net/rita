@@ -368,7 +368,7 @@ pub fn teardown_snat(
     Ok(())
 }
 
-/// Sets up the CGNAT rules for the exit server run on startup. The actual internal <-> external ip 
+/// Sets up the CGNAT rules for the exit server run on startup. The actual internal <-> external ip
 /// allocation is done by the kernel at random, and clients may be assigned any ip in the given range.
 pub fn setup_cgnat(
     exit_ip: Ipv4Addr,
