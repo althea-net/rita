@@ -334,7 +334,7 @@ impl dyn KernelInterface {
 
     /// Generates a unique traffic class id for a exit user, essentially a really dumb hashing function
     pub fn get_class_id(&self, ip: Ipv4Addr) -> u32 {
-        error!("Trying to get class id for ip {}", ip);
+        trace!("Trying to get class id for ip {}", ip);
         let num: u32 = ip.into();
         num % 9999 //9999 is the maximum flow id value allowed
     }
