@@ -5,6 +5,9 @@ use actix_web::web;
 use actix_web::App;
 use actix_web::HttpResponse;
 use actix_web::HttpServer;
+use exit_endpoints::get_exit_network_settings;
+use exit_endpoints::get_next_static_ip;
+use exit_endpoints::set_exit_mode;
 use rita_common::dashboard::auth::*;
 use rita_common::dashboard::babel::*;
 use rita_common::dashboard::backup_created::*;
@@ -32,6 +35,8 @@ use rita_common::network_endpoints::version;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::thread;
+
+pub mod exit_endpoints;
 
 pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
     let startup_status = web::Data::new(startup_status.clone());
@@ -116,6 +121,12 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                         "/remote_logging/level/{level}",
                         web::post().to(remote_logging_level),
                     )
+                    .route(
+                        "/get_exit_network",
+                        web::get().to(get_exit_network_settings),
+                    )
+                    .route("/set_exit_network", web::post().to(set_exit_mode))
+                    .route("/get_next_static_ip", web::post().to(get_next_static_ip))
             })
             .bind(format!(
                 "[::0]:{}",

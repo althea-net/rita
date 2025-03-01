@@ -96,7 +96,12 @@ impl ExitIpv4RoutingSettings {
                 let mut all_ips: Vec<Ipv4Addr> = subnet.iter().collect();
                 // remove the first ip
                 all_ips.remove(0);
-                // the next 2 ips should be the gateway or external ips
+                // the next 2 ips should be the gateway or external ips, but check for duplicates
+                if gateway_ipv4 == external_ipv4 {
+                    return Err(SettingsError::InvalidIpv4Configuration(
+                        "Duplicate network ip".to_string(),
+                    ));
+                }
                 for _i in 0..=1 {
                     if all_ips[0] == *gateway_ipv4 || all_ips[0] == *external_ipv4 {
                         all_ips.remove(0);
@@ -131,8 +136,26 @@ impl ExitIpv4RoutingSettings {
             ExitIpv4RoutingSettings::SNAT {
                 static_assignments,
                 subnet,
-                ..
+                gateway_ipv4,
+                external_ipv4,
+                broadcast_ipv4,
             } => {
+                // check that all ips are unique and in the subnet
+                if !subnet.contains(*gateway_ipv4)
+                    || !subnet.contains(*external_ipv4)
+                    || !subnet.contains(*broadcast_ipv4)
+                {
+                    return Err(SettingsError::InvalidIpv4Configuration(
+                        "Network ip outside of subnet".to_string(),
+                    ));
+                } else if gateway_ipv4 == external_ipv4
+                    || gateway_ipv4 == broadcast_ipv4
+                    || external_ipv4 == broadcast_ipv4
+                {
+                    return Err(SettingsError::InvalidIpv4Configuration(
+                        "Duplicate network ip".to_string(),
+                    ));
+                }
                 let mut used_ips = HashSet::new();
                 for assignment in static_assignments {
                     if used_ips.contains(&assignment.client_external_ip) {
@@ -155,6 +178,112 @@ impl ExitIpv4RoutingSettings {
 
                 Ok(())
             }
+        }
+    }
+
+    pub fn get_next_static_ip(&self) -> Option<Ipv4Addr> {
+        match self {
+            ExitIpv4RoutingSettings::SNAT {
+                subnet,
+                static_assignments,
+                gateway_ipv4,
+                external_ipv4,
+                broadcast_ipv4,
+            } => {
+                // get the first ip in the subnet that is not already assigned in static assignments or settings
+                let mut all_ips: Vec<Ipv4Addr> = subnet.iter().collect();
+                // remove the first ip
+                all_ips.remove(0);
+                // for each ip in the subnet, check if it is in the static assignments. first one free is the next ip
+                for ip in all_ips {
+                    if !static_assignments
+                        .iter()
+                        .any(|x| x.client_external_ip == ip)
+                        && ip != *gateway_ipv4
+                        && ip != *external_ipv4
+                        && ip != *broadcast_ipv4
+                    {
+                        return Some(ip);
+                    }
+                }
+                None
+            }
+            ExitIpv4RoutingSettings::CGNAT {
+                subnet,
+                static_assignments,
+                gateway_ipv4,
+                external_ipv4,
+                broadcast_ipv4,
+            } => {
+                // get the first ip in the subnet that is not already assigned in static assignments or settings
+                let mut all_ips: Vec<Ipv4Addr> = subnet.iter().collect();
+                // remove the first ip
+                all_ips.remove(0);
+                // for each ip in the subnet, check if it is in the static assignments. first one free is the next ip
+                for ip in all_ips {
+                    if !static_assignments
+                        .iter()
+                        .any(|x| x.client_external_ip == ip)
+                        && ip != *gateway_ipv4
+                        && ip != *external_ipv4
+                        && ip != *broadcast_ipv4
+                    {
+                        return Some(ip);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    pub fn maybe_add_static_assignment(
+        &mut self,
+        client_id: Identity,
+    ) -> Result<(), SettingsError> {
+        let next_ip = self.get_next_static_ip();
+        match self {
+            ExitIpv4RoutingSettings::SNAT {
+                static_assignments, ..
+            } => {
+                let next_ip = match next_ip {
+                    Some(ip) => ip,
+                    None => {
+                        return Err(SettingsError::InvalidIpv4Configuration(
+                            "No more addresses to assign".to_string(),
+                        ));
+                    }
+                };
+                let mut new_static_assignments = static_assignments.clone();
+                new_static_assignments.push(ClientIpv4StaticAssignment {
+                    client_id,
+                    client_external_ip: next_ip,
+                });
+                *static_assignments = new_static_assignments;
+                Ok(())
+            }
+            ExitIpv4RoutingSettings::CGNAT {
+                static_assignments, ..
+            } => {
+                let next_ip = match next_ip {
+                    Some(ip) => ip,
+                    None => {
+                        return Err(SettingsError::InvalidIpv4Configuration(
+                            "No more addresses to assign".to_string(),
+                        ));
+                    }
+                };
+                let mut new_static_assignments = static_assignments.clone();
+                new_static_assignments.push(ClientIpv4StaticAssignment {
+                    client_id,
+                    client_external_ip: next_ip,
+                });
+                *static_assignments = new_static_assignments;
+                Ok(())
+            }
+            _ => Err(SettingsError::InvalidIpv4Configuration(
+                "Can only add static assignments to SNAT and CGNAT mode".to_string(),
+            )),
         }
     }
 }
@@ -464,5 +593,79 @@ impl RitaExitSettingsStruct {
         set_rita_exit(ret.clone());
 
         Ok(ret)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use althea_types::random_identity;
+    use std::{net::Ipv4Addr, str::FromStr};
+
+    #[test]
+    fn test_get_next_static_ip_after_maybe_add_static_assignment() {
+        let subnet = Ipv4Network::new(Ipv4Addr::new(192, 168, 1, 0), 24).unwrap();
+        let gateway_ipv4 = Ipv4Addr::new(192, 168, 1, 1);
+        let external_ipv4 = Ipv4Addr::new(192, 168, 1, 2);
+        let broadcast_ipv4 = Ipv4Addr::new(192, 168, 1, 255);
+        let static_assignments = vec![];
+
+        let mut settings = ExitIpv4RoutingSettings::SNAT {
+            subnet,
+            gateway_ipv4,
+            external_ipv4,
+            broadcast_ipv4,
+            static_assignments,
+        };
+
+        let dummy_client = random_identity();
+
+        // Add a static assignment
+        settings.maybe_add_static_assignment(dummy_client).unwrap();
+
+        // Get the next static IP
+        let next_ip = settings.get_next_static_ip();
+
+        // The first available IP should be 192.168.1.4 after maybe_add adds on .3
+        assert_eq!(next_ip, Some(Ipv4Addr::new(192, 168, 1, 4)));
+    }
+
+    #[test]
+    fn test_validate() {
+        // Create a valid ExitNetworkSettings instance
+        let valid_settings = ExitNetworkSettings::test_default();
+        assert!(valid_settings.validate());
+
+        // Create an invalid ExitNetworkSettings instance with an invalid internal subnet
+        let mut invalid_settings = ExitNetworkSettings::test_default();
+        invalid_settings.internal_ipv4 = ExitInternalIpv4Settings {
+            internal_subnet: Ipv4Network::new(Ipv4Addr::new(8, 8, 8, 0), 24).unwrap(),
+        };
+        assert!(!invalid_settings.validate());
+
+        // Create an invalid ExitNetworkSettings instance with an invalid ipv4 routing
+        let mut invalid_settings = ExitNetworkSettings::test_default();
+        invalid_settings.ipv4_routing = ExitIpv4RoutingSettings::CGNAT {
+            subnet: Ipv4Network::new(Ipv4Addr::new(192, 168, 1, 0), 24).unwrap(),
+            static_assignments: vec![ClientIpv4StaticAssignment {
+                client_id: random_identity(),
+                client_external_ip: Ipv4Addr::new(192, 168, 2, 1),
+            }],
+            gateway_ipv4: Ipv4Addr::new(192, 168, 1, 1),
+            external_ipv4: Ipv4Addr::new(192, 168, 1, 2),
+            broadcast_ipv4: Ipv4Addr::new(192, 168, 1, 255),
+        };
+        assert!(!invalid_settings.validate());
+
+        let snat = ExitIpv4RoutingSettings::SNAT {
+            subnet: Ipv4Network::from_str("10.0.0.0").unwrap(),
+            gateway_ipv4: Ipv4Addr::from_str("10.0.0.1").unwrap(),
+            external_ipv4: Ipv4Addr::from_str("10.0.0.2").unwrap(),
+            broadcast_ipv4: Ipv4Addr::from_str("10.0.0.200").unwrap(),
+            static_assignments: vec![],
+        };
+        println!("{:?}", snat);
+        // invalid because of missing subnet mask which defaults to 32
+        assert!(snat.validate().is_err());
     }
 }
