@@ -145,7 +145,7 @@ fn debts_logging(debts: &HashMap<Identity, i128>) {
 
 /// This traffic watcher watches how much traffic each we send and receive from each client.
 pub fn watch_exit_traffic(
-    mut usage_history: HashMap<WgKey, WgUsage>,
+    usage_history: &mut HashMap<WgKey, WgUsage>,
     routes: &[Route],
     clients: Vec<Identity>,
 ) -> Result<(), Box<RitaExitError>> {
@@ -194,7 +194,7 @@ pub fn watch_exit_traffic(
     trace!("merged counters are : {:?}", counters);
 
     // creates new usage entires does not actualy update the values
-    prepare_usage_history(&counters, &mut usage_history);
+    prepare_usage_history(&counters, usage_history);
 
     counters_logging(&counters, &usage_history, our_price as u32);
 

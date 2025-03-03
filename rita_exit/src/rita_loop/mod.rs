@@ -249,7 +249,7 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
             babel_port,
             start,
             rita_exit_cache.get_all_registered_clients(),
-            rita_exit_cache.usage_history.clone(),
+            &mut rita_exit_cache.usage_history,
         );
         info!(
             "Finished Rita billing in {}ms",
@@ -342,7 +342,7 @@ fn bill(
     babel_port: u16,
     start: Instant,
     ids: HashSet<Identity>,
-    usage_history: HashMap<WgKey, WgUsage>,
+    usage_history: &mut HashMap<WgKey, WgUsage>,
 ) {
     trace!("about to try opening babel stream");
 
