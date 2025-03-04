@@ -52,6 +52,16 @@ pub enum ExitState {
 }
 
 impl ExitState {
+    pub fn get_exit_mesh_ip(&self) -> Option<IpAddr> {
+        match *self {
+            ExitState::Registered {
+                ref general_details,
+                ..
+            } => Some(general_details.server_internal_ip),
+            _ => None,
+        }
+    }
+
     pub fn general_details(&self) -> Option<&ExitDetails> {
         match *self {
             ExitState::Registered {

@@ -74,9 +74,6 @@ pub async fn run_multi_exit_test() {
 
     test_routes(namespaces.clone(), expected_routes);
 
-    // sleep so that the exit manager loop can grab the verified exits from the servers (required before registering)
-    thread::sleep(Duration::from_secs(10));
-
     info!("Registering routers to the exit");
     register_all_namespaces_to_exit(namespaces.clone()).await;
 

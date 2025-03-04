@@ -26,6 +26,7 @@ use crate::dashboard::operator_fees::*;
 use crate::dashboard::prices::*;
 use crate::dashboard::router::*;
 use crate::dashboard::usage::*;
+use crate::exit_manager::ExitManager;
 use actix::System;
 use actix_web::{web, App, HttpServer};
 use rita_common::dashboard::auth::*;
@@ -51,16 +52,21 @@ use rita_common::dashboard::wg_key::*;
 use rita_common::dashboard::wifi::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::*;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::thread;
 
 use self::devices_on_lan::get_devices_lan_endpoint;
 
-pub fn start_client_dashboard(rita_dashboard_port: u16) {
+pub fn start_client_dashboard(
+    rita_dashboard_port: u16,
+    exit_manager_ref: Arc<RwLock<ExitManager>>,
+) {
     // dashboard
     thread::spawn(move || {
         let runner = System::new();
         runner.block_on(async move {
-            let _res = HttpServer::new(|| {
+            let _res = HttpServer::new(move || {
                 App::new()
                     .wrap(middleware::AuthMiddlewareFactory)
                     .wrap(middleware::HeadersMiddlewareFactory)
@@ -188,6 +194,7 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                     .route("/phone", web::post().to(set_phone_number))
                     .route("/email", web::get().to(get_email))
                     .route("/email", web::post().to(set_email))
+                    .app_data(web::Data::new(exit_manager_ref.clone()))
             })
             .workers(1)
             .bind(format!("[::0]:{rita_dashboard_port}"))

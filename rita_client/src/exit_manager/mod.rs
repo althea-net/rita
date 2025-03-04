@@ -23,7 +23,6 @@ pub mod time_sync;
 pub mod utils;
 
 use althea_types::ExitIdentity;
-use althea_types::ExitServerList;
 use althea_types::ExitState;
 use exit_selector::ExitSwitcherState;
 use std::collections::HashMap;
@@ -40,44 +39,58 @@ pub struct LastExitStates {
 /// An actor which pays the exit
 #[derive(Clone)]
 pub struct ExitManager {
-    pub nat_setup: bool,
-    /// Every tick we query an exit endpoint to get a list of exits in that cluster. We use this list for exit switching
-    pub exit_list: Option<ExitServerList>,
+    nat_setup: bool,
     /// Store last exit here, when we see an exit change, we reset wg tunnels
-    pub last_exit_state: Option<LastExitStates>,
-    pub last_status_request: Option<Instant>,
-    pub exit_switcher_state: ExitSwitcherState,
+    last_exit_state: Option<LastExitStates>,
+    last_status_request: Option<Instant>,
+    exit_switcher_state: ExitSwitcherState,
+    // mapping from exit identity to exit state, the registration state itself
+    // should always be the same, but the exit specific info can and will change
+    // it may also be possible for us to be registered on one exit but not on another
+    // due to a query issue or other failure on the exit side, so we have to handle that
+    registration_state: HashMap<ExitIdentity, ExitState>,
+}
+
+impl Default for ExitManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ExitManager {
-    pub fn new(currently_selected: Option<ExitIdentity>) -> ExitManager {
+    pub fn new() -> ExitManager {
         ExitManager {
             nat_setup: false,
-            exit_list: None,
             last_exit_state: None,
             last_status_request: None,
             exit_switcher_state: ExitSwitcherState {
                 last_switch: None,
                 backoff: Duration::from_secs(1),
-                currently_selected,
+                currently_selected: None,
                 quality_history: HashMap::new(),
             },
+            registration_state: HashMap::new(),
         }
     }
-}
 
-/// Gets the currently selected exit, if none is selected returns the first exit from the verified list or None if none exist
-pub fn get_current_exit() -> Option<ExitIdentity> {
-    let settings = settings::get_rita_client();
-    match settings.exit_client.registration_state {
-        ExitState::Registered { identity, .. } => Some(*identity),
-        _ => {
-            let exit = settings.exit_client.verified_exit_list.iter().next();
-            match exit {
-                Some(exit) => exit.exit_list.first().cloned(),
-                None => None,
-            }
+    /// Gets the currently selected exit, if none is selected returns the first exit from the verified list or None if none exist
+    pub fn get_current_exit(&self) -> Option<ExitIdentity> {
+        self.exit_switcher_state.currently_selected.clone()
+    }
+
+    /// Gets the exit registration state for the current exit
+    pub fn get_exit_registration_state(&self) -> ExitState {
+        match self.get_current_exit() {
+            Some(exit) => match self.registration_state.get(&exit) {
+                Some(state) => state.clone(),
+                None => ExitState::New,
+            },
+            None => ExitState::New,
         }
+    }
+
+    pub fn set_exit_registration_state(&mut self, exit_id: ExitIdentity, state: ExitState) {
+        self.registration_state.insert(exit_id, state);
     }
 }
 

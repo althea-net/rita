@@ -241,6 +241,11 @@ impl ClientListAnIpAssignmentMap {
     ) -> Result<Ipv4Addr, Box<RitaExitError>> {
         // check if we have already assigned an ip to this client
         if let Some(val) = self.internal_ip_assignments.get_by_value(&their_record) {
+            trace!(
+                "ip already assigned, returning {} for {}",
+                val,
+                their_record.wg_public_key
+            );
             return Ok(*val);
         }
 
@@ -260,6 +265,7 @@ impl ClientListAnIpAssignmentMap {
                         .internal_subnet
                         .broadcast()
             {
+                trace!("Assigned {} internal ip {}", their_record.wg_public_key, ip);
                 self.internal_ip_assignments.insert(ip, their_record);
                 return Ok(ip);
             }

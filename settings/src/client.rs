@@ -4,7 +4,7 @@ use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_client, SettingsError};
 use althea_types::regions::Regions;
-use althea_types::{ExitServerList, ExitState, Identity};
+use althea_types::{ExitServerList, Identity};
 use clarity::Address;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -27,10 +27,6 @@ fn exit_db_smart_contract() -> Address {
         .unwrap()
 }
 
-fn default_registration_state() -> ExitState {
-    ExitState::default()
-}
-
 /// This struct is used by rita to encapsulate all the state/information needed to connect/register
 /// to a exit and to setup the exit tunnel
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -40,11 +36,6 @@ pub struct ExitClientSettings {
     /// exit database smart contract. Once registered and online this list may be populated with new exits through the
     /// exit manager loop which receives verifiable exit lists.
     pub verified_exit_list: Option<ExitServerList>,
-    /// The registration state of this router with the exit database smart contract
-    /// note this value may be affected by what contract is currently selected and what
-    /// chain we are on. Since different chains may reference different registration smart contracts
-    #[serde(default = "default_registration_state", flatten)]
-    pub registration_state: ExitState,
     /// This is the address of the exit database contract, this value is a config value in case
     /// a new version of the contract is ever deployed. Otherwise it won't change much. What this contract contains
     /// is the registration data for all routers, facilitating key exchange between new exits in the cluster and clients
@@ -65,7 +56,6 @@ pub struct ExitClientSettings {
 impl Default for ExitClientSettings {
     fn default() -> Self {
         ExitClientSettings {
-            registration_state: default_registration_state(),
             exit_db_smart_contract: exit_db_smart_contract(),
             lan_nics: HashSet::new(),
             our_region: None,

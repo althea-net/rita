@@ -1,6 +1,10 @@
-use crate::operator_update::{
-    get_client_mbps, get_exit_con, get_hardware_info_update, get_neighbor_info, get_relay_mbps,
-    get_rita_uptime, get_user_bandwidth_usage, handle_operator_update,
+use super::ReceivedOpsData;
+use crate::{
+    exit_manager::ExitManager,
+    operator_update::{
+        get_client_mbps, get_exit_con, get_hardware_info_update, get_neighbor_info, get_relay_mbps,
+        get_rita_uptime, get_user_bandwidth_usage, handle_operator_update,
+    },
 };
 use actix::System;
 use actix_web_actors::ws;
@@ -9,7 +13,7 @@ use althea_types::{
         OperatorWebsocketResponse, RouterWebsocketMessage, WsConnectionDetailsStruct,
         WsCustomerDetailsStruct, WsOperatorAddressStruct, WsTimeseriesDataStruct,
     },
-    Identity,
+    ExitState, Identity,
 };
 use awc::ws::Frame;
 use crypto_box::{PublicKey, SecretKey};
@@ -19,19 +23,12 @@ use settings::{
     get_system_chain, get_user_bandwidth_limit,
 };
 use std::{
-    str, thread,
+    str,
+    sync::{Arc, RwLock},
+    thread,
     time::{Duration, Instant},
 };
 use tokio::time::timeout;
-
-use super::ReceivedOpsData;
-
-/// This function spawns a thread solely responsible for performing the websocket operator update
-pub fn start_operator_socket_update_loop() {
-    // first actually get the websocket address
-    info!("Starting operator socket update loop");
-    send_websocket_update();
-}
 
 // How long we wait between checkins with the operator server
 const SOCKET_UPDATE_FREQUENCY: Duration = Duration::from_secs(10);
@@ -43,7 +40,8 @@ const FIVE_MINUTES: Duration = Duration::from_secs(300);
 const SOCKET_CHECKER_TIMEOUT: Duration = Duration::from_millis(10);
 
 /// Send an update to ops server via websocket
-pub fn send_websocket_update() {
+pub fn start_websocket_operator_update_loop(exit_state_ref: Arc<RwLock<ExitManager>>) {
+    info!("Starting websocket operator update loop");
     let url: &str;
     if cfg!(feature = "dev_env") {
         url = "http://7.7.7.7:8080/ws/";
@@ -57,6 +55,7 @@ pub fn send_websocket_update() {
         // this will always be an error, so it's really just a loop statement
         // with some fancy destructuring
         while let Err(e) = {
+            let exit_state_ref = exit_state_ref.clone();
             thread::spawn(move || {
                 let runner = System::new();
                 runner.block_on(async move {
@@ -150,7 +149,8 @@ pub fn send_websocket_update() {
                                         let messages = get_five_minute_update_data(
                                             id,
                                             ops_last_seen_usage_hour,
-                                            &our_secretkey, &ops_pubkey
+                                            &our_secretkey, &ops_pubkey,
+                                            exit_state_ref.read().unwrap().get_exit_registration_state(),
                                         );
                                         for message in messages {
                                             ws.send(message).await.unwrap();
@@ -281,10 +281,11 @@ fn get_five_minute_update_data(
     ops_last_seen_usage_hour: Option<u64>,
     our_secretkey: &SecretKey,
     ops_pubkey: &PublicKey,
+    exit_state_ref: ExitState,
 ) -> Vec<ws::Message> {
     let mut messages = Vec::new();
 
-    let exit_con = get_exit_con();
+    let exit_con = get_exit_con(exit_state_ref);
     let user_bandwidth_limit = get_user_bandwidth_limit();
     let user_bandwidth_usage = get_user_bandwidth_usage(ops_last_seen_usage_hour);
     let client_mbps = get_client_mbps();

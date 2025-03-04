@@ -164,4 +164,24 @@ mod tests {
         assert_eq!(map.get_by_value(&"a"), None);
         assert_eq!(map.get_by_value(&"b"), None);
     }
+
+    #[test]
+    fn test_get_by_key() {
+        let mut map = DualMap::new();
+        map.insert(1, "a");
+        map.insert(2, "b");
+        assert_eq!(map.get_by_key(&1), Some(&"a"));
+        assert_eq!(map.get_by_key(&2), Some(&"b"));
+        assert_eq!(map.get_by_key(&3), None);
+    }
+
+    #[test]
+    fn test_get_by_value() {
+        let mut map = DualMap::new();
+        map.insert(1, "a");
+        map.insert(2, "b");
+        assert_eq!(map.get_by_value(&"a"), Some(&1));
+        assert_eq!(map.get_by_value(&"b"), Some(&2));
+        assert_eq!(map.get_by_value(&"c"), None);
+    }
 }

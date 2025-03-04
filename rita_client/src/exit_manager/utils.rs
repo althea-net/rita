@@ -1,5 +1,4 @@
 use super::LastExitStates;
-use crate::heartbeat::get_exit_registration_state;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use actix_web::Result;
@@ -40,7 +39,7 @@ pub fn linux_setup_exit_tunnel(
         return Err(RitaClientError::MiscStringError(v));
     }
 
-    error!(
+    info!(
         "Got wg exit listen port as: {}",
         selected_exit.wg_exit_listen_port
     );
@@ -88,8 +87,7 @@ pub fn correct_default_route(input: Option<DefaultRoute>) -> bool {
     }
 }
 
-pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
-    let exit_info = get_exit_registration_state();
+pub fn get_client_pub_ipv6(exit_info: ExitState) -> Option<IpNetwork> {
     if let ExitState::Registered { our_details, .. } = exit_info {
         return our_details.internet_ipv6_subnet;
     }

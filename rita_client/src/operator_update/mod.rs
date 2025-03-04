@@ -5,7 +5,6 @@ pub mod updater;
 extern crate openssh_keys;
 use crate::dashboard::extender_checkin::extend_hardware_info;
 use crate::dashboard::router::set_router_update_instruction;
-use crate::exit_manager::get_current_exit;
 use crate::exit_manager::utils::get_client_pub_ipv6;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::rita_loop::is_gateway_client;
@@ -15,7 +14,9 @@ use althea_kernel_interface::run_command;
 use althea_types::websockets::{
     OperatorAction, OperatorWebsocketMessage, OperatorWebsocketResponse, PaymentAndNetworkSettings,
 };
-use althea_types::{get_sequence_num, NeighborStatus, ShaperSettings, UsageTrackerTransfer};
+use althea_types::{
+    get_sequence_num, ExitState, NeighborStatus, ShaperSettings, UsageTrackerTransfer,
+};
 use althea_types::{
     AuthorizedKeys, BillingDetails, ContactStorage, ContactType, CurExitInfo, ExitConnection,
     HardwareInfo,
@@ -59,12 +60,9 @@ lazy_static! {
     static ref RITA_UPTIME: Instant = Instant::now();
 }
 
-pub fn get_exit_con() -> Option<ExitConnection> {
+pub fn get_exit_con(exit_reg_ref: ExitState) -> Option<ExitConnection> {
     // Get current exit info
-    let curr_exit_ip = match get_current_exit() {
-        Some(exit) => Some(exit.mesh_ip),
-        None => None,
-    };
+    let curr_exit_ip = exit_reg_ref.get_exit_mesh_ip();
     let cur_exit_info = Some(CurExitInfo {
         cluster_name: None,
         // Hopefully ops fills this in
@@ -74,7 +72,7 @@ pub fn get_exit_con() -> Option<ExitConnection> {
 
     Some(ExitConnection {
         cur_exit: cur_exit_info,
-        client_pub_ipv6: get_client_pub_ipv6(),
+        client_pub_ipv6: get_client_pub_ipv6(exit_reg_ref),
     })
 }
 pub fn get_neighbor_info() -> Vec<NeighborStatus> {

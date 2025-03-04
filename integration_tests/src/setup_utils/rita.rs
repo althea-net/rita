@@ -191,12 +191,12 @@ pub fn spawn_rita(
         let system = actix::System::new();
 
         start_rita_common_loops();
-        start_rita_client_loops();
+        let em_state = start_rita_client_loops();
         save_to_disk_loop(SettingsOnDisk::RitaClientSettings(Box::new(
             settings::get_rita_client(),
         )));
         start_core_rita_endpoints(1);
-        start_client_dashboard(s.network.rita_dashboard_port);
+        start_client_dashboard(s.network.rita_dashboard_port, em_state);
 
         if let Err(e) = system.run() {
             panic!("Starting client failed with {}", e);

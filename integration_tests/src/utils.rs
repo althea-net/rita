@@ -336,17 +336,19 @@ pub fn test_all_internet_connectivity(namespaces: NamespaceInfo) {
                 ],
             )
             .unwrap();
-            if String::from_utf8(out.stdout)
-                .unwrap()
-                .contains("1 received")
-            {
+            let output_string = from_utf8(&out.stdout).unwrap();
+            if output_string.contains("1 received") {
                 info!("Ping test passed for {}!", ns.get_name());
                 break;
             } else {
                 if Instant::now() - start > Duration::from_secs(60) {
                     panic!("{} does not have internet connectivity", ns.get_name());
                 }
-                error!("Ping failed for {}, trying again", ns.get_name());
+                error!(
+                    "Ping failed for {} with {}, trying again",
+                    ns.get_name(),
+                    output_string
+                );
                 thread::sleep(Duration::from_secs(5));
             }
         }

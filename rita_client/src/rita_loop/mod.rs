@@ -4,8 +4,7 @@
 //! This loop manages exit signup based on the settings configuration state and deploys an exit vpn
 //! tunnel if the signup was successful on the selected exit.
 
-use crate::exit_manager::get_current_exit;
-use crate::heartbeat::get_exit_registration_state;
+use crate::exit_manager::ExitManager;
 use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::operator_fee_manager::tick_operator_payments;
@@ -81,23 +80,9 @@ pub fn set_gateway_client(input: bool) {
     }
 }
 
-/// This function determines if metrics are permitted for this device, if the user has
-/// disabled logging we should not send any logging data. If they are a member of a network
-/// with an operator address this overrides the logging setting to ensure metrics are sent.
-/// Since an operator address indicates an operator that is being paid for supporting this user
-/// and needs info to assist them. The logging setting may be inspected to disable metrics
-/// not required for a normal operator
-pub fn metrics_permitted() -> bool {
-    settings::get_rita_client().log.enabled
-        || settings::get_rita_client()
-            .operator
-            .operator_address
-            .is_some()
-}
-
 /// Rita loop thread spawning function, this function contains all the rita client functions
 /// with the exception of exit operations which have their own loop
-pub fn start_rita_client_loop() {
+pub fn start_rita_client_loop(exit_state_ref: Arc<RwLock<ExitManager>>) {
     let mut last_restart = Instant::now();
 
     // outer thread is a watchdog inner thread is the runner
@@ -105,6 +90,7 @@ pub fn start_rita_client_loop() {
         // this will always be an error, so it's really just a loop statement
         // with some fancy destructuring
         while let Err(e) = {
+            let exit_state_ref = exit_state_ref.clone();
             thread::spawn(move || {
                 loop {
                     let start = Instant::now();
@@ -124,7 +110,7 @@ pub fn start_rita_client_loop() {
                         start.elapsed().subsec_millis()
                     );
 
-                    check_for_gateway_client_billing_corner_case();
+                    check_for_gateway_client_billing_corner_case(exit_state_ref.clone());
                     info!(
                         "Rita Client loop corner case in {}s {}ms",
                         start.elapsed().as_secs(),
@@ -165,15 +151,20 @@ pub fn start_rita_client_loop() {
     });
 }
 
-pub fn start_rita_client_loops() {
+pub fn start_rita_client_loops() -> Arc<RwLock<ExitManager>> {
     info!("Starting Rita Client loops");
-    if metrics_permitted() {
-        send_heartbeat_loop();
-    }
-    crate::exit_manager::exit_loop::start_exit_manager_loop();
-    crate::rita_loop::start_rita_client_loop();
+
+    // shared exit state data between the threads, this is read only everywhere except
+    // the exit manager loop, and register endpoints, ideally the exit manager would get the only read write copy
+    // but that's not possible with the current stdlib
+    let exit_state: Arc<RwLock<ExitManager>> = Arc::new(RwLock::new(ExitManager::new()));
+
+    crate::exit_manager::exit_loop::start_exit_manager_loop(exit_state.clone());
+    crate::rita_loop::start_rita_client_loop(exit_state.clone());
     crate::self_rescue::start_rita_client_rescue_loop();
-    crate::operator_update::ops_websocket::start_operator_socket_update_loop();
+    crate::operator_update::ops_websocket::start_websocket_operator_update_loop(exit_state.clone());
+    send_heartbeat_loop(exit_state.clone());
+    exit_state
 }
 
 /// There is a complicated corner case where the gateway is a client and a relay to
@@ -182,17 +173,20 @@ pub fn start_rita_client_loops() {
 /// the exit who just has the single billing id for the client and is combining debts
 /// This function grabs neighbors and determines if we have a neighbor with the same mesh ip
 /// and eth address as our selected exit, if we do we trigger the special case handling
-fn check_for_gateway_client_billing_corner_case() {
+fn check_for_gateway_client_billing_corner_case(exit_state_ref: Arc<RwLock<ExitManager>>) {
     let res = tm_get_neighbors();
+    let em = exit_state_ref.read().unwrap();
+    let exit_reg_state = em.get_exit_registration_state();
+    let current_exit = em.get_current_exit();
 
     let neighbors = res;
-    if let ExitState::Registered { .. } = get_exit_registration_state() {
+    if let ExitState::Registered { .. } = exit_reg_state {
         for neigh in neighbors {
             info!("Neighbor is {:?}", neigh);
             // we have a neighbor who is also our selected exit!
             // wg_key excluded due to multihomed exits having a different one
-            let exit = match get_current_exit() {
-                Some(e) => e,
+            let exit = match current_exit {
+                Some(ref e) => e,
                 None => {
                     set_gateway_client(false);
                     return;
@@ -212,28 +206,26 @@ fn check_for_gateway_client_billing_corner_case() {
 }
 
 pub fn start_antenna_forwarder(settings: RitaClientSettings) {
-    if metrics_permitted() {
-        let url: &str;
-        if cfg!(feature = "dev_env") {
-            url = "7.7.7.7:33300";
-        } else if cfg!(feature = "operator_debug") {
-            url = "192.168.10.2:33334";
-        } else {
-            url = "operator.althea.net:33334";
-        }
-
-        let our_id = settings.get_identity().unwrap();
-        let network = settings.network;
-        let interfaces = network.peer_interfaces.clone();
-        start_antenna_forwarding_proxy(
-            url.to_string(),
-            our_id,
-            *HEARTBEAT_SERVER_KEY.read().unwrap(),
-            network.wg_public_key.unwrap(),
-            network.wg_private_key.unwrap(),
-            interfaces,
-        );
+    let url: &str;
+    if cfg!(feature = "dev_env") {
+        url = "7.7.7.7:33300";
+    } else if cfg!(feature = "operator_debug") {
+        url = "192.168.10.2:33334";
+    } else {
+        url = "operator.althea.net:33334";
     }
+
+    let our_id = settings.get_identity().unwrap();
+    let network = settings.network;
+    let interfaces = network.peer_interfaces.clone();
+    start_antenna_forwarding_proxy(
+        url.to_string(),
+        our_id,
+        *HEARTBEAT_SERVER_KEY.read().unwrap(),
+        network.wg_public_key.unwrap(),
+        network.wg_private_key.unwrap(),
+        interfaces,
+    );
 }
 
 /// Manages gateway functionality and maintains the gateway parameter, this is different from the gateway

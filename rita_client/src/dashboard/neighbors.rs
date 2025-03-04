@@ -1,21 +1,20 @@
+use crate::exit_manager::ExitManager;
+use crate::RitaClientError;
 use actix_web::http::StatusCode;
-use actix_web::{HttpRequest, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use althea_types::Identity;
 use arrayvec::ArrayString;
 use babel_monitor::parsing::get_installed_route;
 use babel_monitor::parsing::get_route_via_neigh;
 use babel_monitor::structs::Route;
 use babel_monitor::{open_babel_stream, parse_routes};
-
 use num256::{Int256, Uint256};
 use rita_common::debt_keeper::{dump, NodeDebtData};
 use rita_common::network_monitor::{get_stats, IfaceStats, Stats};
 use rita_common::tunnel_manager::{tm_get_neighbors, Neighbor};
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
-
-use crate::exit_manager::get_current_exit;
-use crate::RitaClientError;
 
 const BABEL_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -53,7 +52,10 @@ pub async fn get_routes(_req: HttpRequest) -> HttpResponse {
 /// since the /debts endpoint was introduced, and should be removed when it can be
 /// coordinated with the frontend.
 /// The routes info might also belong in /exits or a dedicated /routes endpoint
-pub async fn get_neighbor_info(_req: HttpRequest) -> HttpResponse {
+pub async fn get_neighbor_info(
+    _req: HttpRequest,
+    em_ref: web::Data<Arc<RwLock<ExitManager>>>,
+) -> HttpResponse {
     let debts = dump();
     let neighbors = tm_get_neighbors();
     let combined_list = merge_debts_and_neighbors(neighbors, debts);
@@ -65,7 +67,12 @@ pub async fn get_neighbor_info(_req: HttpRequest) -> HttpResponse {
             if let Ok(routes) = routes {
                 let route_table_sample = routes;
                 let stats = get_stats();
-                let output = generate_neighbors_list(stats, route_table_sample, combined_list);
+                let output = generate_neighbors_list(
+                    stats,
+                    route_table_sample,
+                    combined_list,
+                    &em_ref.read().unwrap(),
+                );
                 HttpResponse::Ok().json(output)
             } else {
                 HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
@@ -86,6 +93,7 @@ fn generate_neighbors_list(
     stats: Stats,
     route_table_sample: Vec<Route>,
     debts: HashMap<Identity, (NodeDebtData, Neighbor)>,
+    em_ref: &ExitManager,
 ) -> Vec<NodeInfo> {
     let mut output = Vec::new();
 
@@ -107,7 +115,7 @@ fn generate_neighbors_list(
         }
         let neigh_route = maybe_route.unwrap();
 
-        let exit_ip = match get_current_exit() {
+        let exit_ip = match em_ref.get_current_exit() {
             Some(exit) => exit.mesh_ip,
             None => {
                 output.push(nonviable_node_info(

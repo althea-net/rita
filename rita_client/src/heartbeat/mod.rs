@@ -13,8 +13,8 @@
 //! This packet is encrypted using the usual LibSodium box construction and sent to the heartbeat server in the following format
 //! WgKey, Nonce, Ciphertext for the HeartBeatMessage. This consumes 32 bytes, 24 bytes, and to the end of the message
 
+use crate::exit_manager::ExitManager;
 use althea_kernel_interface::run_command;
-use althea_types::ExitDetails;
 use althea_types::ExitState;
 use althea_types::HeartbeatMessage;
 use althea_types::Identity;
@@ -28,7 +28,6 @@ use crypto_box::aead::Aead;
 use crypto_box::aead::AeadCore;
 use crypto_box::aead::OsRng;
 use crypto_box::SalsaBox;
-use dummy::dummy_selected_exit_details;
 use rita_common::blockchain_oracle::get_oracle_balance;
 use rita_common::network_monitor::get_network_info;
 use rita_common::network_monitor::GetNetworkInfo;
@@ -50,8 +49,6 @@ use dummy::dummy_neigh_tunnel;
 ///These are used during development
 #[allow(unused_imports)]
 use dummy::dummy_route;
-
-use crate::exit_manager::get_current_exit;
 
 pub const HEARTBEAT_LOOP_SPEED: u64 = 5;
 
@@ -77,7 +74,7 @@ lazy_static! {
         Arc::new(RwLock::new(None));
 }
 
-pub fn send_heartbeat_loop() {
+pub fn send_heartbeat_loop(exit_state_ref: Arc<RwLock<ExitManager>>) {
     let mut last_restart = Instant::now();
 
     // outer thread is a watchdog inner thread is the runner
@@ -86,11 +83,12 @@ pub fn send_heartbeat_loop() {
         // with some fancy destructuring
 
         while let Err(e) = {
+            let exit_state_ref = exit_state_ref.clone();
             thread::spawn(move || loop {
                 let start = Instant::now();
                 trace!("Client tick!");
 
-                send_udp_heartbeat();
+                send_udp_heartbeat(exit_state_ref.clone());
 
                 info!(
                     "Heartbeat loop completed in {}s {}ms",
@@ -117,7 +115,7 @@ pub fn send_heartbeat_loop() {
     });
 }
 
-fn send_udp_heartbeat() {
+fn send_udp_heartbeat(exit_state_ref: Arc<RwLock<ExitManager>>) {
     let heartbeat_url: &str;
     if cfg!(feature = "dev_env") {
         heartbeat_url = "7.7.7.7:33333";
@@ -134,7 +132,7 @@ fn send_udp_heartbeat() {
     let dns_request = heartbeat_url.to_socket_addrs();
 
     // Check for the basics first, before doing any of the hard futures work
-    let mut our_id: Identity = if settings::get_rita_client().get_identity().is_some() {
+    let our_id: Identity = if settings::get_rita_client().get_identity().is_some() {
         trace!(
             "Got identity: {} ",
             settings::get_rita_client().get_identity().unwrap()
@@ -144,26 +142,6 @@ fn send_udp_heartbeat() {
         trace!("Could not get identity!");
         return;
     };
-    let mut selected_exit_details: ExitDetails = dummy_selected_exit_details();
-
-    if !cfg!(feature = "operator_debug") {
-        if let Some(id) = settings::get_rita_client().get_identity() {
-            let exit_info = get_exit_registration_state();
-            match exit_info.general_details() {
-                Some(details) => {
-                    our_id = id;
-                    selected_exit_details = details.clone();
-                    trace!("got exit details for id: {}", id);
-                }
-                None => {
-                    trace!("got no exit details!");
-                    return;
-                }
-            }
-        } else {
-            return;
-        };
-    }
 
     trace!("we have heartbeat basic info");
 
@@ -173,6 +151,14 @@ fn send_udp_heartbeat() {
             warn!("Could not get network info with {:?}", e);
             return;
         }
+    };
+
+    let exit_state_ref = exit_state_ref.read().unwrap().get_exit_registration_state();
+    let exit_price = match exit_state_ref.clone() {
+        ExitState::New | ExitState::Pending { .. } | ExitState::Denied { .. } => 0,
+        ExitState::Registered {
+            general_details, ..
+        } => general_details.exit_price,
     };
 
     // In this block we handle gathering all the info and the many ways gathering it could fail
@@ -185,7 +171,7 @@ fn send_udp_heartbeat() {
                 if cfg!(feature = "operator_debug") || cfg!(feature = "dev_env") {
                     Ok(dummy_route())
                 } else {
-                    get_selected_exit_route(&network_info.babel_routes)
+                    get_selected_exit_route(&network_info.babel_routes, exit_state_ref.clone())
                 };
 
             match selected_exit_route {
@@ -246,7 +232,7 @@ fn send_udp_heartbeat() {
             send_udp_heartbeat_packet(
                 dns_socket,
                 our_id,
-                selected_exit_details.exit_price,
+                exit_price,
                 hb_cache.exit_route.clone(),
                 hb_cache.exit_neighbor_babel.clone(),
                 hb_cache.exit_neighbor_rita.identity.global,
@@ -257,9 +243,12 @@ fn send_udp_heartbeat() {
     }
 }
 
-fn get_selected_exit_route(route_dump: &[Route]) -> Result<Route, BabelMonitorError> {
-    let exit_mesh_ip = match get_current_exit() {
-        Some(exit) => exit.mesh_ip,
+fn get_selected_exit_route(
+    route_dump: &[Route],
+    exit_state: ExitState,
+) -> Result<Route, BabelMonitorError> {
+    let exit_mesh_ip = match exit_state.get_exit_mesh_ip() {
+        Some(exit) => exit,
         None => {
             return Err(BabelMonitorError::MiscStringError(
                 "No exit selected, can't heartbeat!".to_string(),
@@ -267,16 +256,6 @@ fn get_selected_exit_route(route_dump: &[Route]) -> Result<Route, BabelMonitorEr
         }
     };
     get_installed_route(&exit_mesh_ip, route_dump)
-}
-
-/// Each router selects an exit registration smart contract to register with, this function returns
-/// the current registration state of the router on that smart contract. Or more accurately the last known
-/// state since it has to be queried.
-pub fn get_exit_registration_state() -> ExitState {
-    settings::get_rita_client()
-        .exit_client
-        .registration_state
-        .clone()
 }
 
 fn get_rita_neigh_option(

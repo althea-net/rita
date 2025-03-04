@@ -1,4 +1,4 @@
-use super::get_current_exit;
+use super::ExitManager;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use actix_web::Result;
@@ -13,8 +13,9 @@ use settings::exit::EXIT_LIST_IP;
 use settings::exit::EXIT_LIST_PORT;
 use settings::get_registration_details;
 use settings::get_rita_client;
-use settings::set_rita_client;
 use std::net::SocketAddr;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 
 const EXIT_LIST_TIMEOUT: Duration = Duration::from_secs(20);
@@ -95,18 +96,34 @@ async fn send_exit_status_request(
 
 /// Registration is simply one of the exits requesting an update to a global smart contract
 /// with our information.
-pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientError> {
+pub async fn exit_setup_request(
+    em_ref: Arc<Arc<RwLock<ExitManager>>>,
+    code: Option<String>,
+) -> Result<(), RitaClientError> {
     let client_settings = settings::get_rita_client();
-    let exit = match get_current_exit() {
+
+    info!("In exit setup request about to grab em_ref lock");
+    // This is put into it's own scope to drop the lock as soon as possible
+    // so that we don't hold it while waiting for the exit to respond
+    let (exit, registration_state) = {
+        let em_ref = em_ref.read().unwrap();
+        (
+            em_ref.get_current_exit(),
+            em_ref.get_exit_registration_state(),
+        )
+    };
+    info!("got the info from the lock");
+
+    let exit = match exit {
+        Some(exit) => exit,
         None => {
             return Err(RitaClientError::MiscStringError(
-                "No exit set, can't register!".to_string(),
+                "No exit selected".to_string(),
             ))
         }
-        Some(exit) => exit,
     };
 
-    match client_settings.exit_client.registration_state.clone() {
+    match registration_state.clone() {
         ExitState::New { .. } | ExitState::Pending { .. } => {
             let exit_pubkey = exit.wg_key;
 
@@ -144,12 +161,11 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
 
             let exit_response = send_exit_setup_request(exit_pubkey, endpoint, ident).await?;
 
-            info!("Setting an exit setup response");
-            // we already have a loaded rita client settings above, but it could have been several seconds
-            // since we loaded above, better to load a new copy just in case
-            let mut client_settings = settings::get_rita_client();
-            client_settings.exit_client.registration_state = exit_response;
-            set_rita_client(client_settings);
+            info!("Got exit setup response {:?}", exit_response);
+            em_ref
+                .write()
+                .unwrap()
+                .set_exit_registration_state(exit, exit_response.clone());
 
             Ok(())
         }
@@ -160,8 +176,7 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
             );
             error!(
                 "Could not find a valid exit to register to! {:#?} {:#?}",
-                client_settings.exit_client.verified_exit_list,
-                client_settings.exit_client.registration_state
+                client_settings.exit_client.verified_exit_list, registration_state
             );
             Err(RitaClientError::MiscStringError(
                 "Could not find a valid exit to register to!".to_string(),
@@ -174,7 +189,10 @@ pub async fn exit_setup_request(code: Option<String>) -> Result<(), RitaClientEr
     }
 }
 
-pub async fn exit_status_request(exit: ExitIdentity) -> Result<(), RitaClientError> {
+pub async fn exit_status_request(
+    exit: ExitIdentity,
+    em_state: Arc<RwLock<ExitManager>>,
+) -> Result<(), RitaClientError> {
     let exit_list = match settings::get_rita_client().exit_client.verified_exit_list {
         Some(list) => list,
         None => {
@@ -222,11 +240,11 @@ pub async fn exit_status_request(exit: ExitIdentity) -> Result<(), RitaClientErr
     );
 
     let exit_response = send_exit_status_request(exit_pubkey, &endpoint, ident).await?;
-    let mut rita_client = settings::get_rita_client();
-    rita_client.exit_client.registration_state = exit_response.clone();
-    settings::set_rita_client(rita_client);
-
     trace!("Got exit status response {:?}", exit_response);
+    em_state
+        .write()
+        .unwrap()
+        .set_exit_registration_state(exit, exit_response);
     Ok(())
 }
 

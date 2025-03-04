@@ -1,9 +1,10 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
-use crate::exit_manager::get_current_exit;
 use crate::exit_manager::requests::exit_setup_request;
+use crate::exit_manager::ExitManager;
 use crate::RitaClientError;
 use actix_web::http::StatusCode;
+use actix_web::web;
 use actix_web::{web::Path, HttpRequest, HttpResponse};
 use althea_kernel_interface::ping_check::ping_check;
 use althea_types::{ExitIdentity, ExitState};
@@ -11,6 +12,7 @@ use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::parsing::do_we_have_route;
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -56,7 +58,9 @@ fn is_tunnel_working(
     }
 }
 
-pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
+pub fn dashboard_get_exit_info(
+    em_ref: Arc<Arc<RwLock<ExitManager>>>,
+) -> Result<Vec<ExitInfo>, RitaClientError> {
     let babel_port = settings::get_rita_client().network.babel_port;
     match open_babel_stream(babel_port, Duration::from_secs(5)) {
         Ok(mut stream) => {
@@ -66,8 +70,9 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                     let mut output = Vec::new();
                     let rita_client = settings::get_rita_client();
                     let exit_client = rita_client.exit_client;
-                    let reg_state = exit_client.registration_state;
-                    let current_exit = get_current_exit();
+                    let em_ref = em_ref.read().unwrap();
+                    let reg_state = em_ref.get_exit_registration_state();
+                    let current_exit = em_ref.get_current_exit();
 
                     let verified_exit_list = match exit_client.verified_exit_list.clone() {
                         Some(list) => list,
@@ -116,19 +121,22 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
     }
 }
 
-pub async fn get_exit_info(_req: HttpRequest) -> HttpResponse {
+pub async fn get_exit_info(
+    _req: HttpRequest,
+    em_ref: web::Data<Arc<RwLock<ExitManager>>>,
+) -> HttpResponse {
     debug!("Exit endpoint hit!");
-    match dashboard_get_exit_info() {
+    match dashboard_get_exit_info(em_ref.into_inner()) {
         Ok(a) => HttpResponse::Ok().json(a),
         Err(e) => HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e:?}")),
     }
 }
 
-pub async fn register_to_exit() -> HttpResponse {
+pub async fn register_to_exit(em_ref: web::Data<Arc<RwLock<ExitManager>>>) -> HttpResponse {
     info!("/exit/register hit");
 
     let mut ret = HashMap::new();
-    if let Err(e) = exit_setup_request(None).await {
+    if let Err(e) = exit_setup_request(em_ref.into_inner(), None).await {
         error!("exit_setup_request() failed with: {:?}", e);
         ret.insert("error".to_owned(), "Exit setup request failed".to_owned());
         ret.insert("rust_error".to_owned(), format!("{e:?}"));
@@ -137,12 +145,15 @@ pub async fn register_to_exit() -> HttpResponse {
     HttpResponse::Ok().json(ret)
 }
 
-pub async fn verify_on_exit_with_code(path: Path<String>) -> HttpResponse {
+pub async fn verify_on_exit_with_code(
+    path: Path<String>,
+    em_ref: web::Data<Arc<RwLock<ExitManager>>>,
+) -> HttpResponse {
     let code = path.into_inner();
     debug!("/exit/verify/{} hit", code);
 
     let mut ret = HashMap::new();
-    if let Err(e) = exit_setup_request(Some(code)).await {
+    if let Err(e) = exit_setup_request(em_ref.into_inner(), Some(code)).await {
         error!("exit_setup_request() failed with: {:?}", e);
         ret.insert("error".to_owned(), "Exit setup request failed".to_owned());
         ret.insert("rust_error".to_owned(), format!("{e:?}"));
