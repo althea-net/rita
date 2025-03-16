@@ -116,21 +116,43 @@ impl TokenBridge {
     ) -> Result<Uint256, TokenBridgeError> {
         let secret = self.eth_privatekey;
 
-        // You basically just send it some dai to the bridge address and they show
-        // up in the same address on the xdai side we have no idea when this has succeeded
-        // since the events are not indexed
+        let allowance = self
+            .eth_web3
+            .get_erc20_allowance(
+                *DAI_CONTRACT_ON_ETH,
+                self.eth_privatekey.to_address(),
+                self.xdai_bridge_on_eth,
+            )
+            .await?;
+        trace!("Current DAI allowance on the bridge is {}", allowance);
+        if dai_amount > allowance {
+            trace!("Executing approval for DAI transfer");
+            // approve 1000 dai at a time, this reduces gas costs for the user
+            self.eth_web3
+                .erc20_approve(
+                    *DAI_CONTRACT_ON_ETH,
+                    // 1000 dai
+                    1000000000000000000000u128.into(),
+                    self.eth_privatekey,
+                    self.xdai_bridge_on_eth,
+                    Some(timeout),
+                    vec![],
+                )
+                .await?;
+        }
+
         let tx = self
             .eth_web3
             .prepare_transaction(
-                *DAI_CONTRACT_ON_ETH,
+                self.xdai_bridge_on_eth,
                 encode_call(
-                    "transfer(address,uint256)",
-                    &[self.xdai_bridge_on_eth.into(), dai_amount.into()],
+                    "relayTokens(address,uint256)",
+                    &[self.eth_privatekey.to_address().into(), dai_amount.into()],
                 )
                 .unwrap(),
                 0u32.into(),
                 secret,
-                Vec::new(),
+                vec![],
             )
             .await?;
         let tx_hash = self.eth_web3.send_prepared_transaction(tx).await?;

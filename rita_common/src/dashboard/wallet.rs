@@ -6,6 +6,7 @@ use actix_web_async::http::StatusCode;
 use actix_web_async::web::Path;
 use actix_web_async::HttpResponse;
 use althea_types::SystemChain;
+use clarity::utils::display_uint256_as_address;
 use clarity::Address;
 use num256::Uint256;
 use std::time::Duration;
@@ -98,15 +99,14 @@ pub async fn eth_compatible_withdraw(dest: Address, amount: Uint256) -> HttpResp
         )
         .await;
     match tx {
-        Ok(tx) => {
-            let transaction_status = web3.send_prepared_transaction(tx).await;
-            if let Err(e) = transaction_status {
-                HttpResponse::InternalServerError()
-                    .json(format!("Withdraw failed with {:?} try again!", e))
-            } else {
-                HttpResponse::Ok().json(format!("Successful withdraw of {} to {}", amount, dest))
-            }
-        }
+        Ok(tx) => match web3.send_prepared_transaction(tx).await {
+            Ok(transaction_status) => HttpResponse::Ok().json(format!(
+                "{}",
+                display_uint256_as_address(transaction_status)
+            )),
+            Err(e) => HttpResponse::InternalServerError()
+                .json(format!("Withdraw failed with {:?} try again!", e)),
+        },
         Err(e) => HttpResponse::InternalServerError()
             .json(format!("Withdraw failed with {:?} try again!", e)),
     }
