@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -eux
-export TARGET=ipq40xx
-export TRIPLE=armv7-unknown-linux-musleabihf
+export TARGET=aarch64
+export TRIPLE=aarch64-unknown-linux-musl
+export RITA_VERSION=rita
 export ROUTER_IP=192.168.10.1
 bash scripts/cross_building/openwrt_build_$TARGET.sh --features rita_bin/development
 set +e
