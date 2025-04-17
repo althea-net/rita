@@ -143,7 +143,7 @@ pub fn one_time_exit_setup(
         ],
     )?;
 
-    let output = run_command("ip", &["link", "set", "dev", interface, "mtu", "1500"])?;
+    let output = run_command("ip", &["link", "set", "dev", interface, "mtu", "1340"])?;
     if !output.stderr.is_empty() {
         return Err(KernelInterfaceError::RuntimeError(format!(
             "received error adding wg link: {}",
