@@ -188,7 +188,7 @@ impl dyn KernelInterface {
             ],
         )?;
 
-        let output = self.run_command("ip", &["link", "set", "dev", interface, "mtu", "1500"])?;
+        let output = self.run_command("ip", &["link", "set", "dev", interface, "mtu", "1340"])?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error adding wg link: {}",
