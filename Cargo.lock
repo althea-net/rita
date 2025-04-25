@@ -1360,6 +1360,7 @@ dependencies = [
  "crossbeam",
  "env_logger",
  "futures 0.3.31",
+ "lazy_static",
  "log",
  "openssl",
  "openssl-probe",
