@@ -20,8 +20,8 @@ pub fn check_integration_test_netns() -> u32 {
         };
         let ns = ns.trim();
         match (
-            ns.split('-').last().unwrap().parse(),
-            ns.split('_').last().unwrap().parse(),
+            ns.split('-').next_back().unwrap().parse(),
+            ns.split('_').next_back().unwrap().parse(),
         ) {
             (Ok(a), _) => a,
             (_, Ok(a)) => a,

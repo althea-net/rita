@@ -124,7 +124,7 @@ pub async fn exit_setup_request(
     };
 
     match registration_state.clone() {
-        ExitState::New { .. } | ExitState::Pending { .. } => {
+        ExitState::New | ExitState::Pending { .. } => {
             let exit_pubkey = exit.wg_key;
 
             let mut reg_details: ExitRegistrationDetails = match get_registration_details() {

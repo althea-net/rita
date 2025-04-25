@@ -22,9 +22,9 @@ use web30::jsonrpc::error::Web3Error;
 pub mod client_db;
 pub mod config;
 pub mod endpoints;
+pub mod legacy_client_registration;
 pub mod register_client_batch_loop;
 pub mod sms_auth;
-pub mod legacy_client_registration;
 
 const RPC_SERVER: &str = "https://dai.althea.net";
 const WEB3_TIMEOUT: Duration = Duration::from_secs(10);
