@@ -24,6 +24,7 @@ pub mod config;
 pub mod endpoints;
 pub mod register_client_batch_loop;
 pub mod sms_auth;
+pub mod legacy_client_registration;
 
 const RPC_SERVER: &str = "https://dai.althea.net";
 const WEB3_TIMEOUT: Duration = Duration::from_secs(10);
