@@ -258,7 +258,7 @@ async fn handle_exit_status_request(
     match registration_state {
         // Once one exit is registered, this moves all exits from New -> Registered
         // Giving us an internal ipv4 and ipv6 address for each exit in our config
-        ExitState::New { .. } => {
+        ExitState::New => {
             trace!(
                 "Exit {} is in state NEW, calling general details",
                 curr_exit.mesh_ip

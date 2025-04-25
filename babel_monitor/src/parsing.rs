@@ -69,14 +69,8 @@ pub fn parse_interfaces_sync(output: String) -> Result<Vec<Interface>, BabelMoni
                     Ok(val) => val,
                     Err(_) => continue,
                 },
-                ipv4: match find_and_parse_babel_val("ipv4", entry) {
-                    Ok(val) => Some(val),
-                    Err(_) => None,
-                },
-                ipv6: match find_and_parse_babel_val("ipv6", entry) {
-                    Ok(val) => Some(val),
-                    Err(_) => None,
-                },
+                ipv4: find_and_parse_babel_val("ipv4", entry).ok(),
+                ipv6: find_and_parse_babel_val("ipv6", entry).ok(),
             };
             vector.push(interface);
         }

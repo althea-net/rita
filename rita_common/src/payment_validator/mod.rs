@@ -359,8 +359,8 @@ impl PaymentValidator {
 
             if elapsed.is_some() && elapsed.unwrap() > PAYMENT_RECEIVE_TIMEOUT {
                 error!(
-                    "Incoming transaction {} has timed out, payment failed!",
-                    format!("{:#066x}", item.payment.txid)
+                    "Incoming transaction {:#066x} has timed out, payment failed!",
+                    item.payment.txid
                 );
 
                 to_delete.push((item.clone(), TxValidationStatus::ToUsFailure));

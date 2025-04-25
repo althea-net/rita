@@ -245,10 +245,7 @@ fn maybe_get_single_line_u64(path: &str) -> Option<u64> {
         Ok(line) => {
             let var_name = line.first();
             match var_name {
-                Some(val) => match val.parse() {
-                    Ok(res) => Some(res),
-                    Err(_e) => None,
-                },
+                Some(val) => val.parse().ok(),
                 None => None,
             }
         }

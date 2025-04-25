@@ -200,7 +200,7 @@ pub async fn deploy_contracts() -> Address {
     );
     let contract_addr = from_utf8(&res.stdout).unwrap();
     info!("Contract is: {}", contract_addr);
-    let mut res = contract_addr.split(' ').last().unwrap().to_string();
+    let mut res = contract_addr.split(' ').next_back().unwrap().to_string();
     res.pop();
     res.parse().unwrap()
 }
@@ -611,7 +611,7 @@ pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
         let stderr = from_utf8(&output.stderr).expect("Why is this failing");
         let std_output = from_utf8(&output.stdout).expect("could not get output for client setup!");
         if !std_output.is_empty() {
-            info!("Server out: {}", format!("{}", std_output));
+            info!("Server out: {}", std_output);
         } else {
             panic!(
                 "Iperf server failed to generate traffic with status {} and stderr {}",
@@ -642,7 +642,7 @@ pub fn generate_traffic(from: Namespace, to: Option<Namespace>, data: String) {
         let stderr = from_utf8(&output.stderr).expect("Why is this failing");
         let std_output = from_utf8(&output.stdout).expect("could not get output for client setup!");
         if !std_output.is_empty() {
-            info!("Client out: {}", format!("{}", std_output));
+            info!("Client out: {}", std_output);
             break;
         } else if stderr.contains("Connection refused") || stderr.contains("Bad file descriptor") {
             info!("server not set up yet");
