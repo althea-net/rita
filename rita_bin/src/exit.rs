@@ -177,6 +177,8 @@ async fn main() {
     save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(Box::new(
         settings::get_rita_exit(),
     )));
+    info!("Starting exit websocket loop");
+    rita_client::operator_update::ops_websocket::start_websocket_operator_update_loop(None);
 
     // this call blocks, transforming this startup thread into the main exit watchdog thread
     start_rita_exit_loop(client_and_ip_map).await;
@@ -225,6 +227,8 @@ async fn check_startup_balance_and_contract(
 }
 
 async fn get_registered_users() -> Result<HashSet<Identity>, Web3Error> {
+    // todo test only
+    return Ok(HashSet::new());
     let payment_settings = settings::get_rita_common().payment;
     let our_address = payment_settings.eth_address.expect("No address!");
     let full_node = get_web3_server();
@@ -239,7 +243,10 @@ async fn check_balance(
     our_address: Address,
     startup_status: Arc<RwLock<Option<String>>>,
 ) -> Result<(), String> {
+    // todo test only
+    return Ok(());
     let full_node = get_web3_server();
+    info!("Full node url: {}", full_node);
     let web3 = web30::client::Web3::new(&full_node, Duration::from_secs(5));
     let res = web3.eth_get_balance(our_address).await;
     match res {

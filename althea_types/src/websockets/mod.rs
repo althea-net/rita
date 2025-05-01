@@ -7,9 +7,7 @@ use num256::Uint256;
 pub mod encryption;
 
 use crate::{
-    BillingDetails, ContactType, ExitConnection, HardwareInfo, Identity, InstallationDetails,
-    NeighborStatus, ShaperSettings, SystemChain, UpdateType, UpdateTypeLegacy,
-    UsageTrackerTransfer, WgKey, WifiToken,
+    BillingDetails, ContactType, ExitConnection, ExitDetails, HardwareInfo, Identity, InstallationDetails, NeighborStatus, ShaperSettings, SystemChain, UpdateType, UpdateTypeLegacy, UsageTrackerTransfer, WgKey, WifiToken
 };
 
 /// Variants of this enum are the types of data that ops can receive over a websocket connection
@@ -25,6 +23,8 @@ pub enum RouterWebsocketMessage {
     CustomerDetails(WsCustomerDetailsStruct),
     /// Information about the router's connection and bandwidth usage
     ConnectionDetails(WsConnectionDetailsStruct),
+    /// Information about an appliance exit sent over to ops
+    ApplianceExitInfo(WsApplianceExitInfo),
 }
 
 // just ignore the hardware info field on the timeseries data message for now
@@ -84,6 +84,7 @@ impl PartialEq for RouterWebsocketMessage {
                     user_bandwidth_usage: user_bandwidth_usage1,
                     client_mbps: client_mbps1,
                     relay_mbps: relay_mbps1,
+                    exit_mbps: exit_mbps1,
                 }),
                 RouterWebsocketMessage::ConnectionDetails(WsConnectionDetailsStruct {
                     id: id2,
@@ -92,6 +93,7 @@ impl PartialEq for RouterWebsocketMessage {
                     user_bandwidth_usage: user_bandwidth_usage2,
                     client_mbps: client_mbps2,
                     relay_mbps: relay_mbps2,
+                    exit_mbps: exit_mbps2,
                 }),
             ) => {
                 id1 == id2
@@ -100,6 +102,7 @@ impl PartialEq for RouterWebsocketMessage {
                     && user_bandwidth_usage1 == user_bandwidth_usage2
                     && client_mbps1 == client_mbps2
                     && relay_mbps1 == relay_mbps2
+                    && exit_mbps1 == exit_mbps2
             }
             _ => false,
         }
@@ -165,6 +168,17 @@ pub struct WsConnectionDetailsStruct {
     /// Curent relay data usage in mbps, coputed as the last input to the usage tracker
     /// so an average of around 5-10 seconds
     pub relay_mbps: Option<u64>,
+    /// Current relay data usage in mbps computed as the last input to the usage tracker
+    /// so an average of around 5-10 seconds (only sent by exits)
+    pub exit_mbps: Option<u64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Message containing info about the appliance exit that is not otherwise covered by the 
+/// other messages or sent in heartbeats which exits do not send
+pub struct WsApplianceExitInfo {
+    pub id: Identity,
+    pub version: String,
+    pub exit_details: ExitDetails,
 }
 
 /// Something the operator may want to do to a router under their control

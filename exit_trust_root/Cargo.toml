@@ -40,3 +40,4 @@ actix-rt = {workspace=true}
 
 [features]
 development = []
+local_test = []

@@ -162,7 +162,7 @@ pub fn start_rita_client_loops() -> Arc<RwLock<ExitManager>> {
     crate::exit_manager::exit_loop::start_exit_manager_loop(exit_state.clone());
     crate::rita_loop::start_rita_client_loop(exit_state.clone());
     crate::self_rescue::start_rita_client_rescue_loop();
-    crate::operator_update::ops_websocket::start_websocket_operator_update_loop(exit_state.clone());
+    crate::operator_update::ops_websocket::start_websocket_operator_update_loop(Some(exit_state.clone()));
     send_heartbeat_loop(exit_state.clone());
     exit_state
 }

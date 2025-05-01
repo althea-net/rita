@@ -19,8 +19,7 @@ extern crate arrayvec;
 
 use althea_kernel_interface::netns::check_integration_test_netns;
 use althea_types::{
-    BillingDetails, ContactType, ExitRegistrationDetails, Identity, InstallationDetails,
-    SystemChain,
+    BillingDetails, ContactType, ExitDetails, ExitRegistrationDetails, ExitVerifMode, Identity, InstallationDetails, SystemChain
 };
 use clarity::Address;
 use logging::LoggingSettings;
@@ -324,14 +323,14 @@ pub fn get_rita_client() -> RitaClientSettings {
     match SETTINGS.read().unwrap().get(&netns) {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.get_client().unwrap(),
         Some(Settings::Client(settings)) => settings.clone(),
-        Some(Settings::Exit(_)) => panic!("expected client settings, but got exit setttings"),
+        Some(Settings::Exit(_)) => panic!("expected client settings, but got exit settings"),
         None => panic!("expected settings but got none"),
     }
 }
 
 pub fn get_contact_info() -> Option<ContactType> {
-    let rita_client = get_rita_client();
-    option_convert(rita_client.payment.contact_info)
+    let rita_common = get_rita_common();
+    option_convert(rita_common.payment.contact_info)
 }
 pub fn get_registration_details() -> Option<ExitRegistrationDetails> {
     let rita_client = get_rita_client();
@@ -357,8 +356,8 @@ pub fn get_billing_details() -> Option<BillingDetails> {
     operator_settings.billing_details
 }
 pub fn get_user_bandwidth_limit() -> Option<usize> {
-    let rita_client = get_rita_client();
-    rita_client.network.user_bandwidth_limit
+    let rita_common = get_rita_common();
+    rita_common.network.user_bandwidth_limit
 }
 pub fn get_operator_address() -> Option<Address> {
     let rita_client = get_rita_client();
@@ -366,8 +365,8 @@ pub fn get_operator_address() -> Option<Address> {
     operator_settings.operator_address
 }
 pub fn get_system_chain() -> SystemChain {
-    let rita_client = get_rita_client();
-    let payment = rita_client.payment;
+    let rita_common = get_rita_common();
+    let payment = rita_common.payment;
     payment.system_chain
 }
 
@@ -389,6 +388,23 @@ pub fn get_rita_exit() -> RitaExitSettingsStruct {
         val.clone()
     } else {
         panic!("Failed to get RitaExitSettings from storage");
+    }
+}
+
+pub fn get_exit_details() -> ExitDetails {
+    let exit_settings = get_rita_exit();
+    ExitDetails {
+        server_internal_ip: exit_settings
+            .exit_network
+            .internal_ipv4
+            .internal_ip()
+            .into(),
+        wg_exit_port: exit_settings.exit_network.wg_tunnel_port,
+        exit_price: exit_settings.exit_network.exit_price,
+        exit_currency: exit_settings.payment.system_chain,
+        netmask: exit_settings.exit_network.internal_ipv4.prefix(),
+        description: exit_settings.description,
+        verif_mode: ExitVerifMode::Phone,
     }
 }
 

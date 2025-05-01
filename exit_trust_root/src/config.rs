@@ -19,7 +19,7 @@ pub struct Config {
     /// How long to wait for a response from a full node before timing out
     /// in seconds. Set this conservatively to avoid crashing an operation
     /// that has already been running for a long time.
-    #[arg(short, long, default_value = "30")]
+    #[arg(long, default_value = "30")]
     pub timeout: u64,
     /// rpc url to use, this should be an ETH node on the same network as the
     /// database smart contract
@@ -42,7 +42,7 @@ pub struct Config {
     /// The Magic number if provided bypasses authentication
     /// and registers the user with the given identity
     /// If set to true use https mode
-    #[arg(short, long)]
+    #[arg(long)]
     pub https: bool,
     /// URL to listen on
     #[arg(short, long)]
