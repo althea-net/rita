@@ -5,6 +5,7 @@ use clarity::Address;
 use ipnetwork::IpNetwork;
 use serde::Deserialize;
 use serde::Serialize;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::net::IpAddr;
 
@@ -119,6 +120,16 @@ pub enum ExitVerifMode {
     Phone,
     Email,
     Off,
+}
+
+impl Display for ExitVerifMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExitVerifMode::Phone => write!(f, "Phone"),
+            ExitVerifMode::Email => write!(f, "Email"),
+            ExitVerifMode::Off => write!(f, "Off"),
+        }
+    }
 }
 
 fn default_verif_mode() -> ExitVerifMode {

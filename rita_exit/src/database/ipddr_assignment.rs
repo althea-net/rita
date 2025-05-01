@@ -1,5 +1,5 @@
 use super::dualmap::DualMap;
-use crate::database::get_exit_info;
+use crate::database::get_exit_details;
 use crate::rita_loop::RitaExitData;
 use crate::RitaExitError;
 use althea_kernel_interface::exit_server_tunnel::setup_client_snat;
@@ -127,7 +127,7 @@ impl ClientListAnIpAssignmentMap {
                     client_internal_ip: IpAddr::V4(current_ip),
                     internet_ipv6_subnet: current_internet_ipv6,
                 },
-                general_details: get_exit_info(),
+                general_details: get_exit_details(),
                 message: "Registration OK".to_string(),
                 identity: Box::new(exit.get_exit_identity()),
             })

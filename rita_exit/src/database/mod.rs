@@ -24,7 +24,7 @@ use althea_kernel_interface::ExitClient;
 use althea_types::regions::Regions;
 use althea_types::Identity;
 use althea_types::WgKey;
-use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
+use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
 use exit_trust_root::endpoints::RegisterRequest;
 use exit_trust_root::endpoints::SubmitCodeRequest;
 use ipnetwork::IpNetwork;
@@ -33,6 +33,7 @@ use rita_common::blockchain_oracle::calculate_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
 use settings::exit::ExitIpv4RoutingSettings;
+use settings::get_exit_details;
 use settings::get_rita_exit;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -52,23 +53,6 @@ pub const ONE_DAY: i64 = 86400;
 
 /// Timeout when requesting client registration
 pub const CLIENT_REGISTER_TIMEOUT: Duration = Duration::from_secs(5);
-
-pub fn get_exit_info() -> ExitDetails {
-    let exit_settings = get_rita_exit();
-    ExitDetails {
-        server_internal_ip: exit_settings
-            .exit_network
-            .internal_ipv4
-            .internal_ip()
-            .into(),
-        wg_exit_port: exit_settings.exit_network.wg_tunnel_port,
-        exit_price: exit_settings.exit_network.exit_price,
-        exit_currency: exit_settings.payment.system_chain,
-        netmask: exit_settings.exit_network.internal_ipv4.prefix(),
-        description: exit_settings.description,
-        verif_mode: ExitVerifMode::Phone,
-    }
-}
 
 /// Handles a new client registration api call. Performs a geoip lookup
 /// on their registration ip to make sure that they are coming from a valid gateway
@@ -131,7 +115,7 @@ pub async fn signup_client(
                 client_internal_ip: exit_client.internal_ip,
                 internet_ipv6_subnet: exit_client.internet_ipv6,
             },
-            general_details: get_exit_info(),
+            general_details: get_exit_details(),
             message: "Registration OK".to_string(),
             identity: Box::new(exit_settings.get_exit_identity()),
         })

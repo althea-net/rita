@@ -53,7 +53,9 @@ pub fn get_web3_server() -> String {
     let mut rng = thread_rng();
     let val = rng.gen_range(0..node_list.len());
 
-    node_list[val].clone()
+    //node_list[val].clone()
+    // TODO TEST ONLY
+    "https://testnet.althea.zone:9090".to_string()
 }
 
 /// Checks the list of full nodes, panics if none exist, if there exist

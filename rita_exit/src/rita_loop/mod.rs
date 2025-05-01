@@ -310,6 +310,8 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
 
 /// Updates the client list, if this is not successful the old client list is used
 async fn update_client_list(reg_clients_list: HashSet<Identity>) -> HashSet<Identity> {
+    // TODO testing only
+    return HashSet::new();
     let payment_settings = settings::get_rita_common().payment;
     let contract_address = settings::get_rita_exit()
         .exit_network
