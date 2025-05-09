@@ -28,7 +28,7 @@ use rita_common::dashboard::interfaces::InterfaceMode;
 use rita_common::tunnel_manager::tm_get_neighbors;
 use rita_common::usage_tracker::get_current_hour;
 use rita_common::usage_tracker::get_last_saved_usage_hour;
-use settings::client::RitaClientSettings;
+use settings::RitaSettings;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -162,7 +162,9 @@ pub fn start_rita_client_loops() -> Arc<RwLock<ExitManager>> {
     crate::exit_manager::exit_loop::start_exit_manager_loop(exit_state.clone());
     crate::rita_loop::start_rita_client_loop(exit_state.clone());
     crate::self_rescue::start_rita_client_rescue_loop();
-    crate::operator_update::ops_websocket::start_websocket_operator_update_loop(Some(exit_state.clone()));
+    crate::operator_update::ops_websocket::start_websocket_operator_update_loop(Some(
+        exit_state.clone(),
+    ));
     send_heartbeat_loop(exit_state.clone());
     exit_state
 }
@@ -205,7 +207,7 @@ fn check_for_gateway_client_billing_corner_case(exit_state_ref: Arc<RwLock<ExitM
     }
 }
 
-pub fn start_antenna_forwarder(settings: RitaClientSettings) {
+pub fn start_antenna_forwarder(settings: RitaSettings) {
     let url: &str;
     if cfg!(feature = "dev_env") {
         url = "7.7.7.7:33300";

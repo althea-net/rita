@@ -19,7 +19,8 @@ extern crate arrayvec;
 
 use althea_kernel_interface::netns::check_integration_test_netns;
 use althea_types::{
-    BillingDetails, ContactType, ExitDetails, ExitRegistrationDetails, ExitVerifMode, Identity, InstallationDetails, SystemChain
+    BillingDetails, ContactType, ExitDetails, ExitRegistrationDetails, ExitVerifMode, Identity,
+    InstallationDetails, SystemChain,
 };
 use clarity::Address;
 use logging::LoggingSettings;

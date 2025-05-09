@@ -35,9 +35,13 @@ use rita_common::DROPBEAR_AUTHORIZED_KEYS;
 use serde_json::Map;
 use serde_json::Value;
 use settings::client::RitaClientSettings;
+use settings::exit::RitaExitSettingsStruct;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
-use settings::{check_if_exit, get_rita_common, option_convert, set_rita_client, set_rita_common};
+use settings::{
+    check_if_exit, get_rita_common, get_rita_exit, option_convert, set_rita_client,
+    set_rita_common, set_rita_exit,
+};
 use std::collections::{HashMap, HashSet};
 use std::fs::{remove_file, rename, File};
 use std::io::{BufRead, BufReader, Write};
@@ -171,7 +175,7 @@ pub fn handle_operator_update(
                     settings,
                 );
                 set_rita_common(rita_common);
-                return Ok(None)
+                return Ok(None);
             }
             let mut rita_client = settings::get_rita_client();
             let use_operator_price = rita_client.operator.use_operator_price
@@ -193,8 +197,8 @@ pub fn handle_operator_update(
         OperatorWebsocketMessage::OperatorFee(fee) => {
             info!("RECEIVED WEBSOCKET MESSAGE: OperatorFee");
             if check_if_exit() {
+                // exits do not have an operator fee setting
                 return Ok(None);
-                // todo
             }
             let mut rita_client = settings::get_rita_client();
             let use_operator_price = rita_client.operator.use_operator_price
@@ -210,16 +214,25 @@ pub fn handle_operator_update(
             info!("RECEIVED WEBSOCKET MESSAGE: MergeJson");
             // if we are an exit, handle differently since no client settings
             if check_if_exit() {
-                // let mut rita_exit = get_rita_exit();
-                // // merge the new settings into the local settings
-                // merge_settings_safely(&mut rita_exit, json);
-                // set_rita_exit(rita_exit);
-                return Ok(None);
+                let rita_exit = get_rita_exit();
+                if let MergeSettingsStruct::Exit(exit) =
+                    merge_settings_safely(MergeSettingsStruct::Exit(rita_exit), json)
+                {
+                    set_rita_exit(exit);
+                } else {
+                    error!("Failed to merge settings, expected exit settings");
+                }
+            } else {
+                let rita_client = settings::get_rita_client();
+                // merge the new settings into the local settings
+                if let MergeSettingsStruct::Client(client) =
+                    merge_settings_safely(MergeSettingsStruct::Client(rita_client), json)
+                {
+                    set_rita_client(client);
+                } else {
+                    error!("Failed to merge settings, expected client settings");
+                }
             }
-            let mut rita_client = settings::get_rita_client();
-            // merge the new settings into the local settings
-            merge_settings_safely(&mut rita_client, json);
-            set_rita_client(rita_client);
         }
         OperatorWebsocketMessage::OperatorAction(action) => {
             info!("RECEIVED WEBSOCKET MESSAGE: OperatorAction");
@@ -604,28 +617,52 @@ fn check_billing_update(current: Option<BillingDetails>, incoming: Option<Billin
     false
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+enum MergeSettingsStruct {
+    Client(RitaClientSettings),
+    Exit(RitaExitSettingsStruct),
+}
+impl MergeSettingsStruct {
+    fn merge(&mut self, new_settings: Value) {
+        match self {
+            MergeSettingsStruct::Client(settings) => match settings.merge(new_settings.clone()) {
+                Ok(_) => trace!("Merged new settings successfully {:?}", settings),
+                Err(e) => error!(
+                    "Failed to merge OperatorUpdate settings {:?} {:?}",
+                    new_settings, e
+                ),
+            },
+            MergeSettingsStruct::Exit(settings) => match settings.merge(new_settings.clone()) {
+                Ok(_) => trace!("Merged new settings successfully {:?}", settings),
+                Err(e) => error!(
+                    "Failed to merge OperatorUpdate settings {:?} {:?}",
+                    new_settings, e
+                ),
+            },
+        }
+    }
+}
+
 /// Merges an arbitrary settings string, after first filtering for several
 /// forbidden values
-fn merge_settings_safely(client_settings: &mut RitaClientSettings, new_settings: Value) {
-    trace!("we have settings from our config {:?}", client_settings);
+fn merge_settings_safely(
+    mut settings: MergeSettingsStruct,
+    new_settings: Value,
+) -> MergeSettingsStruct {
+    trace!("we have settings from our config {:?}", settings);
     trace!("Got new settings from server {:?}", new_settings);
     // merge in arbitrary setting change string if it's not blank
     if new_settings != "" {
         if let Value::Object(map) = new_settings.clone() {
             let contains_forbidden_key = contains_forbidden_key(map, &FORBIDDEN_MERGE_VALUES);
             if !contains_forbidden_key {
-                match client_settings.merge(new_settings.clone()) {
-                    Ok(_) => trace!("Merged new settings successfully {:?}", client_settings),
-                    Err(e) => error!(
-                        "Failed to merge OperatorUpdate settings {:?} {:?}",
-                        new_settings, e
-                    ),
-                }
+                settings.merge(new_settings)
             } else {
                 info!("Merge Json contains forbidden key! {:?}", new_settings);
             }
         }
     }
+    settings
 }
 
 /// Recursively traverses down a json object looking for items in the
