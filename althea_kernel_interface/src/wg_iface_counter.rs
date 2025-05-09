@@ -61,11 +61,7 @@ fn read_wg_counters_internal(stdout: String) -> Result<HashMap<WgKey, WgUsage>, 
             Ok(key) => {
                 result.insert(key, usage);
             }
-            Err(e) => warn!(
-                "Failed to parse WgKey {} with {:?}",
-                item["key"].to_string(),
-                e
-            ),
+            Err(e) => warn!("Failed to parse WgKey {} with {:?}", &item["key"], e),
         }
     }
 

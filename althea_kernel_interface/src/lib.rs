@@ -34,7 +34,7 @@ pub mod interface_tools;
 pub mod ip_addr;
 pub mod ip_neigh;
 pub mod ip_route;
-mod iptables;
+pub mod iptables;
 pub mod is_openwrt;
 pub mod link_local_tools;
 pub mod manipulate_uci;

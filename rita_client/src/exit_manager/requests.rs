@@ -124,7 +124,7 @@ pub async fn exit_setup_request(
     };
 
     match registration_state.clone() {
-        ExitState::New { .. } | ExitState::Pending { .. } => {
+        ExitState::New | ExitState::Pending { .. } => {
             let exit_pubkey = exit.wg_key;
 
             let mut reg_details: ExitRegistrationDetails = match get_registration_details() {
@@ -280,7 +280,15 @@ pub async fn get_exit_list() -> Result<SignedExitServerList, RitaClientError> {
     };
 
     let config = get_rita_client();
-    let allowed_signers = config.exit_client.allowed_exit_list_signers;
+    let mut allowed_signers = config.exit_client.allowed_exit_list_signers;
+    if cfg!(feature = "operator_debug") {
+        // In test mode, we allow any signer
+        allowed_signers.push(
+            "0x34d97aaf58b1a81d3ed3068a870d8093c6341cf5d1ef7e6efa03fe7f7fc2c3a8"
+                .parse()
+                .unwrap(),
+        );
+    }
 
     trace!(
         "About to verify exit list signer and contract we are expecting {} and signer {:?}",

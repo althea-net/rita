@@ -542,8 +542,8 @@ async fn send_make_payment_endpoints(
                         (make_payments_v1_ack, neighbor_url)
                     };
                     info!(
-                        "Payment pmt with tx identifier: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
-                        format!("{:#066x}", tx_id),
+                        "Payment pmt with tx identifier: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
+                        tx_id,
                         status.status(),
                         status.body().await,
                         url,
@@ -554,8 +554,9 @@ async fn send_make_payment_endpoints(
                 }
                 (false, false) => {
                     error!(
-                        "We published txid: {} to url {} but our neighbor responded with status {:?} and body {:?}, will retry",
-                                format!("{:#066x}", tx_id), neighbor_url, make_payments_v1_ack.status(), make_payments_v1_ack.body().await);
+                        "We published txid: {:#066x} to url {} but our neighbor responded with status {:?} and body {:?}, will retry",
+                        tx_id, neighbor_url, make_payments_v1_ack.status(), make_payments_v1_ack.body().await
+                    );
                     Some(resend_info)
                 }
             }
@@ -564,8 +565,8 @@ async fn send_make_payment_endpoints(
             // probably a b19 router
             if make_payments_v1_ack.status().is_success() {
                 info!(
-                    "Payment pmt with txid: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
-                    format!("{:#066x}", tx_id),
+                    "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
+                    tx_id,
                     make_payments_v1_ack.status(),
                     make_payments_v1_ack.body().await,
                     neighbor_url,
@@ -575,8 +576,8 @@ async fn send_make_payment_endpoints(
                 None
             } else {
                 error!(
-                    "Make_payment with tx identifier {} failed with status {:?} and body {:?}",
-                    format!("{:#066x}", tx_id),
+                    "Make_payment with tx identifier {:#066x} failed with status {:?} and body {:?}",
+                    tx_id,
                     make_payments_v1_ack.status(),
                     make_payments_v1_ack.body().await
                 );
@@ -588,8 +589,8 @@ async fn send_make_payment_endpoints(
             // has been removed, all this legacy code can be removed also
             if make_payments_v2_ack.status().is_success() {
                 info!(
-                    "Payment pmt with txid: {} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
-                    format!("{:#066x}", tx_id),
+                    "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using node {:?} and amount {}",
+                    tx_id,
                     make_payments_v2_ack.status(),
                     make_payments_v2_ack.body().await,
                     neighbor_url_v2,
@@ -599,8 +600,8 @@ async fn send_make_payment_endpoints(
                 None
             } else {
                 error!(
-                    "Make_payment_v2 with txid {} failed with status {:?} and body {:?}",
-                    format!("{:#066x}", tx_id),
+                    "Make_payment_v2 with txid {:#066x} failed with status {:?} and body {:?}",
+                    tx_id,
                     make_payments_v2_ack.status(),
                     make_payments_v2_ack.body().await
                 );
@@ -610,8 +611,8 @@ async fn send_make_payment_endpoints(
         (Err(_), Err(e)) => {
             // Why is make payment failing here? Call a resend
             error!(
-                "We published txid: {} but failed to notify our neighbor with {:?}, will retry",
-                format!("{:#066x}", tx_id),
+                "We published txid: {:#066x} but failed to notify our neighbor with {:?}, will retry",
+                tx_id,
                 e
             );
             Some(resend_info)

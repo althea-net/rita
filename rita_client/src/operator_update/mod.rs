@@ -29,15 +29,19 @@ use rita_common::dashboard::wifi::{reset_wifi_pass, set_wifi_multi_internal};
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
-use rita_common::usage_tracker::structs::UsageType::{Client, Relay};
+use rita_common::usage_tracker::structs::UsageType::{Client, Exit, Relay};
 use rita_common::usage_tracker::{get_current_hour, get_current_throughput, get_usage_data_map};
 use rita_common::DROPBEAR_AUTHORIZED_KEYS;
 use serde_json::Map;
 use serde_json::Value;
 use settings::client::RitaClientSettings;
+use settings::exit::RitaExitSettingsStruct;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
-use settings::{option_convert, set_rita_client};
+use settings::{
+    check_if_exit, get_rita_common, get_rita_exit, option_convert, set_rita_client,
+    set_rita_common, set_rita_exit,
+};
 use std::collections::{HashMap, HashSet};
 use std::fs::{remove_file, rename, File};
 use std::io::{BufRead, BufReader, Write};
@@ -84,7 +88,7 @@ pub fn get_neighbor_info() -> Vec<NeighborStatus> {
     neighbor_info
 }
 pub fn get_hardware_info_update() -> Option<HardwareInfo> {
-    let rita_client = settings::get_rita_client();
+    let rita_client = settings::get_rita_common();
     let logging_enabled = rita_client.log.enabled;
     // disable hardware info sending if logging is disabled
     let hardware_info = match logging_enabled {
@@ -111,6 +115,9 @@ pub fn get_client_mbps() -> Option<u64> {
 }
 pub fn get_relay_mbps() -> Option<u64> {
     get_current_throughput(Relay)
+}
+pub fn get_exit_mbps() -> Option<u64> {
+    get_current_throughput(Exit)
 }
 pub fn get_rita_uptime() -> Duration {
     RITA_UPTIME.elapsed()
@@ -155,6 +162,21 @@ pub fn handle_operator_update(
     match decrypted_message {
         OperatorWebsocketMessage::PaymentAndNetworkSettings(settings) => {
             info!("RECEIVED WEBSOCKET MESSAGE: PaymentAndNetworkSettings");
+            if check_if_exit() {
+                //todo: do gateway and operator price settings make sense here for exit?
+                let mut rita_common = get_rita_common();
+                let is_gateway = true;
+                let use_operator_price = true;
+                update_payment_and_network_settings(
+                    &mut rita_common.payment,
+                    &mut rita_common.network,
+                    use_operator_price,
+                    is_gateway,
+                    settings,
+                );
+                set_rita_common(rita_common);
+                return Ok(None);
+            }
             let mut rita_client = settings::get_rita_client();
             let use_operator_price = rita_client.operator.use_operator_price
                 || rita_client.operator.force_use_operator_price;
@@ -174,6 +196,10 @@ pub fn handle_operator_update(
 
         OperatorWebsocketMessage::OperatorFee(fee) => {
             info!("RECEIVED WEBSOCKET MESSAGE: OperatorFee");
+            if check_if_exit() {
+                // exits do not have an operator fee setting
+                return Ok(None);
+            }
             let mut rita_client = settings::get_rita_client();
             let use_operator_price = rita_client.operator.use_operator_price
                 || rita_client.operator.force_use_operator_price;
@@ -186,10 +212,27 @@ pub fn handle_operator_update(
         }
         OperatorWebsocketMessage::MergeJson(json) => {
             info!("RECEIVED WEBSOCKET MESSAGE: MergeJson");
-            let mut rita_client = settings::get_rita_client();
-            // merge the new settings into the local settings
-            merge_settings_safely(&mut rita_client, json);
-            set_rita_client(rita_client);
+            // if we are an exit, handle differently since no client settings
+            if check_if_exit() {
+                let rita_exit = get_rita_exit();
+                if let MergeSettingsStruct::Exit(exit) =
+                    merge_settings_safely(MergeSettingsStruct::Exit(rita_exit), json)
+                {
+                    set_rita_exit(exit);
+                } else {
+                    error!("Failed to merge settings, expected exit settings");
+                }
+            } else {
+                let rita_client = settings::get_rita_client();
+                // merge the new settings into the local settings
+                if let MergeSettingsStruct::Client(client) =
+                    merge_settings_safely(MergeSettingsStruct::Client(rita_client), json)
+                {
+                    set_rita_client(client);
+                } else {
+                    error!("Failed to merge settings, expected client settings");
+                }
+            }
         }
         OperatorWebsocketMessage::OperatorAction(action) => {
             info!("RECEIVED WEBSOCKET MESSAGE: OperatorAction");
@@ -209,16 +252,19 @@ pub fn handle_operator_update(
         }
         OperatorWebsocketMessage::ContactInfo(info) => {
             info!("RECEIVED WEBSOCKET MESSAGE: ContactInfo");
-            let mut rita_client = settings::get_rita_client();
+            let mut rita_common = settings::get_rita_common();
             let update =
-                check_contacts_update(rita_client.payment.contact_info.clone(), info.clone());
+                check_contacts_update(rita_common.payment.contact_info.clone(), info.clone());
             if update {
-                rita_client.payment.contact_info = option_convert(info);
+                rita_common.payment.contact_info = option_convert(info);
             }
-            set_rita_client(rita_client);
+            set_rita_common(rita_common);
         }
         OperatorWebsocketMessage::BillingDetails(details) => {
             info!("RECEIVED WEBSOCKET MESSAGE: BillingDetails");
+            if check_if_exit() {
+                return Ok(None);
+            }
             let mut rita_client = settings::get_rita_client();
             rita_client.operator.installation_details = None;
             if check_billing_update(
@@ -267,7 +313,8 @@ fn hardware_info_logs(info: &Option<HardwareInfo>) {
 
 /// checks the operatoraction and performs it, if any.
 fn perform_operator_action(action: OperatorAction) {
-    let mut rita_client = settings::get_rita_client();
+    let is_exit = check_if_exit();
+    let mut rita_common = settings::get_rita_common();
     match action {
         OperatorAction::ResetShaper => flag_reset_shaper(),
         OperatorAction::Reboot => {
@@ -280,7 +327,7 @@ fn perform_operator_action(action: OperatorAction) {
             }
         }
         OperatorAction::ResetRouterPassword => {
-            rita_client.network.rita_dashboard_password = None;
+            rita_common.network.rita_dashboard_password = None;
         }
         OperatorAction::ResetWiFiPassword => {
             let _res = reset_wifi_pass();
@@ -295,7 +342,15 @@ fn perform_operator_action(action: OperatorAction) {
             );
         }
         OperatorAction::ChangeOperatorAddress { new_address } => {
-            rita_client.operator.operator_address = new_address;
+            if is_exit {
+                let mut rita_exit = settings::get_rita_exit();
+                rita_exit.operator.operator_address = new_address;
+                settings::set_rita_exit(rita_exit);
+            } else {
+                let mut rita_client = settings::get_rita_client();
+                rita_client.operator.operator_address = new_address;
+                settings::set_rita_client(rita_client);
+            }
         }
         OperatorAction::Update { instruction } => {
             info!(
@@ -316,9 +371,9 @@ fn perform_operator_action(action: OperatorAction) {
         OperatorAction::SetMinGas { new_min_gas } => {
             info!(
                 "Updated min gas from {} to {}",
-                rita_client.payment.min_gas, new_min_gas
+                rita_common.payment.min_gas, new_min_gas
             );
-            rita_client.payment.min_gas = new_min_gas;
+            rita_common.payment.min_gas = new_min_gas;
         }
         OperatorAction::UpdateAuthorizedKeys {
             add_list,
@@ -330,31 +385,31 @@ fn perform_operator_action(action: OperatorAction) {
             info!("Update auth_keys result is  {:?}", res);
         }
     }
-    settings::set_rita_client(rita_client);
+    settings::set_rita_common(rita_common);
     info!("Successfully completed OperatorUpdate");
 }
 
 /// applies new shaper settings, called from an operator websocket message
 pub fn apply_shaper_settings_update(shaper_settings: ShaperSettings) {
-    let mut rita_client = settings::get_rita_client();
-    rita_client.network.shaper_settings = shaper_settings;
-    settings::set_rita_client(rita_client);
+    let mut rita_common = settings::get_rita_common();
+    rita_common.network.shaper_settings = shaper_settings;
+    settings::set_rita_common(rita_common);
 }
 
 pub fn apply_babeld_settings_update(babeld_settings: BabeldConfig) {
-    let mut rita_client = settings::get_rita_client();
+    let mut rita_common = settings::get_rita_common();
     // copy off the price and metric factor, which are stored in this object logically in local
     // settings but we do not wish to update from the ops side, we have specific fields (and user opt outs)
     // for these values elsewhere in the operator update flow
-    let price = rita_client.network.babeld_settings.local_fee;
-    let metric_factor = rita_client.network.babeld_settings.metric_factor;
+    let price = rita_common.network.babeld_settings.local_fee;
+    let metric_factor = rita_common.network.babeld_settings.metric_factor;
 
-    rita_client.network.babeld_settings = babeld_settings;
+    rita_common.network.babeld_settings = babeld_settings;
 
     // set the price and metric factor back to their original values
-    rita_client.network.babeld_settings.local_fee = price;
-    rita_client.network.babeld_settings.metric_factor = metric_factor;
-    settings::set_rita_client(rita_client);
+    rita_common.network.babeld_settings.local_fee = price;
+    rita_common.network.babeld_settings.metric_factor = metric_factor;
+    settings::set_rita_common(rita_common);
 }
 
 // cycles in/out ssh pubkeys for recovery access
@@ -562,28 +617,52 @@ fn check_billing_update(current: Option<BillingDetails>, incoming: Option<Billin
     false
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+enum MergeSettingsStruct {
+    Client(RitaClientSettings),
+    Exit(RitaExitSettingsStruct),
+}
+impl MergeSettingsStruct {
+    fn merge(&mut self, new_settings: Value) {
+        match self {
+            MergeSettingsStruct::Client(settings) => match settings.merge(new_settings.clone()) {
+                Ok(_) => trace!("Merged new settings successfully {:?}", settings),
+                Err(e) => error!(
+                    "Failed to merge OperatorUpdate settings {:?} {:?}",
+                    new_settings, e
+                ),
+            },
+            MergeSettingsStruct::Exit(settings) => match settings.merge(new_settings.clone()) {
+                Ok(_) => trace!("Merged new settings successfully {:?}", settings),
+                Err(e) => error!(
+                    "Failed to merge OperatorUpdate settings {:?} {:?}",
+                    new_settings, e
+                ),
+            },
+        }
+    }
+}
+
 /// Merges an arbitrary settings string, after first filtering for several
 /// forbidden values
-fn merge_settings_safely(client_settings: &mut RitaClientSettings, new_settings: Value) {
-    trace!("we have settings from our config {:?}", client_settings);
+fn merge_settings_safely(
+    mut settings: MergeSettingsStruct,
+    new_settings: Value,
+) -> MergeSettingsStruct {
+    trace!("we have settings from our config {:?}", settings);
     trace!("Got new settings from server {:?}", new_settings);
     // merge in arbitrary setting change string if it's not blank
     if new_settings != "" {
         if let Value::Object(map) = new_settings.clone() {
             let contains_forbidden_key = contains_forbidden_key(map, &FORBIDDEN_MERGE_VALUES);
             if !contains_forbidden_key {
-                match client_settings.merge(new_settings.clone()) {
-                    Ok(_) => trace!("Merged new settings successfully {:?}", client_settings),
-                    Err(e) => error!(
-                        "Failed to merge OperatorUpdate settings {:?} {:?}",
-                        new_settings, e
-                    ),
-                }
+                settings.merge(new_settings)
             } else {
                 info!("Merge Json contains forbidden key! {:?}", new_settings);
             }
         }
     }
+    settings
 }
 
 /// Recursively traverses down a json object looking for items in the
