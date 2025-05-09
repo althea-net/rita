@@ -7,7 +7,9 @@ use num256::Uint256;
 pub mod encryption;
 
 use crate::{
-    BillingDetails, ContactType, ExitConnection, ExitDetails, HardwareInfo, Identity, InstallationDetails, NeighborStatus, ShaperSettings, SystemChain, UpdateType, UpdateTypeLegacy, UsageTrackerTransfer, WgKey, WifiToken
+    BillingDetails, ContactType, ExitConnection, ExitDetails, HardwareInfo, Identity,
+    InstallationDetails, NeighborStatus, ShaperSettings, SystemChain, UpdateType, UpdateTypeLegacy,
+    UsageTrackerTransfer, WgKey, WifiToken,
 };
 
 /// Variants of this enum are the types of data that ops can receive over a websocket connection
@@ -173,7 +175,7 @@ pub struct WsConnectionDetailsStruct {
     pub exit_mbps: Option<u64>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// Message containing info about the appliance exit that is not otherwise covered by the 
+/// Message containing info about the appliance exit that is not otherwise covered by the
 /// other messages or sent in heartbeats which exits do not send
 pub struct WsApplianceExitInfo {
     pub id: Identity,

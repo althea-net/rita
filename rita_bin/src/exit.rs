@@ -18,6 +18,7 @@ use clarity::Address;
 use exit_trust_root::client_db::get_all_registered_clients;
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
+use rita_client::rita_loop::start_antenna_forwarder;
 use rita_exit::rita_loop::start_rita_exit_list_endpoint;
 use rita_exit::ClientListAnIpAssignmentMap;
 use std::collections::HashSet;
@@ -172,12 +173,13 @@ async fn main() {
     start_rita_exit_endpoints(client_and_ip_map.clone());
     start_rita_exit_list_endpoint();
 
+    let common_settings = settings::get_rita_common();
+    start_antenna_forwarder(common_settings);
     start_rita_common_loops();
     start_operator_update_loop();
     save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(Box::new(
         settings::get_rita_exit(),
     )));
-    info!("Starting exit websocket loop");
     rita_client::operator_update::ops_websocket::start_websocket_operator_update_loop(None);
 
     // this call blocks, transforming this startup thread into the main exit watchdog thread
@@ -227,8 +229,9 @@ async fn check_startup_balance_and_contract(
 }
 
 async fn get_registered_users() -> Result<HashSet<Identity>, Web3Error> {
-    // todo test only
-    return Ok(HashSet::new());
+    if cfg!(feature = "optools_dev_env") {
+        return Ok(HashSet::new());
+    }
     let payment_settings = settings::get_rita_common().payment;
     let our_address = payment_settings.eth_address.expect("No address!");
     let full_node = get_web3_server();
@@ -243,10 +246,10 @@ async fn check_balance(
     our_address: Address,
     startup_status: Arc<RwLock<Option<String>>>,
 ) -> Result<(), String> {
-    // todo test only
-    return Ok(());
+    if cfg!(feature = "optools_dev_env") {
+        return Ok(());
+    }
     let full_node = get_web3_server();
-    info!("Full node url: {}", full_node);
     let web3 = web30::client::Web3::new(&full_node, Duration::from_secs(5));
     let res = web3.eth_get_balance(our_address).await;
     match res {

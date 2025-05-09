@@ -1,15 +1,18 @@
 use super::{get_exit_mbps, ReceivedOpsData};
 use crate::{
-    exit_manager::ExitManager, operator_update::{
+    exit_manager::ExitManager,
+    operator_update::{
         get_client_mbps, get_exit_con, get_hardware_info_update, get_neighbor_info, get_relay_mbps,
         get_rita_uptime, get_user_bandwidth_usage, handle_operator_update,
-    }
+    },
 };
 use actix::System;
 use actix_web_actors::ws;
 use althea_types::{
     websockets::{
-        OperatorWebsocketResponse, RouterWebsocketMessage, WsApplianceExitInfo, WsConnectionDetailsStruct, WsCustomerDetailsStruct, WsOperatorAddressStruct, WsTimeseriesDataStruct
+        OperatorWebsocketResponse, RouterWebsocketMessage, WsApplianceExitInfo,
+        WsConnectionDetailsStruct, WsCustomerDetailsStruct, WsOperatorAddressStruct,
+        WsTimeseriesDataStruct,
     },
     ExitState, Identity,
 };
@@ -17,7 +20,8 @@ use awc::ws::Frame;
 use crypto_box::{PublicKey, SecretKey};
 use futures::{SinkExt, StreamExt};
 use settings::{
-    get_billing_details, get_contact_info, get_exit_details, get_install_details, get_operator_address, get_rita_exit, get_system_chain, get_user_bandwidth_limit
+    get_billing_details, get_contact_info, get_exit_details, get_install_details,
+    get_operator_address, get_rita_exit, get_system_chain, get_user_bandwidth_limit,
 };
 use std::{
     str,
@@ -170,17 +174,12 @@ pub fn start_websocket_operator_update_loop(exit_state_ref: Option<Arc<RwLock<Ex
                                                 ws.send(message).await.unwrap();
                                             }
                                             info!("Five minute client websocket update sent");
-                                            
                                         } else {
                                             let messages = get_five_minute_exit_update_data(
                                                 id,
                                                 ops_last_seen_usage_hour,
                                                 &our_secretkey, &ops_pubkey,
                                             );
-                                            for message in messages {
-                                                ws.send(message).await.unwrap();
-                                            }
-                                            let messages = get_ten_minute_exit_update_data(id, &our_secretkey, &ops_pubkey);
                                             for message in messages {
                                                 ws.send(message).await.unwrap();
                                             }
@@ -335,7 +334,7 @@ fn get_ten_minute_exit_update_data(
     messages.push(ws::Message::Binary(encrypted_json.into()));
     // send the exit details
     let exit_details = get_exit_details();
-    let data = RouterWebsocketMessage::ApplianceExitInfo(WsApplianceExitInfo{
+    let data = RouterWebsocketMessage::ApplianceExitInfo(WsApplianceExitInfo {
         id,
         version: env!("CARGO_PKG_VERSION").to_string(),
         exit_details,
