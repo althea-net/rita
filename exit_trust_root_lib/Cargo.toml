@@ -1,20 +1,15 @@
 [package]
-name = "exit_trust_root"
+name = "exit_trust_root_lib"
 version = "0.21.5"
 edition = "2021"
 license = "Apache-2.0"
-description = "Server to provide a root of exit trust for Althea routers"
+description = "Library functions for the exit trust root"
 
 [lib]
-name = "exit_trust_root"
+name = "exit_trust_root_lib"
 path = "src/lib.rs"
 
-[[bin]]
-name = "exit_trust_root_server"
-path = "src/bin.rs"
-
 [dependencies]
-clap = {version="4", features=["derive"]}
 althea_types = { path = "../althea_types" }
 awc = {workspace = true}
 actix-web = {workspace = true}

@@ -39,7 +39,7 @@ rita_common = { path = "../rita_common", default-features = false }
 rita_client = { path = "../rita_client", default-features = false }
 rita_exit = { path = "../rita_exit", default-features = false }
 rita_extender = { path = "../rita_extender", default-features = false }
-exit_trust_root = { path = "../exit_trust_root" }
+exit_trust_root_lib = { path = "../exit_trust_root_lib" }
 flate2 = { version = "1.0", features = [
     "rust_backend",
 ], default-features = false }

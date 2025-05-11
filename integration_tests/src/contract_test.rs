@@ -1,7 +1,7 @@
 use althea_types::random_identity;
 use althea_types::{regions::Regions, ExitIdentity, SystemChain};
 use clarity::{Address, PrivateKey};
-use exit_trust_root::client_db::{
+use exit_trust_root_lib::client_db::{
     add_exit_admin, add_exits_to_registration_list, add_users_to_registered_list,
     check_and_add_user_admin, get_all_registered_clients, get_exits_list,
     get_registered_client_using_wgkey,
