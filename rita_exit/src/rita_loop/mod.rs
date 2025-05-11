@@ -28,7 +28,7 @@ use althea_types::regions::Regions;
 use althea_types::{Identity, SignedExitServerList, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
 use clarity::Address;
-use exit_trust_root::client_db::get_all_registered_clients;
+use exit_trust_root_lib::client_db::get_all_registered_clients;
 use ipnetwork::{Ipv4Network, Ipv6Network};
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;

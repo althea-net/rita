@@ -21,7 +21,7 @@ settings = { path = "../settings" }
 rita_client = { path = "../rita_client", features = ["dev_env"] }
 rita_common = { path = "../rita_common", features = ["integration_test"] }
 rita_exit = { path = "../rita_exit", features = ["dev_env"] }
-exit_trust_root = { path = "../exit_trust_root", features = ["development"] }
+exit_trust_root_lib = { path = "../exit_trust_root_lib", features = ["development"] }
 ctrlc = { version = "3.4.5", features = ["termination"] }
 awc = {workspace = true}
 actix-rt = {workspace = true}

@@ -15,7 +15,7 @@
 
 use althea_types::Identity;
 use clarity::Address;
-use exit_trust_root::client_db::get_all_registered_clients;
+use exit_trust_root_lib::client_db::get_all_registered_clients;
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
 use rita_client::rita_loop::start_antenna_forwarder;

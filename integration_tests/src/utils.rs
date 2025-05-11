@@ -23,7 +23,7 @@ use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use clarity::PrivateKey as ClarityPrivkey;
 use clarity::{Address, Transaction, Uint256};
 use deep_space::{Address as AltheaAddress, Coin, Contact, CosmosPrivateKey, PrivateKey};
-use exit_trust_root::client_db::{add_exit_admin, add_exits_to_registration_list};
+use exit_trust_root_lib::client_db::{add_exit_admin, add_exits_to_registration_list};
 use futures::future::join_all;
 use ipnetwork::IpNetwork;
 use lazy_static;

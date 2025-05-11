@@ -3,6 +3,8 @@ use clarity::Address;
 use clarity::PrivateKey;
 use crossbeam::queue::SegQueue;
 use phonenumber::PhoneNumber;
+use serde::Deserialize;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -11,41 +13,41 @@ use std::time::Instant;
 use crate::register_client_batch_loop::RegistrationRequest;
 use crate::RPC_SERVER;
 
+fn get_rpc_server() -> String {
+    RPC_SERVER.to_string()
+}
+
+fn get_default_timeout() -> u64 {
+    30
+}
+
 /// Command line arguments
-#[derive(clap::Parser, Clone, Debug)]
-#[clap(version = env!("CARGO_PKG_VERSION"), author = "Justin Kilpatrick <justin@althea.net>")]
-#[command(version, about, long_about = None)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     /// How long to wait for a response from a full node before timing out
     /// in seconds. Set this conservatively to avoid crashing an operation
     /// that has already been running for a long time.
-    #[arg(long, default_value = "30")]
+    #[serde(default = "get_default_timeout")]
     pub timeout: u64,
     /// rpc url to use, this should be an ETH node on the same network as the
     /// database smart contract
-    #[arg(short, long, default_value = RPC_SERVER)]
+    #[serde(default = "get_rpc_server")]
     pub rpc: String,
     /// An ethereum private key, used to both sign transactions (root of trust)
     /// and to make requests to the database smart contract, such as registration
-    #[arg(short, long)]
     pub private_key: PrivateKey,
     /// SMS API key
-    #[arg(short, long)]
     pub telnyx_api_key: String,
     /// SMS verify profile id
-    #[arg(short, long)]
     pub verify_profile_id: String,
     /// The Magic number if provided bypasses authentication
     /// and registers the user with the given identity
-    #[arg(short, long)]
     pub magic_number: Option<PhoneNumber>,
     /// The Magic number if provided bypasses authentication
     /// and registers the user with the given identity
     /// If set to true use https mode
-    #[arg(long)]
     pub https: bool,
     /// URL to listen on
-    #[arg(short, long)]
     pub url: String,
 }
 
