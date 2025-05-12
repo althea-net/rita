@@ -53,6 +53,7 @@ async function deploy() {
 
   const alt_location_2_altheadb = "AltheaDB.json"
 
+  const alt_location_3_altheadb = "artifacts/contracts/AltheaDB.sol/AltheaDB.json"
 
   if (fs.existsSync(main_location_altheadb)) {
     althea_db_path = main_location_altheadb
@@ -60,6 +61,8 @@ async function deploy() {
     althea_db_path = alt_location_1_altheadb
   } else if (fs.existsSync(alt_location_2_altheadb)) {
     althea_db_path = alt_location_2_altheadb
+  } else if (fs.existsSync(alt_location_3_altheadb)) {
+    althea_db_path = alt_location_3_altheadb
   } else {
     console.log("Test mode was enabled but the ERC20 contracts can't be found!")
     exit(1)
