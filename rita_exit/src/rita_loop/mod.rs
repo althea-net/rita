@@ -28,7 +28,7 @@ use althea_types::regions::Regions;
 use althea_types::{Identity, SignedExitServerList, WgKey};
 use babel_monitor::{open_babel_stream, parse_routes};
 use clarity::Address;
-use exit_trust_root::client_db::get_all_registered_clients;
+use exit_trust_root_lib::client_db::get_all_registered_clients;
 use ipnetwork::{Ipv4Network, Ipv6Network};
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
@@ -310,6 +310,10 @@ pub async fn start_rita_exit_loop(client_and_ip_info: Arc<RwLock<ClientListAnIpA
 
 /// Updates the client list, if this is not successful the old client list is used
 async fn update_client_list(reg_clients_list: HashSet<Identity>) -> HashSet<Identity> {
+    if cfg!(feature = "operator_debug") {
+        // if we are not in exit mode, we don't need to do anything
+        return HashSet::new();
+    }
     let payment_settings = settings::get_rita_common().payment;
     let contract_address = settings::get_rita_exit()
         .exit_network

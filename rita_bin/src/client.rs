@@ -182,7 +182,8 @@ fn main() {
     )));
     start_core_rita_endpoints(4);
     start_client_dashboard(settings.network.rita_dashboard_port, em_ref);
-    start_antenna_forwarder(settings);
+    let common_settings = settings::get_rita_common();
+    start_antenna_forwarder(common_settings);
 
     // utility and rescue fucntions, these perform some upgrade or check
     update_dns_conf();

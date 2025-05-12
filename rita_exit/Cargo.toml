@@ -7,7 +7,7 @@ license = "Apache-2.0"
 
 [dependencies]
 num256 = {workspace = true}
-exit_trust_root = { path = "../exit_trust_root" }
+exit_trust_root_lib = { path = "../exit_trust_root_lib" }
 rita_common = { path = "../rita_common" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }

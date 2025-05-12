@@ -132,7 +132,7 @@ pub async fn get_country(
     geoip_cache: &mut HashMap<IpAddr, Regions>,
     ip: IpAddr,
 ) -> Result<Regions, Box<RitaExitError>> {
-    trace!("get GeoIP country for {}", ip.to_string());
+    trace!("get GeoIP country for {}", ip);
 
     // if allowed countries is not configured we don't care and will use
     // unkonwn region as a placeholder
@@ -176,11 +176,7 @@ pub async fn get_country(
         Some(code) => Ok(code),
         None => {
             let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{ip}");
-            info!(
-                "making GeoIP request to {} for {}",
-                geo_ip_url,
-                ip.to_string()
-            );
+            info!("making GeoIP request to {} for {}", geo_ip_url, ip);
             // run in async closure and return the result
             let client = awc::Client::new();
             if let Ok(mut res) = client
