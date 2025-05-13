@@ -122,6 +122,7 @@ impl TokenBridge {
                 *DAI_CONTRACT_ON_ETH,
                 self.eth_privatekey.to_address(),
                 self.xdai_bridge_on_eth,
+                vec![],
             )
             .await?;
         trace!("Current DAI allowance on the bridge is {}", allowance);
@@ -168,7 +169,7 @@ impl TokenBridge {
         let dai_address = *DAI_CONTRACT_ON_ETH;
         Ok(self
             .eth_web3
-            .get_erc20_balance(dai_address, self.own_address)
+            .get_erc20_balance(dai_address, self.own_address, vec![])
             .await?)
     }
 
@@ -176,7 +177,7 @@ impl TokenBridge {
         let usdc_address = *USDC_CONTRACT_ADDRESS;
         Ok(self
             .eth_web3
-            .get_erc20_balance(usdc_address, self.own_address)
+            .get_erc20_balance(usdc_address, self.own_address, vec![])
             .await?)
     }
 
@@ -184,7 +185,7 @@ impl TokenBridge {
         let usdt_address = get_usdt_address();
         Ok(self
             .eth_web3
-            .get_erc20_balance(usdt_address, self.own_address)
+            .get_erc20_balance(usdt_address, self.own_address, vec![])
             .await?)
     }
 
@@ -254,6 +255,7 @@ pub async fn get_relay_message_hash(
     let msg_hash = xdai_web3
         .simulate_transaction(
             TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            vec![],
             None,
         )
         .await?;
@@ -270,6 +272,7 @@ pub async fn get_relay_message_hash(
     let msg = xdai_web3
         .simulate_transaction(
             TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            vec![],
             None,
         )
         .await?;
@@ -289,6 +292,7 @@ pub async fn get_relay_message_hash(
     let sigs_payload = xdai_web3
         .simulate_transaction(
             TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            vec![],
             None,
         )
         .await?;
@@ -369,6 +373,7 @@ pub async fn check_relayed_message(
     let res = web3
         .simulate_transaction(
             TransactionRequest::quick_tx(own_address, contract, payload),
+            vec![],
             None,
         )
         .await?;

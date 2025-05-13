@@ -12,6 +12,7 @@ use futures::future::join3;
 use num256::Uint256;
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
+use std::vec;
 use web30::amm::DAI_CONTRACT_ADDRESS;
 use web30::amm::USDC_CONTRACT_ADDRESS;
 use web30::jsonrpc::error::Web3Error;
@@ -276,6 +277,7 @@ pub async fn simulate_signature_submission(
         .eth_web3
         .simulate_transaction(
             TransactionRequest::quick_tx(bridge.own_address, bridge.xdai_bridge_on_eth, payload),
+            vec![],
             None,
         )
         .await

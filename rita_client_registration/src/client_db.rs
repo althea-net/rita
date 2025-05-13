@@ -25,6 +25,7 @@ pub async fn get_all_regsitered_clients(
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),
+            vec![],
             None,
         )
         .await?;
@@ -45,6 +46,7 @@ pub async fn get_registered_client_using_wgkey(
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),
+            vec![],
             None,
         )
         .await?;
@@ -66,6 +68,7 @@ pub async fn get_registered_client_using_ethkey(
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),
+            vec![],
             None,
         )
         .await?;
@@ -87,6 +90,7 @@ pub async fn get_registered_client_using_meship(
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),
+            vec![],
             None,
         )
         .await?;

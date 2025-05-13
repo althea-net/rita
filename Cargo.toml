@@ -38,7 +38,7 @@ opt-level = 2
 
 [workspace.dependencies]
 deep_space = {version = "=2.27.2", features = ["althea"], default-features=false}
-web30 = "1.6"
+web30 = "1.12"
 clarity = "1.5"
 num256 = "0.6"
 awc = {version = "3.2", default-features = false, features=["openssl", "compress-gzip", "compress-zstd"]}
