@@ -108,7 +108,9 @@ async fn main() {
 
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
-    openssl_probe::probe();
+    unsafe {
+        openssl_probe::init_openssl_env_vars();
+    }
 
     // An exit setting dictating if this exit operator wants to log remotely or locally
     let should_remote_log = settings.remote_log;
