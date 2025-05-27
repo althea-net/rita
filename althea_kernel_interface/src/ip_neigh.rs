@@ -1,6 +1,6 @@
 use crate::run_command;
 use mac_address::MacAddress;
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 use std::net::IpAddr;
 
 /// Runs the ip neigh command via the Kernel interface lazy static and returns an error if it doesn't work
@@ -14,16 +14,12 @@ pub fn grab_ip_neigh() -> Result<Vec<(IpAddr, MacAddress)>, std::io::Error> {
                 let string_to_parse = String::from_utf8_lossy(&output.stdout).to_string();
                 Ok(parse_ip_neigh(string_to_parse))
             } else {
-                Err(Error::new(
-                    ErrorKind::Other,
-                    "Empty ip neigh command. Failed".to_string(),
-                ))
+                Err(Error::other("Empty ip neigh command. Failed".to_string()))
             }
         }
-        Err(e) => Err(Error::new(
-            ErrorKind::Other,
-            format!("Unable to grab ip neigh from router. Failed with error {e:?}"),
-        )),
+        Err(e) => Err(Error::other(format!(
+            "Unable to grab ip neigh from router. Failed with error {e:?}"
+        ))),
     }
 }
 

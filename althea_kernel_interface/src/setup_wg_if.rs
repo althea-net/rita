@@ -168,7 +168,6 @@ fn get_last_active_handshake_time_internal(out: String) -> Result<Vec<(WgKey, Sy
     }
     Ok(timestamps)
 }
-// here
 
 /// Returns the last handshake time of every client on this tunnel.
 pub fn get_last_handshake_time(ifname: &str) -> Result<Vec<(WgKey, SystemTime)>, Error> {

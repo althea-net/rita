@@ -276,6 +276,7 @@ pub async fn simulate_signature_submission(
         .eth_web3
         .simulate_transaction(
             TransactionRequest::quick_tx(bridge.own_address, bridge.xdai_bridge_on_eth, payload),
+            Vec::new(),
             None,
         )
         .await

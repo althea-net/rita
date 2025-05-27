@@ -36,7 +36,14 @@ pub fn select_best_exit(
     // continue with first saved exit if we can't find a better one
     let best_exit = match switcher_state.get_best_exit() {
         Some(exit) => exit,
-        None => exit_list.exit_list.first().cloned().unwrap(),
+        None => match exit_list.exit_list.first().cloned() {
+            Some(exit) => exit,
+            None => {
+                // if we have no exits to select from we just return
+                info!("No exits to select from, returning... {:?}", exit_list);
+                return;
+            }
+        },
     };
     // it hasn't been long enough to initiate a switch, unless our current exit is down
     // either way once we're past this code block we're allowed to switch

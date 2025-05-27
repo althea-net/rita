@@ -43,8 +43,6 @@ pub struct Config {
     /// The Magic number if provided bypasses authentication
     /// and registers the user with the given identity
     pub magic_number: Option<PhoneNumber>,
-    /// The Magic number if provided bypasses authentication
-    /// and registers the user with the given identity
     /// If set to true use https mode
     pub https: bool,
     /// URL to listen on

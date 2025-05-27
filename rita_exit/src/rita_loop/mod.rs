@@ -32,7 +32,7 @@ use exit_trust_root_lib::client_db::get_all_registered_clients;
 use ipnetwork::{Ipv4Network, Ipv6Network};
 use rita_common::debt_keeper::DebtAction;
 use rita_common::rita_loop::get_web3_server;
-use settings::exit::{ExitIpv4RoutingSettings, EXIT_LIST_PORT};
+use settings::exit::{ExitIpv4RoutingSettings, EXIT_LIST_IP, EXIT_LIST_PORT};
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, RwLock};
@@ -420,6 +420,7 @@ async fn check_regions(
 
 fn setup_exit_wg_tunnel() {
     // Setup wg_exit
+    info!("Setting up wg_exit");
     if let Err(e) = create_blank_wg_interface(EXIT_INTERFACE) {
         warn!("new exit setup returned {}", e)
     }
@@ -557,19 +558,27 @@ pub fn start_rita_exit_list_endpoint() {
     let exit_contract_data_cache: Arc<RwLock<HashMap<Address, SignedExitServerList>>> =
         Arc::new(RwLock::new(HashMap::new()));
     let web_data = web::Data::new(exit_contract_data_cache.clone());
-    thread::spawn(move || {
+    // here loop this thread spawner so if it panics (as in the case of the tunnel not being setup before trying to bind)
+    thread::spawn(move || loop {
         let runner = AsyncSystem::new();
+        let web_data = web_data.clone();
+        info!("Starting exit list endpoint");
         runner.block_on(async move {
-            let _res = HttpServer::new(move || {
+            match HttpServer::new(move || {
                 App::new()
                     .route("/exit_list", web::post().to(get_exit_list))
                     .app_data(web_data.clone())
             })
-            .bind(format!("[::0]:{}", EXIT_LIST_PORT,))
-            .unwrap()
-            .shutdown_timeout(0)
-            .run()
-            .await;
+            .bind(format!("[{}]:{}", EXIT_LIST_IP, EXIT_LIST_PORT,))
+            {
+                Ok(server) => {
+                    let _ = server.shutdown_timeout(0).run().await;
+                }
+                Err(e) => {
+                    error!("Failed to bind exit list endpoint with {:?}", e);
+                    thread::sleep(Duration::from_secs(5)); // wait 5 seconds before trying again
+                }
+            };
         });
     });
 }

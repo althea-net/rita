@@ -9,6 +9,7 @@ use clarity::{
     abi::{encode_call, AbiToken},
     Address, PrivateKey, Uint256,
 };
+use log::trace;
 use std::{collections::HashSet, net::IpAddr, time::Duration, vec};
 use tokio::time::timeout as future_timeout;
 use web30::{
@@ -29,6 +30,7 @@ pub async fn get_all_registered_clients(
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),
+            Vec::new(),
             None,
         )
         .await?;
@@ -50,6 +52,7 @@ pub async fn get_registered_client_using_wgkey(
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),
+            Vec::new(),
             None,
         )
         .await?;
@@ -130,13 +133,11 @@ pub async fn add_exits_to_registration_list(
             options,
         )
         .await?;
-
     let tx_hash = web30.send_prepared_transaction(tx).await?;
 
     if let Some(timeout) = wait_timeout {
         future_timeout(timeout, web30.wait_for_transaction(tx_hash, timeout, None)).await??;
     }
-
     Ok(tx_hash)
 }
 
@@ -153,6 +154,7 @@ pub async fn check_user_admin(
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(our_private_key.to_address(), contract, payload),
+            Vec::new(),
             None,
         )
         .await?;
@@ -205,6 +207,7 @@ pub async fn check_exit_admin(
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(our_private_key.to_address(), contract, payload),
+            Vec::new(),
             None,
         )
         .await?;
@@ -255,10 +258,48 @@ pub async fn get_exits_list(
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),
+            Vec::new(),
             None,
         )
         .await?;
 
+    trace!("Exit list response: {:?}", res);
     // Parse resulting bytes
     convert_althea_types_to_web3_error(ExitIdentity::decode_array_from_eth_abi(res))
+}
+
+#[cfg(test)]
+pub mod tests {
+    use althea_types::Identity;
+    use clarity::abi::encode_call;
+    use web30::{client::Web3, types::TransactionRequest};
+
+    use crate::legacy_client_registration::WEB3_TIMEOUT;
+
+    #[ignore]
+    #[actix_web::test]
+    async fn test_decide_from_payload() {
+        let web3 = Web3::new("https://testnet.althea.zone:8545", WEB3_TIMEOUT);
+        let req_addr = "insert_test_addr".parse().unwrap();
+        let contract = "insert_contract_addr".parse().unwrap();
+        let payload = encode_call("getAllRegisteredUsers()", &[]).unwrap();
+        let res = web3
+            .simulate_transaction(
+                TransactionRequest::quick_tx(req_addr, contract, payload),
+                Vec::new(),
+                None,
+            )
+            .await
+            .unwrap();
+        println!("Received bytes: {:?}", res);
+        let res = Identity::decode_array_from_eth_abi(res);
+        match res.clone() {
+            Ok(res) => {
+                println!("Decoded identities: {:?}", res);
+                assert!(res.len() == 1);
+                //assert_eq!(idents, res.unwrap());
+            }
+            Err(e) => panic!("Failed to decode eth abi {:?} with error {:?}", res, e),
+        }
+    }
 }

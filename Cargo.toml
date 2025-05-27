@@ -52,6 +52,6 @@ althea_proto = "0.9"
 # in 'vendored' mode all the way down the tree. What this means is that we use
 # an openssl implementation from the crate and not from the system, simplifying
 # our build process for a lot of cross-compile situations
-openssl = {version = "0.10", features = ["vendored"]}
-openssl-probe = "0.1"
+openssl = {version = "0.10.72", features = ["vendored"]}
+openssl-probe = "0.1.6"
 lettre = { version = "0.11", features = ["file-transport", "serde"]}

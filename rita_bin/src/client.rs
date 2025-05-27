@@ -9,7 +9,6 @@
 
 #![warn(clippy::all)]
 #![allow(clippy::pedantic)]
-#![forbid(unsafe_code)]
 
 use althea_kernel_interface::babel::restart_babel;
 use althea_kernel_interface::check_cron::check_cron;

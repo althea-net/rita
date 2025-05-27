@@ -146,7 +146,7 @@ impl TokenBridge {
         let dai_address = *DAI_CONTRACT_ON_ETH;
         Ok(self
             .eth_web3
-            .get_erc20_balance(dai_address, self.own_address)
+            .get_erc20_balance(dai_address, self.own_address, Vec::new())
             .await?)
     }
 
@@ -154,7 +154,7 @@ impl TokenBridge {
         let usdc_address = *USDC_CONTRACT_ADDRESS;
         Ok(self
             .eth_web3
-            .get_erc20_balance(usdc_address, self.own_address)
+            .get_erc20_balance(usdc_address, self.own_address, Vec::new())
             .await?)
     }
 
@@ -162,7 +162,7 @@ impl TokenBridge {
         let usdt_address = get_usdt_address();
         Ok(self
             .eth_web3
-            .get_erc20_balance(usdt_address, self.own_address)
+            .get_erc20_balance(usdt_address, self.own_address, Vec::new())
             .await?)
     }
 
@@ -232,6 +232,7 @@ pub async fn get_relay_message_hash(
     let msg_hash = xdai_web3
         .simulate_transaction(
             TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            Vec::new(),
             None,
         )
         .await?;
@@ -248,6 +249,7 @@ pub async fn get_relay_message_hash(
     let msg = xdai_web3
         .simulate_transaction(
             TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            Vec::new(),
             None,
         )
         .await?;
@@ -267,6 +269,7 @@ pub async fn get_relay_message_hash(
     let sigs_payload = xdai_web3
         .simulate_transaction(
             TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            Vec::new(),
             None,
         )
         .await?;
@@ -347,6 +350,7 @@ pub async fn check_relayed_message(
     let res = web3
         .simulate_transaction(
             TransactionRequest::quick_tx(own_address, contract, payload),
+            Vec::new(),
             None,
         )
         .await?;

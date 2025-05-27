@@ -11,7 +11,6 @@
 
 #![warn(clippy::all)]
 #![allow(clippy::pedantic)]
-#![forbid(unsafe_code)]
 
 use althea_types::Identity;
 use clarity::Address;
@@ -111,7 +110,6 @@ async fn main() {
     unsafe {
         openssl_probe::init_openssl_env_vars();
     }
-
     // An exit setting dictating if this exit operator wants to log remotely or locally
     let should_remote_log = settings.remote_log;
     // if remote logging is disabled, or the NO_REMOTE_LOG env var is set we should use the
@@ -208,6 +206,7 @@ async fn check_startup_balance_and_contract(
         .is_err()
     {
         if fail_on_startup {
+            info!("Failed to get balance for account, exiting");
             std::process::exit(1);
         }
     }
@@ -241,6 +240,10 @@ async fn get_registered_users() -> Result<HashSet<Identity>, Web3Error> {
     let contract_address = settings::get_rita_exit()
         .exit_network
         .registered_users_contract_addr;
+    trace!(
+        "Getting registered users from contract {:?}",
+        contract_address
+    );
     get_all_registered_clients(&web3, our_address, contract_address).await
 }
 
@@ -265,6 +268,7 @@ async fn check_balance(
                     .write()
                     .unwrap()
                     .replace(error_message.clone());
+                error!("{error_message}");
                 Err(error_message)
             } else {
                 Ok(())

@@ -5,7 +5,6 @@
 
 #![warn(clippy::all)]
 #![allow(clippy::pedantic)]
-#![forbid(unsafe_code)]
 
 #[macro_use]
 extern crate log;
@@ -28,7 +27,6 @@ fn main() {
     unsafe {
         openssl_probe::init_openssl_env_vars();
     }
-
     // Connect to router and get its revevant info. Called here to get logging info
     let setting = get_initial_logging_settings();
     println!("Initial checkin returned {setting:?}");

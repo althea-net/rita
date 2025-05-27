@@ -251,7 +251,10 @@ async fn get_exit_list_from_root(contract_addr: Address) -> Option<SignedExitSer
             }
         }
     } else {
-        error!("Failed to get exit list from root server");
+        error!(
+            "Failed to get exit list from root server with {:?}",
+            response
+        );
         None
     }
 }

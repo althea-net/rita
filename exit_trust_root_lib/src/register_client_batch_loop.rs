@@ -126,8 +126,9 @@ pub async fn register_client_batch_loop(
                 our_private_key,
                 Some(TX_TIMEOUT),
                 vec![
-                    SendTxOption::GasPriorityFee(1000000000u128.into()),
-                    SendTxOption::GasMaxFee(4000000000u128.into()),
+                    // SendTxOption::GasPriorityFee(1000000000u128.into()),
+                    // SendTxOption::GasMaxFee(4000000000u128.into()),
+                    SendTxOption::GasLimitMultiplier(2.0),
                 ],
             )
             .await
