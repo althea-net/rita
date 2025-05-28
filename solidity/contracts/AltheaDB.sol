@@ -23,13 +23,6 @@ struct ExitIdentity {
     uint256[] payment_types;
 }
 
-/// Thrown when the caller is not authorized to register users
-error UnathorizedCaller();
-error DuplicateUser();
-error DuplicateAdmin();
-error IdentityNotFound();
-error AdminNotFound();
-
 contract AltheaDB {
     /// The admin address that is allowed to update who is on the
     /// user admin and exit admin lists. This could be an individual
@@ -189,7 +182,7 @@ contract AltheaDB {
                 return i;
             }
         }
-        revert IdentityNotFound();
+        revert("id not found");
     }
 
     function getIndexOfId(
@@ -201,7 +194,7 @@ contract AltheaDB {
                 return i;
             }
         }
-        revert IdentityNotFound();
+        revert("id not found");
     }
 
     function getIndexOfAdmin(
@@ -213,7 +206,7 @@ contract AltheaDB {
                 return i;
             }
         }
-        revert AdminNotFound();
+        revert("admin not found");
     }
 
     /// Checks both the exit and the client lists for any entry with any
@@ -244,7 +237,7 @@ contract AltheaDB {
             // if any client or exit currently registered has overlapping data, do not allow the
             // registration to continue
             if (checkForAnyDuplicates(entry)) {
-                revert DuplicateUser();
+                revert("duplicate");
             }
 
             state_registeredIps[entry.mesh_ip] = true;
@@ -254,7 +247,7 @@ contract AltheaDB {
             state_registeredUsers.push(entry);
             emit UserRegisteredEvent(entry);
         } else {
-            revert UnathorizedCaller();
+            revert("unauthorized");
         }
     }
 
@@ -277,7 +270,7 @@ contract AltheaDB {
 
             emit UserRemovedEvent(entry);
         } else {
-            revert UnathorizedCaller();
+            revert("unauthorized");
         }
     }
 
@@ -294,7 +287,7 @@ contract AltheaDB {
             // if any client or exit currently registered has overlapping data, do not allow the
             // registration to continue
             if (checkForAnyDuplicates(exitIdToId(entry))) {
-                revert DuplicateUser();
+                revert("duplicate");
             }
 
             state_registeredIps[entry.mesh_ip] = true;
@@ -304,7 +297,7 @@ contract AltheaDB {
             state_registeredExits.push(entry);
             emit ExitRegisteredEvent(entry);
         } else {
-            revert UnathorizedCaller();
+            revert("unauthorized");
         }
     }
 
@@ -327,7 +320,7 @@ contract AltheaDB {
 
             emit ExitRemovedEvent(entry);
         } else {
-            revert UnathorizedCaller();
+            revert("unauthorized");
         }
     }
 
@@ -424,13 +417,13 @@ contract AltheaDB {
     function addUserAdmin(address entry) public {
         if (state_admin == msg.sender) {
             if (isUserAdmin(entry)) {
-                revert DuplicateAdmin();
+                revert("duplicate");
             }
 
             state_UserAdmins.push(entry);
             emit UserAdminAddedEvent(entry);
         } else {
-            revert UnathorizedCaller();
+            revert("unauthorized");
         }
     }
 
@@ -441,7 +434,7 @@ contract AltheaDB {
             deleteArrayEntry(index, state_UserAdmins);
             emit UserAdminAddedEvent(entry);
         } else {
-            revert UnathorizedCaller();
+            revert("unauthorized");
         }
     }
 
@@ -449,13 +442,13 @@ contract AltheaDB {
     function addExitAdmin(address entry) public {
         if (state_admin == msg.sender) {
             if (isExitAdmin(entry)) {
-                revert DuplicateAdmin();
+                revert("duplicate");
             }
 
             state_ExitAdmins.push(entry);
             emit ExitAdminAddedEvent(entry);
         } else {
-            revert UnathorizedCaller();
+            revert("unauthorized");
         }
     }
 
@@ -466,7 +459,7 @@ contract AltheaDB {
             deleteArrayEntry(index, state_ExitAdmins);
             emit UserAdminAddedEvent(entry);
         } else {
-            revert UnathorizedCaller();
+            revert("unauthorized");
         }
     }
 }
