@@ -59,7 +59,7 @@ async fn retrieve_exit_server_list(
         }
         false => {
             get_exits_list(
-                &Web3::new(RPC_SERVER, WEB3_TIMEOUT),
+                &Web3::new(&config.rpc, WEB3_TIMEOUT),
                 config.private_key.to_address(),
                 exit_contract,
             )
