@@ -9,7 +9,6 @@
 
 #![warn(clippy::all)]
 #![allow(clippy::pedantic)]
-#![forbid(unsafe_code)]
 
 use althea_kernel_interface::babel::restart_babel;
 use althea_kernel_interface::check_cron::check_cron;
@@ -133,7 +132,9 @@ fn main() {
 
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
-    openssl_probe::probe();
+    unsafe {
+        openssl_probe::init_openssl_env_vars();
+    }
 
     // we should remote log if there's an operator address or if logging is enabled
     let should_remote_log = settings.log.enabled || settings.operator.operator_address.is_some();
@@ -182,7 +183,8 @@ fn main() {
     )));
     start_core_rita_endpoints(4);
     start_client_dashboard(settings.network.rita_dashboard_port, em_ref);
-    start_antenna_forwarder(settings);
+    let common_settings = settings::get_rita_common();
+    start_antenna_forwarder(common_settings);
 
     // utility and rescue fucntions, these perform some upgrade or check
     update_dns_conf();

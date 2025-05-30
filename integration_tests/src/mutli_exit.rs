@@ -157,7 +157,7 @@ fn get_current_exit(ns: Namespace, namespaces: NamespaceInfo) -> Namespace {
     }
     let out = out_str.unwrap();
     let out = out.split(']').collect::<Vec<&str>>()[0];
-    let out = out.split('[').last().unwrap();
+    let out = out.split('[').next_back().unwrap();
     let ns = get_node_id_from_ip(out.parse().unwrap());
     namespaces.get_namespace(ns).expect("This should be valid")
 }

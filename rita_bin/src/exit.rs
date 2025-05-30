@@ -11,13 +11,13 @@
 
 #![warn(clippy::all)]
 #![allow(clippy::pedantic)]
-#![forbid(unsafe_code)]
 
 use althea_types::Identity;
 use clarity::Address;
-use exit_trust_root::client_db::get_all_registered_clients;
+use exit_trust_root_lib::client_db::get_all_registered_clients;
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
+use rita_client::rita_loop::start_antenna_forwarder;
 use rita_exit::rita_loop::start_rita_exit_list_endpoint;
 use rita_exit::ClientListAnIpAssignmentMap;
 use std::collections::HashSet;
@@ -107,8 +107,9 @@ async fn main() {
 
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
-    openssl_probe::probe();
-
+    unsafe {
+        openssl_probe::init_openssl_env_vars();
+    }
     // An exit setting dictating if this exit operator wants to log remotely or locally
     let should_remote_log = settings.remote_log;
     // if remote logging is disabled, or the NO_REMOTE_LOG env var is set we should use the
@@ -172,11 +173,14 @@ async fn main() {
     start_rita_exit_endpoints(client_and_ip_map.clone());
     start_rita_exit_list_endpoint();
 
+    let common_settings = settings::get_rita_common();
+    start_antenna_forwarder(common_settings);
     start_rita_common_loops();
     start_operator_update_loop();
     save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(Box::new(
         settings::get_rita_exit(),
     )));
+    rita_client::operator_update::ops_websocket::start_websocket_operator_update_loop(None);
 
     // this call blocks, transforming this startup thread into the main exit watchdog thread
     start_rita_exit_loop(client_and_ip_map).await;
@@ -202,6 +206,7 @@ async fn check_startup_balance_and_contract(
         .is_err()
     {
         if fail_on_startup {
+            info!("Failed to get balance for account, exiting");
             std::process::exit(1);
         }
     }
@@ -225,6 +230,9 @@ async fn check_startup_balance_and_contract(
 }
 
 async fn get_registered_users() -> Result<HashSet<Identity>, Web3Error> {
+    if cfg!(feature = "optools_dev_env") {
+        return Ok(HashSet::new());
+    }
     let payment_settings = settings::get_rita_common().payment;
     let our_address = payment_settings.eth_address.expect("No address!");
     let full_node = get_web3_server();
@@ -232,6 +240,10 @@ async fn get_registered_users() -> Result<HashSet<Identity>, Web3Error> {
     let contract_address = settings::get_rita_exit()
         .exit_network
         .registered_users_contract_addr;
+    trace!(
+        "Getting registered users from contract {:?}",
+        contract_address
+    );
     get_all_registered_clients(&web3, our_address, contract_address).await
 }
 
@@ -239,6 +251,9 @@ async fn check_balance(
     our_address: Address,
     startup_status: Arc<RwLock<Option<String>>>,
 ) -> Result<(), String> {
+    if cfg!(feature = "optools_dev_env") {
+        return Ok(());
+    }
     let full_node = get_web3_server();
     let web3 = web30::client::Web3::new(&full_node, Duration::from_secs(5));
     let res = web3.eth_get_balance(our_address).await;
@@ -253,6 +268,7 @@ async fn check_balance(
                     .write()
                     .unwrap()
                     .replace(error_message.clone());
+                error!("{error_message}");
                 Err(error_message)
             } else {
                 Ok(())

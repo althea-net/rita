@@ -19,6 +19,7 @@ use std::sync::RwLock;
 use std::time::Duration;
 
 const EXIT_LIST_TIMEOUT: Duration = Duration::from_secs(20);
+const EXIT_SETUP_TIMEOUT: Duration = Duration::from_secs(10);
 
 async fn send_exit_setup_request(
     exit_pubkey: WgKey,
@@ -36,7 +37,7 @@ async fn send_exit_setup_request(
 
     let response = client
         .post(&endpoint)
-        .timeout(CLIENT_LOOP_TIMEOUT)
+        .timeout(EXIT_SETUP_TIMEOUT)
         .send_json(&ident)
         .await;
     let mut response = match response {
@@ -124,7 +125,7 @@ pub async fn exit_setup_request(
     };
 
     match registration_state.clone() {
-        ExitState::New { .. } | ExitState::Pending { .. } => {
+        ExitState::New | ExitState::Pending { .. } => {
             let exit_pubkey = exit.wg_key;
 
             let mut reg_details: ExitRegistrationDetails = match get_registration_details() {
@@ -251,7 +252,6 @@ pub async fn exit_status_request(
 /// Hits the exit_list endpoint
 pub async fn get_exit_list() -> Result<SignedExitServerList, RitaClientError> {
     let endpoint = format!("http://[{}]:{}/exit_list", EXIT_LIST_IP, EXIT_LIST_PORT);
-
     let client = awc::Client::default();
     let response = client
         .post(&endpoint)
@@ -266,21 +266,32 @@ pub async fn get_exit_list() -> Result<SignedExitServerList, RitaClientError> {
                 awc::error::SendRequestError::Timeout.to_string(),
             ));
         }
-        Err(e) => return Err(RitaClientError::SendRequestError(e.to_string())),
+        Err(e) => {
+            trace!("Failed to get exit list from exit {:?}", e);
+            return Err(RitaClientError::SendRequestError(e.to_string()));
+        }
     };
 
     let list: SignedExitServerList = match response {
         Ok(a) => a,
         Err(e) => {
             return Err(RitaClientError::MiscStringError(format!(
-                "Failed to get exit list from exit {:?}",
+                "Failed to get exit list from exit payload {:?}",
                 e
             )));
         }
     };
 
     let config = get_rita_client();
-    let allowed_signers = config.exit_client.allowed_exit_list_signers;
+    let mut allowed_signers = config.exit_client.allowed_exit_list_signers;
+    if cfg!(feature = "operator_debug") {
+        // In test mode, we allow any signer
+        allowed_signers.push(
+            "0x34d97aaf58b1a81d3ed3068a870d8093c6341cf5d1ef7e6efa03fe7f7fc2c3a8"
+                .parse()
+                .unwrap(),
+        );
+    }
 
     trace!(
         "About to verify exit list signer and contract we are expecting {} and signer {:?}",

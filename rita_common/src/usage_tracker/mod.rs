@@ -20,7 +20,6 @@ use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Error as IOError;
-use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
@@ -141,8 +140,7 @@ impl UsageTrackerStorage {
         let settings = settings::get_rita_common();
 
         if self.check_unsaved_payments() || self.check_unsaved_usage() {
-            return Err(RitaCommonError::StdError(IOError::new(
-                ErrorKind::Other,
+            return Err(RitaCommonError::StdError(IOError::other(
                 "Too little data for writing",
             )));
         }

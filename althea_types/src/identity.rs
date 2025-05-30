@@ -306,16 +306,15 @@ impl Identity {
             )));
         }
 
-        let num_entries: usize =
-            usize::from_be_bytes(match byte_chunks[1][24..WORD_SIZE].try_into() {
-                Ok(a) => a,
-                Err(e) => {
-                    let msg = format!("Cannot parse array len with {}", e);
-                    return Err(AltheaTypesError::BadEthAbiInput(msg));
-                }
-            });
+        let num_entries: u64 = u64::from_be_bytes(match byte_chunks[1][24..WORD_SIZE].try_into() {
+            Ok(a) => a,
+            Err(e) => {
+                let msg = format!("Cannot parse array len with {}", e);
+                return Err(AltheaTypesError::BadEthAbiInput(msg));
+            }
+        });
 
-        for i in 0..num_entries {
+        for i in 0..num_entries as usize {
             let start_index = 2 * WORD_SIZE + i * IDENTITY_SIZE;
             if start_index + IDENTITY_SIZE > bytes.len() {
                 return Err(AltheaTypesError::BadEthAbiInput(format!(

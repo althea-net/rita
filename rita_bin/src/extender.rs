@@ -5,7 +5,6 @@
 
 #![warn(clippy::all)]
 #![allow(clippy::pedantic)]
-#![forbid(unsafe_code)]
 
 #[macro_use]
 extern crate log;
@@ -25,8 +24,9 @@ const DEFAULT_DASHBOARD_PORT: u16 = 4877;
 fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
-    openssl_probe::probe();
-
+    unsafe {
+        openssl_probe::init_openssl_env_vars();
+    }
     // Connect to router and get its revevant info. Called here to get logging info
     let setting = get_initial_logging_settings();
     println!("Initial checkin returned {setting:?}");

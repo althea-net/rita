@@ -22,6 +22,7 @@ use web30::jsonrpc::error::Web3Error;
 pub mod client_db;
 pub mod config;
 pub mod endpoints;
+pub mod legacy_client_registration;
 pub mod register_client_batch_loop;
 pub mod sms_auth;
 
@@ -58,7 +59,7 @@ async fn retrieve_exit_server_list(
         }
         false => {
             get_exits_list(
-                &Web3::new(RPC_SERVER, WEB3_TIMEOUT),
+                &Web3::new(&config.rpc, WEB3_TIMEOUT),
                 config.private_key.to_address(),
                 exit_contract,
             )
