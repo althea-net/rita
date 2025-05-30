@@ -243,19 +243,19 @@ describe("Althea exit DB tests", function () {
   it("throws on Client unauthorized caller", async function () {
     await expect(addUser({ with_admin: false, try_duplicate: false, try_partial_dup: false, remove_admin: false, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
-      "UnathorizedCaller()"
+      "unauthorized"
     );
   });
   it("throws on Client admin removed", async function () {
     await expect(addUser({ with_admin: true, try_duplicate: false, try_partial_dup: false, remove_admin: true, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
-      "UnathorizedCaller()"
+      "unauthorized"
     );
   });
   it("throws on Dup Client admin", async function () {
     await expect(addUser({ with_admin: true, try_duplicate: false, try_partial_dup: false, remove_admin: true, cross_dup: false, dup_admin: true })
     ).to.be.revertedWith(
-      "DuplicateAdmin()"
+      "duplicate"
     );
   });
   it("User registration happy path", async function () {
@@ -264,37 +264,37 @@ describe("Althea exit DB tests", function () {
   it("throws on User duplicate", async function () {
     await expect(addUser({ with_admin: true, try_duplicate: true, try_partial_dup: false, remove_admin: false, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
-      "DuplicateUser()"
+      "duplicate"
     );
   });
   it("throws on User cross duplicate", async function () {
     await expect(addUser({ with_admin: true, try_duplicate: true, try_partial_dup: false, remove_admin: false, cross_dup: true, dup_admin: false })
     ).to.be.revertedWith(
-      "DuplicateUser()"
+      "duplicate"
     );
   });
   it("throws on User partial duplicate", async function () {
     await expect(addUser({ with_admin: true, try_duplicate: true, try_partial_dup: true, remove_admin: false, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
-      "DuplicateUser()"
+      "duplicate"
     );
   });
   it("throws on Exit unauthorized caller", async function () {
     await expect(addExit({ with_admin: false, try_duplicate: false, try_partial_dup: false, remove_admin: false, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
-      "UnathorizedCaller()"
+      "unauthorized"
     );
   });
   it("throws on Exit admin removed", async function () {
     await expect(addExit({ with_admin: true, try_duplicate: false, try_partial_dup: false, remove_admin: true, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
-      "UnathorizedCaller()"
+      "unauthorized"
     );
   });
   it("throws on Dup Exit admin", async function () {
     await expect(addExit({ with_admin: true, try_duplicate: false, try_partial_dup: false, remove_admin: true, cross_dup: false, dup_admin: true })
     ).to.be.revertedWith(
-      "DuplicateAdmin()"
+      "duplicate"
     );
   });
   it("Exit registration happy path", async function () {
@@ -303,19 +303,19 @@ describe("Althea exit DB tests", function () {
   it("throws on Exit duplicate", async function () {
     await expect(addExit({ with_admin: true, try_duplicate: true, try_partial_dup: false, remove_admin: false, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
-      "DuplicateUser()"
+      "duplicate"
     );
   });
   it("throws on Exit cross duplicate", async function () {
     await expect(addExit({ with_admin: true, try_duplicate: true, try_partial_dup: false, remove_admin: false, cross_dup: true, dup_admin: false })
     ).to.be.revertedWith(
-      "DuplicateUser()"
+      "duplicate"
     );
   });
   it("throws on Exit partial duplicate", async function () {
     await expect(addExit({ with_admin: true, try_duplicate: true, try_partial_dup: true, remove_admin: false, cross_dup: false, dup_admin: false })
     ).to.be.revertedWith(
-      "DuplicateUser()"
+      "duplicate"
     );
   });
 });
