@@ -1,10 +1,13 @@
 use std::net::Ipv4Addr;
 
 use actix_web::{web::Json, HttpRequest, HttpResponse};
-use althea_kernel_interface::run_command;
+use althea_kernel_interface::{run_command, setup_wg_if::get_wg_exit_clients_online};
 use althea_types::Identity;
 use ipnetwork::Ipv4Network;
+use rita_common::usage_tracker::get_current_throughput;
 use settings::exit::ExitIpv4RoutingSettings;
+
+use crate::rita_loop::EXIT_INTERFACE;
 
 pub async fn get_exit_network_settings(_req: HttpRequest) -> HttpResponse {
     let settings = settings::get_rita_exit().exit_network;
@@ -128,6 +131,19 @@ pub async fn get_next_static_ip(req: Json<ExitModeRequest>) -> HttpResponse {
         Some(ip) => HttpResponse::Ok().json(ip),
         None => HttpResponse::InternalServerError().finish(),
     }
+}
+
+/// returns the number of clients connected to the exit
+pub async fn get_num_clients(_req: HttpRequest) -> HttpResponse {
+    let clients_online = get_wg_exit_clients_online(EXIT_INTERFACE).ok().unwrap_or(0);
+    HttpResponse::Ok().json(clients_online)
+}
+
+pub async fn get_throughput(_req: HttpRequest) -> HttpResponse {
+    // returns the current throughput of the exit
+    let throughput =
+        get_current_throughput(rita_common::usage_tracker::structs::UsageType::Exit).unwrap_or(0);
+    HttpResponse::Ok().json(throughput)
 }
 
 #[cfg(test)]

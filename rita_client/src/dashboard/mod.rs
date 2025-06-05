@@ -101,8 +101,6 @@ pub fn start_client_dashboard(
                     .route("/info", web::get().to(get_own_info))
                     .route("/interfaces", web::get().to(get_interfaces_endpoint))
                     .route("/interfaces", web::post().to(set_interfaces_endpoint))
-                    .route("/interfaces/mesh", web::get().to(wlan_mesh_get))
-                    .route("/interfaces/mesh/{enabled}", web::post().to(wlan_mesh_set))
                     .route("/eth_private_key", web::get().to(get_eth_private_key))
                     .route("/mesh_ip", web::get().to(get_mesh_ip))
                     .route("/neighbors", web::get().to(get_neighbor_info))

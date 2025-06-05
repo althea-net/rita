@@ -1,14 +1,13 @@
 //! A generalized interface for modifying networking interface assignments using UCI
 use crate::RitaCommonError;
 use actix_web::http::StatusCode;
-use actix_web::web::Path;
 use actix_web::{web::Json, HttpRequest, HttpResponse};
 use althea_kernel_interface::fs_sync::fs_sync;
 use althea_kernel_interface::manipulate_uci::{
-    del_uci_var, get_uci_var, openwrt_reset_network, openwrt_reset_wireless, set_uci_var,
+    del_uci_var, get_uci_var, openwrt_reset_network, set_uci_var,
     uci_commit, uci_revert, uci_show,
 };
-use althea_kernel_interface::{is_openwrt::is_openwrt, run_command};
+use althea_kernel_interface::run_command;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::net::Ipv4Addr;
@@ -251,8 +250,8 @@ pub fn ethernet_transform_mode(
             "We can't change Unknown interfaces!".to_string(),
         ));
     }
-    let rita_client = settings::get_rita_client();
-    let mut network = rita_client.network;
+    let mut rita_common = settings::get_rita_common();
+    let mut network = rita_common.network;
 
     // if we have edited UCI and it fails we set this var to handle cleanup later
     let mut return_codes = Vec::new();
@@ -343,7 +342,7 @@ pub fn ethernet_transform_mode(
             let ret = get_uci_var("network.lan.ifname");
             match ret {
                 Ok(list) => {
-                    trace!("The existing LAN interfaces list is {:?}", list);
+                    info!("The existing LAN interfaces list is {:?}", list);
                     let new_list = list_add(&list, ifname);
                     trace!("Setting the new list {:?}", new_list);
                     let ret = set_uci_var("network.lan.ifname", &new_list);
@@ -381,11 +380,10 @@ pub fn ethernet_transform_mode(
             error_occured.push(e);
         }
     }
-    let mut rita_client = settings::get_rita_client();
     if !error_occured.is_empty() {
         let res = uci_revert("network");
-        rita_client.network = old_network_settings;
-        settings::set_rita_client(rita_client);
+        rita_common.network = old_network_settings;
+        settings::set_rita_common(rita_common);
         //bail!("Error running UCI commands! Revert attempted: {:?}", res);
         if let Err(re) = res {
             return Err(RitaCommonError::InterfaceToggleError {
@@ -403,8 +401,8 @@ pub fn ethernet_transform_mode(
     uci_commit("network")?;
     openwrt_reset_network()?;
 
-    rita_client.network = network;
-    settings::set_rita_client(rita_client);
+    rita_common.network = network;
+    settings::set_rita_common(rita_common);
 
     // try and save the config and fail if we can't
     if let Err(_e) = settings::write_config() {
@@ -416,122 +414,6 @@ pub fn ethernet_transform_mode(
     fs_sync()?;
 
     Ok(())
-}
-
-/// Unlike physical ethernet interfaces you can run multiple SSID's on a single WIFI card
-/// so we don't provide options to 'change' wireless modes to match the users expectations
-/// instead we provide a toggle interface.
-/// For example 'toggle user wlan off' or 'toggle phone sale network on' or 'toggle router
-/// to router wireless meshing'.
-fn wlan_toggle_get(uci_spec: &str) -> Result<bool, RitaCommonError> {
-    if !is_openwrt() {
-        return Err(RitaCommonError::MiscStringError(
-            "Not an OpenWRT device!".to_string(),
-        ));
-    }
-    let bad_wireless = "Wireless config not correct";
-    let current_state = uci_show(Some(uci_spec))?;
-    let current_state = match current_state.get(uci_spec) {
-        Some(val) => val,
-        None => return Err(RitaCommonError::MiscStringError(bad_wireless.to_string())),
-    };
-    let current_state = if current_state.contains('0') {
-        true
-    } else if current_state.contains('1') {
-        false
-    } else {
-        return Err(RitaCommonError::MiscStringError(bad_wireless.to_string()));
-    };
-
-    trace!(
-        "wlan get status: uci_spec {}, enabled: {}",
-        uci_spec,
-        current_state
-    );
-
-    Ok(current_state)
-}
-
-pub async fn wlan_mesh_get(_: HttpRequest) -> HttpResponse {
-    let res = wlan_toggle_get("wireless.mesh.disabled");
-    match res {
-        Ok(b) => HttpResponse::Ok().json(b),
-        Err(e) => {
-            error!("get mesh failed with {:?}", e);
-            HttpResponse::InternalServerError().into()
-        }
-    }
-}
-
-fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaCommonError> {
-    if !is_openwrt() {
-        return Err(RitaCommonError::MiscStringError(
-            "Not an OpenWRT device!".to_string(),
-        ));
-    }
-    let bad_wireless = "Wireless config not correct";
-    trace!("wlan toggle: uci_spec {}, enabled: {}", uci_spec, enabled,);
-
-    let current_state = uci_show(Some(uci_spec))?;
-    let current_state = match current_state.get(uci_spec) {
-        Some(val) => val,
-        None => return Err(RitaCommonError::MiscStringError(bad_wireless.to_string())),
-    };
-    let current_state = if current_state.contains('0') {
-        true
-    } else if current_state.contains('1') {
-        false
-    } else {
-        return Err(RitaCommonError::MiscStringError(bad_wireless.to_string()));
-    };
-
-    if enabled == current_state {
-        return Ok(());
-    }
-
-    // remember it's a 'disabled' toggle so we want to set it to zero to be 'enabled'
-    let res = if enabled {
-        set_uci_var(uci_spec, "0")
-    } else {
-        set_uci_var(uci_spec, "1")
-    };
-
-    if let Err(e) = res {
-        let res_b = uci_revert("wireless");
-        if let Err(re) = res_b {
-            return Err(RitaCommonError::InterfaceToggleError {
-                main_error: vec![e],
-                revert_status: Some(re),
-            });
-        } else {
-            return Err(RitaCommonError::InterfaceToggleError {
-                main_error: vec![e],
-                revert_status: None,
-            });
-        }
-    }
-
-    uci_commit("wireless")?;
-    openwrt_reset_wireless()?;
-
-    // We edited disk contents, force global sync
-    fs_sync()?;
-
-    run_command("reboot", &[])?;
-
-    Ok(())
-}
-
-pub async fn wlan_mesh_set(enabled: Path<bool>) -> HttpResponse {
-    let enabled = enabled.into_inner();
-    let res = wlan_toggle_set("wireless.mesh.disabled", enabled);
-    match res {
-        Ok(_) => HttpResponse::Ok().into(),
-        Err(e) => {
-            error!("set mesh failed with {:?}", e);
-            HttpResponse::InternalServerError().into()
-        }
-    }
 }
 
 /// A helper function for adding entries to a list

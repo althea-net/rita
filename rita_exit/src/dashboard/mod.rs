@@ -7,6 +7,8 @@ use actix_web::HttpResponse;
 use actix_web::HttpServer;
 use exit_endpoints::get_exit_network_settings;
 use exit_endpoints::get_next_static_ip;
+use exit_endpoints::get_num_clients;
+use exit_endpoints::get_throughput;
 use exit_endpoints::set_exit_mode;
 use rita_common::dashboard::auth::*;
 use rita_common::dashboard::babel::*;
@@ -88,8 +90,6 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     .route("/startup_status", web::get().to(get_startup_status))
                     .route("/interfaces", web::get().to(get_interfaces_endpoint))
                     .route("/interfaces", web::post().to(set_interfaces_exit_endpoint))
-                    .route("/interfaces/mesh", web::get().to(wlan_mesh_get))
-                    .route("/interfaces/mesh/{enabled}", web::post().to(wlan_mesh_set))
                     .route("/phone", web::get().to(get_phone_number))
                     .route("/phone", web::post().to(set_phone_number))
                     .route("/email", web::get().to(get_email))
@@ -127,6 +127,8 @@ pub fn start_rita_exit_dashboard(startup_status: Arc<RwLock<Option<String>>>) {
                     )
                     .route("/set_exit_network", web::post().to(set_exit_mode))
                     .route("/get_next_static_ip", web::post().to(get_next_static_ip))
+                    .route("/throughput", web::get().to(get_throughput))
+                    .route("/clients", web::get().to(get_num_clients))
             })
             .bind(format!(
                 "[::0]:{}",
