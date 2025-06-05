@@ -4,8 +4,7 @@ use actix_web::http::StatusCode;
 use actix_web::{web::Json, HttpRequest, HttpResponse};
 use althea_kernel_interface::fs_sync::fs_sync;
 use althea_kernel_interface::manipulate_uci::{
-    del_uci_var, get_uci_var, openwrt_reset_network, set_uci_var,
-    uci_commit, uci_revert, uci_show,
+    del_uci_var, get_uci_var, openwrt_reset_network, set_uci_var, uci_commit, uci_revert, uci_show,
 };
 use althea_kernel_interface::run_command;
 use std::collections::HashMap;
