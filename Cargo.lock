@@ -1316,6 +1316,8 @@ dependencies = [
  "futures 0.3.31",
  "lazy_static",
  "log",
+ "num",
+ "num256",
  "openssl",
  "openssl-probe",
  "phonenumber",

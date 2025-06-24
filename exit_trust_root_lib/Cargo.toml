@@ -29,6 +29,8 @@ toml = "0.5"
 crossbeam = "0.8"
 futures = "0.3"
 lazy_static = "1.5"
+num256 = {workspace = true}
+num = "0.4.1"
 
 [dev-dependencies]
 actix-rt = {workspace=true}
