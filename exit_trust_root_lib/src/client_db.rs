@@ -6,11 +6,13 @@
 use crate::sms_auth::convert_althea_types_to_web3_error;
 use althea_types::{ExitIdentity, Identity, WgKey};
 use clarity::{
-    abi::{encode_call, AbiToken}, utils::debug_print_data, Address, PrivateKey
+    abi::{encode_call, AbiToken},
+    utils::debug_print_data,
+    Address, PrivateKey,
 };
-use num256::Uint256;
-use num::ToPrimitive;
 use log::{info, trace};
+use num::ToPrimitive;
+use num256::Uint256;
 use std::{collections::HashSet, net::IpAddr, time::Duration, vec};
 use tokio::time::timeout as future_timeout;
 use web30::{
@@ -274,7 +276,7 @@ pub async fn get_user_admin_list(
     requester_address: Address,
     contract: Address,
 ) -> Result<Vec<Address>, Web3Error> {
-    let payload = encode_call("state_UserAdmins()", &[])?;
+    let payload = encode_call("getUserAdminList()", &[])?;
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),
@@ -306,7 +308,7 @@ pub async fn get_exit_admin_list(
     requester_address: Address,
     contract: Address,
 ) -> Result<Vec<Address>, Web3Error> {
-    let payload = encode_call("state_ExitAdmins()", &[])?;
+    let payload = encode_call("getExitAdminList()", &[])?;
     let res = web30
         .simulate_transaction(
             TransactionRequest::quick_tx(requester_address, contract, payload),
@@ -332,7 +334,7 @@ pub async fn get_exit_admin_list(
     Ok(addresses)
 }
 
-pub async fn get_state_admin_list(
+pub async fn get_state_admin(
     web30: &Web3,
     requester_address: Address,
     contract: Address,
@@ -348,19 +350,9 @@ pub async fn get_state_admin_list(
     info!("Got state admin list response: {:?}", res);
     let out = debug_print_data(&res);
     info!("State admin list debug output: {:?}", out);
-    let location = Uint256::from_be_bytes(&res[0..32]).to_usize().unwrap();
-    let length = Uint256::from_be_bytes(&res[location..location + 32])
-        .to_usize()
-        .unwrap();
-    let mut addresses = vec![];
-    for i in 0..length {
-        let start = location + 32 + i * 32;
-        let end = start + 32;
-        let address = Address::from_slice(&res[start + 12..end]).unwrap();
-        addresses.push(address);
-    }
-
-    Ok(addresses)
+    let state_admin_address = Address::from_slice(&res[12..]).unwrap();
+    info!("State admin address: {:?}", state_admin_address);
+    return Ok(vec![state_admin_address]);
 }
 
 #[cfg(test)]

@@ -472,9 +472,4 @@ contract AltheaDB {
     function getExitAdminList() public view returns (address[] memory) {
         return state_ExitAdmins;
     }
-
-    // Query contract admin
-    function getStateAdminList() public view returns (address) {
-        return state_admin;
-    }
 }
