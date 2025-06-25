@@ -10,7 +10,7 @@ use crate::{
 };
 use actix_web::{get, web, HttpResponse, Responder};
 use clarity::Address;
-use log::error;
+use log::{error, info};
 use std::str::FromStr;
 use web30::client::Web3;
 
@@ -65,8 +65,8 @@ pub async fn get_exit_admins(cache: web::Data<ConfigAndCache>) -> impl Responder
     match client_list {
         Ok(exits) => HttpResponse::Ok().json(exits),
         Err(e) => {
-            error!("Failed to get client list from contract: {:?}", e);
-            HttpResponse::InternalServerError().json("Failed to get client list from contract")
+            error!("Failed to get exit admin list from contract: {:?}", e);
+            HttpResponse::InternalServerError().json("Failed to get exit admin list from contract")
         }
     }
 }
@@ -74,6 +74,9 @@ pub async fn get_exit_admins(cache: web::Data<ConfigAndCache>) -> impl Responder
 #[get("/user_admin_list")]
 pub async fn get_user_admins(cache: web::Data<ConfigAndCache>) -> impl Responder {
     let config = cache.get_config();
+    info!("Private key: {:?}", config.private_key);
+    info!("RPC URL: {:?}", config.rpc);
+    info!("Exit contract address: {:?}", EXIT_CONTRACT);
     let client_list = get_user_admin_list(
         &Web3::new(&config.rpc, WEB3_TIMEOUT),
         config.private_key.to_address(),
@@ -83,8 +86,8 @@ pub async fn get_user_admins(cache: web::Data<ConfigAndCache>) -> impl Responder
     match client_list {
         Ok(exits) => HttpResponse::Ok().json(exits),
         Err(e) => {
-            error!("Failed to get client list from contract: {:?}", e);
-            HttpResponse::InternalServerError().json("Failed to get client list from contract")
+            error!("Failed to get user admin list from contract: {:?}", e);
+            HttpResponse::InternalServerError().json("Failed to get user admin list from contract")
         }
     }
 }
@@ -101,8 +104,8 @@ pub async fn get_state_admins(cache: web::Data<ConfigAndCache>) -> impl Responde
     match client_list {
         Ok(exits) => HttpResponse::Ok().json(exits),
         Err(e) => {
-            error!("Failed to get client list from contract: {:?}", e);
-            HttpResponse::InternalServerError().json("Failed to get client list from contract")
+            error!("Failed to get state admin list from contract: {:?}", e);
+            HttpResponse::InternalServerError().json("Failed to get state admin list from contract")
         }
     }
 }

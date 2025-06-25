@@ -6,12 +6,11 @@
 use crate::sms_auth::convert_althea_types_to_web3_error;
 use althea_types::{ExitIdentity, Identity, WgKey};
 use clarity::{
-    abi::{encode_call, AbiToken},
-    Address, PrivateKey,
+    abi::{encode_call, AbiToken}, utils::debug_print_data, Address, PrivateKey
 };
 use num256::Uint256;
 use num::ToPrimitive;
-use log::trace;
+use log::{info, trace};
 use std::{collections::HashSet, net::IpAddr, time::Duration, vec};
 use tokio::time::timeout as future_timeout;
 use web30::{
@@ -284,6 +283,9 @@ pub async fn get_user_admin_list(
         )
         .await?;
 
+    info!("User admin list response: {:?}", res);
+    let out = debug_print_data(&res);
+    info!("User admin list debug output: {:?}", out);
     let location = Uint256::from_be_bytes(&res[0..32]).to_usize().unwrap();
     let length = Uint256::from_be_bytes(&res[location..location + 32])
         .to_usize()
@@ -312,7 +314,9 @@ pub async fn get_exit_admin_list(
             None,
         )
         .await?;
-
+    info!("Exit admin list response: {:?}", res);
+    let out = debug_print_data(&res);
+    info!("Exit admin list debug output: {:?}", out);
     let location = Uint256::from_be_bytes(&res[0..32]).to_usize().unwrap();
     let length = Uint256::from_be_bytes(&res[location..location + 32])
         .to_usize()
@@ -341,7 +345,9 @@ pub async fn get_state_admin_list(
             None,
         )
         .await?;
-
+    info!("Got state admin list response: {:?}", res);
+    let out = debug_print_data(&res);
+    info!("State admin list debug output: {:?}", out);
     let location = Uint256::from_be_bytes(&res[0..32]).to_usize().unwrap();
     let length = Uint256::from_be_bytes(&res[location..location + 32])
         .to_usize()
