@@ -18,6 +18,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use web30::client::Web3;
 
+// TODO we will want a backend list here for accepted contracts
 /// This endpoint retrieves and signs the data from any specified exit contract,
 /// allowing this server to serve as a root of trust for several different exit contracts.
 #[get("/{exit_contract}")]
@@ -27,6 +28,8 @@ pub async fn return_signed_exit_contract_data(
 ) -> impl Responder {
     let contract: Address = exit_contract.into_inner();
     let cached_list = cache.get(&contract);
+    info!("Retrieving exit server list for contract {:?}", contract);
+    info!("Cached list: {:?}", cached_list);
 
     match cached_list {
         Some(list) => {

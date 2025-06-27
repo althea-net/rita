@@ -7,9 +7,12 @@ use crate::sms_auth::convert_althea_types_to_web3_error;
 use althea_types::{ExitIdentity, Identity, WgKey};
 use clarity::{
     abi::{encode_call, AbiToken},
-    Address, PrivateKey, Uint256,
+    utils::debug_print_data,
+    Address, PrivateKey,
 };
-use log::trace;
+use log::{info, trace};
+use num::ToPrimitive;
+use num256::Uint256;
 use std::{collections::HashSet, net::IpAddr, time::Duration, vec};
 use tokio::time::timeout as future_timeout;
 use web30::{
@@ -266,6 +269,90 @@ pub async fn get_exits_list(
     trace!("Exit list response: {:?}", res);
     // Parse resulting bytes
     convert_althea_types_to_web3_error(ExitIdentity::decode_array_from_eth_abi(res))
+}
+
+pub async fn get_user_admin_list(
+    web30: &Web3,
+    requester_address: Address,
+    contract: Address,
+) -> Result<Vec<Address>, Web3Error> {
+    let payload = encode_call("getUserAdminList()", &[])?;
+    let res = web30
+        .simulate_transaction(
+            TransactionRequest::quick_tx(requester_address, contract, payload),
+            Vec::new(),
+            None,
+        )
+        .await?;
+
+    info!("User admin list response: {:?}", res);
+    let out = debug_print_data(&res);
+    info!("User admin list debug output: {:?}", out);
+    let location = Uint256::from_be_bytes(&res[0..32]).to_usize().unwrap();
+    let length = Uint256::from_be_bytes(&res[location..location + 32])
+        .to_usize()
+        .unwrap();
+    let mut addresses = vec![];
+    for i in 0..length {
+        let start = location + 32 + i * 32;
+        let end = start + 32;
+        let address = Address::from_slice(&res[start + 12..end]).unwrap();
+        addresses.push(address);
+    }
+
+    Ok(addresses)
+}
+
+pub async fn get_exit_admin_list(
+    web30: &Web3,
+    requester_address: Address,
+    contract: Address,
+) -> Result<Vec<Address>, Web3Error> {
+    let payload = encode_call("getExitAdminList()", &[])?;
+    let res = web30
+        .simulate_transaction(
+            TransactionRequest::quick_tx(requester_address, contract, payload),
+            Vec::new(),
+            None,
+        )
+        .await?;
+    info!("Exit admin list response: {:?}", res);
+    let out = debug_print_data(&res);
+    info!("Exit admin list debug output: {:?}", out);
+    let location = Uint256::from_be_bytes(&res[0..32]).to_usize().unwrap();
+    let length = Uint256::from_be_bytes(&res[location..location + 32])
+        .to_usize()
+        .unwrap();
+    let mut addresses = vec![];
+    for i in 0..length {
+        let start = location + 32 + i * 32;
+        let end = start + 32;
+        let address = Address::from_slice(&res[start + 12..end]).unwrap();
+        addresses.push(address);
+    }
+
+    Ok(addresses)
+}
+
+pub async fn get_state_admin(
+    web30: &Web3,
+    requester_address: Address,
+    contract: Address,
+) -> Result<Vec<Address>, Web3Error> {
+    let payload = encode_call("state_admin()", &[])?;
+    let res = web30
+        .simulate_transaction(
+            TransactionRequest::quick_tx(requester_address, contract, payload),
+            Vec::new(),
+            None,
+        )
+        .await?;
+    info!("Got state admin list response: {:?}", res);
+    let out = debug_print_data(&res);
+    info!("State admin list debug output: {:?}", out);
+    let state_admin_address = Address::from_slice(&res[12..]).unwrap();
+    info!("State admin address: {:?}", state_admin_address);
+    return Ok(vec![state_admin_address]);
 }
 
 #[cfg(test)]
