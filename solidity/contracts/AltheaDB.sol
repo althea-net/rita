@@ -462,4 +462,19 @@ contract AltheaDB {
             revert("unauthorized");
         }
     }
+
+    // Query user admin list
+    function getUserAdminList() public view returns (address[] memory) {
+        return state_UserAdmins;
+    }
+
+    // Query exit admin list
+    function getExitAdminList() public view returns (address[] memory) {
+        return state_ExitAdmins;
+    }
+
+    // Query contract admin
+    function getStateAdminList() public view returns (address) {
+        return state_admin;
+    }
 }
