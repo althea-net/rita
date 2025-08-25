@@ -90,6 +90,22 @@ lazy_static! {
     )));
 }
 
+pub fn init_db_pool(db_uri: String, workers: u32) -> Pool<ConnectionManager<PgConnection>> {
+    if !(db_uri.contains("postgres://")
+        || db_uri.contains("postgresql://")
+        || db_uri.contains("psql://"))
+    {
+        panic!("You must provide a valid postgressql database uri!");
+    }
+
+    let manager = ConnectionManager::new(db_uri);
+    r2d2::Pool::builder()
+        .max_size(workers + 1)
+        .build(manager)
+        .expect("Failed to create pool. Check exit IP is trusted to access postgresql")
+
+}
+
 lazy_static! {
     pub static ref DB_POOL: Arc<RwLock<Pool<ConnectionManager<PgConnection>>>> = {
         let db_uri = settings::get_rita_exit().db_uri;
@@ -101,13 +117,10 @@ lazy_static! {
             panic!("You must provide a valid postgressql database uri!");
         }
 
-        let manager = ConnectionManager::new(settings::get_rita_exit().db_uri);
-        Arc::new(RwLock::new(
-            r2d2::Pool::builder()
-                .max_size(settings::get_rita_exit().workers + 1)
-                .build(manager)
-                .expect("Failed to create pool. Check exit IP is trusted to access postgresql"),
-        ))
+        Arc::new(RwLock::new(init_db_pool(
+            settings::get_rita_exit().db_uri,
+            settings::get_rita_exit().workers,
+        )))
     };
 }
 #[derive(Debug, Deserialize, Default)]
