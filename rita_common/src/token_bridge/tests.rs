@@ -26,8 +26,8 @@ fn test_xdai_setup_withdraw() {
         default_bridge_addresses(),
         pk.to_address(),
         pk,
-        "https://eth.altheamesh.com".into(),
-        "https://dai.altheamesh.com".into(),
+        "https://eth.althea.net".into(),
+        "https://dai.althea.net".into(),
         TIMEOUT,
     );
 
@@ -75,8 +75,8 @@ fn test_xdai_transfer_withdraw() {
         default_bridge_addresses(),
         pk.to_address(),
         pk,
-        "https://eth.altheamesh.com".into(),
-        "https://dai.altheamesh.com".into(),
+        "https://eth.althea.net".into(),
+        "https://dai.althea.net".into(),
         TIMEOUT,
     );
 
@@ -116,8 +116,8 @@ fn test_xdai_unlock_withdraw() {
         default_bridge_addresses(),
         pk.to_address(),
         pk,
-        "https://eth.altheamesh.com".into(),
-        "https://dai.altheamesh.com".into(),
+        "https://eth.althea.net".into(),
+        "https://dai.althea.net".into(),
         TIMEOUT,
     );
 
@@ -154,8 +154,8 @@ fn test_simulate_unlock_funds() {
         default_bridge_addresses(),
         pk.to_address(),
         pk,
-        "https://eth.altheamesh.com".into(),
-        "https://dai.altheamesh.com".into(),
+        "https://eth.althea.net".into(),
+        "https://dai.althea.net".into(),
         TIMEOUT,
     );
 
@@ -188,11 +188,11 @@ fn test_simulate_unlock_funds() {
     })
 }
 
-/// Tests that funds in dai are being transfered over to the xdai blockchain as long as dai funds are greater than
-/// minimum amount to exchange (cost of a withdrawal + cost of swap to dai + cost of transfer)
+/// Tests that funds in usds are being transfered over to the xdai blockchain as long as usds funds are greater than
+/// minimum amount to exchange (cost of a withdrawal + cost of swap to usds + cost of transfer)
 #[test]
 #[ignore]
-fn test_transfer_dai() {
+fn test_transfer_usds() {
     let pk = PrivateKey::from_str(&format!(
         "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",
         "632c1e54099", "51b0281"
@@ -203,16 +203,16 @@ fn test_transfer_dai() {
         default_bridge_addresses(),
         pk.to_address(),
         pk,
-        "https://eth.altheamesh.com".into(),
-        "https://dai.altheamesh.com".into(),
+        "https://eth.althea.net".into(),
+        "https://dai.althea.net".into(),
         TIMEOUT,
     );
 
     let runner = actix_async::System::new();
     runner.block_on(async move {
-        let res = transfer_dai(bridge.clone(), bridge.get_dai_balance().await.unwrap()).await;
+        let res = transfer_usds(bridge.clone(), bridge.get_usds_balance().await.unwrap()).await;
         if res.is_err() {
-            panic!("Failed to rescue dai with {:?}", res);
+            panic!("Failed to rescue usds with {:?}", res);
         }
     })
 }

@@ -1,23 +1,23 @@
 // This module is designed to allow easy deposits for some supported chains using Ethereum. The idea
 // is pretty simple, the user deposits money into their routers Ethereum address, this is then exchanged
-// through uniswap into DAI and then from there it is bridged over to the Xdai proof of authority chains.
-// Support for Cosmos chains using a DAI-pegged native currency is next on the list.
+// through uniswap into USDS and then from there it is bridged over to the Xdai proof of authority chains.
+// Support for Cosmos chains using a USDS-pegged native currency is next on the list.
 
 // Essentially the goal is to allow users to deposit a popular and easy to acquire coin on Ethereum and then
 // actually transact in a stablecoin on a fast blockchain, eg not Ethereum.
 
-// Currently this flow supports USDC, USDT, and DAI itself (v2 specifically)
+// Currently this flow supports USDC, USDT, and USDS itself (v2 specifically)
 
 // This entire module works on the premise we call the conveyor belt model. It's difficult to track
 // money through this entire process exactly, in fact there are some edge cases where it's simply not
 // possible to reliably say if a task has completed or not. With that in mind we simply always progress
-// the the process for Source coin -> DAI -> XDAI.
+// the the process for Source coin -> USDS -> XDAI.
 
 // For the withdraw process we update a lazy static variable every time a withdraw is invoked.
 // Every tick, we check for updated withdraw information in the lazy static and use this to
 // initiate a withdrawal. From there, we loop to check for events related to the withdraws,
 // simulate these, and those that pass are unlocked on the eth side. Funds are sent to their final
-// destination in dai
+// destination in usds
 
 #[cfg(test)]
 mod tests;
@@ -177,7 +177,7 @@ pub async fn withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {
             set_bridge_state(writer.clone());
             let _res = encode_relaytokens(token_bridge, to, amount, Duration::from_secs(600)).await;
 
-            detailed_state_change(DetailedBridgeState::XdaiToDai { amount });
+            detailed_state_change(DetailedBridgeState::XdaiToUsds { amount });
             // Reset the lock
             writer.withdraw_in_progress = false;
             set_bridge_state(writer);
@@ -207,14 +207,14 @@ fn detailed_state_change(msg: DetailedBridgeState) {
 /// being inaccurate or going backwards
 #[derive(Debug, Eq, PartialEq, Clone, Serialize)]
 pub enum DetailedBridgeState {
-    /// Swapping any input token for dai
+    /// Swapping any input token for usds
     Swap,
-    /// Converting Dai to Xdai
-    DaiToXdai { amount: Uint256 },
-    /// Converting Xdai to Dai
-    XdaiToDai { amount: Uint256 },
-    DaiToDest {
-        amount_of_dai: Uint256,
+    /// Converting USDS to Xdai
+    UsdsToXdai { amount: Uint256 },
+    /// Converting Xdai to USDS
+    XdaiToUsds { amount: Uint256 },
+    UsdsToDest {
+        amount_of_usds: Uint256,
         dest_address: Address,
     },
     /// Nothing is happening

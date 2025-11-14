@@ -10,7 +10,7 @@ fn default_support_number() -> PhoneNumber {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct LocalizationSettings {
-    /// If we should display the $ symbol or just the DAI star symbol next
+    /// If we should display the $ symbol or just the USDS star symbol next
     /// to the balance, designed to help manage how prominently we want the cryptocurrency
     /// aspect of Althea to be displayed to the user.
     #[serde(default = "default_display_currency_symbol")]

@@ -1572,7 +1572,7 @@ ReleaseCandidate
 
 Gets the status of the token bridge
 
-Reserve amount is always in DAI (dollars), withdraw chain represents how withdraws will be performed.
+Reserve amount is always in USDS (dollars), withdraw chain represents how withdraws will be performed.
 The state is the DetailedBridgeState object in `rita_common/token_bridge/mod.rs` and you should consult
 the code there for all of it's many possible states
 

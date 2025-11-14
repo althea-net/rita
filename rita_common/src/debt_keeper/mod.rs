@@ -211,7 +211,7 @@ pub fn payment_received(
     let dk_pin = &mut *DEBT_DATA.write().unwrap();
     let dk = get_debt_keeper_write_ref(dk_pin);
 
-    // Debt keeper currently bookeeps in dai, we convert whatever amount we recive to the debt keeper using
+    // Debt keeper currently bookeeps in usds, we convert whatever amount we recive to the debt keeper using
     let amount = normalize_payment_amount(
         amount,
         denom,
@@ -256,7 +256,7 @@ pub fn payment_succeeded(
 ) -> Result<(), RitaCommonError> {
     let dk_pin = &mut *DEBT_DATA.write().unwrap();
     let dk = get_debt_keeper_write_ref(dk_pin);
-    // Debt keeper currently bookeeps in dai, we convert whatever amount we recive to the debt keeper using
+    // Debt keeper currently bookeeps in usds, we convert whatever amount we recive to the debt keeper using
     let amount = normalize_payment_amount(
         amount,
         denom,

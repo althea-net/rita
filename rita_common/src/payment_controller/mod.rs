@@ -227,7 +227,7 @@ async fn make_althea_payment(
 
     info!("We are sending an Althea payment of {} wei", pmt.amount);
     // Payments are tracked by debt keeper in wei (1*10^18) = $1 this is becuase
-    // on xdai the native token is DAI which is pegged to the dollar and it uses 18 decimals
+    // on xdai the native token is USDS which is pegged to the dollar and it uses 18 decimals
     // of precision. We need to convert this to the correct denomination for USDC on Althea L1
     // which is a 6 decimal precision coin.
     pmt.amount = normalize_payment_amount(

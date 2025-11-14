@@ -9,7 +9,7 @@ use clarity::{Address, PrivateKey};
 use num256::Uint256;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
-use web30::amm::{DAI_CONTRACT_ADDRESS as DAI_CONTRACT_ON_ETH, USDC_CONTRACT_ADDRESS};
+use web30::amm::{USDC_CONTRACT_ADDRESS, USDS_CONTRACT_ADDRESS as USDS_CONTRACT_ON_ETH};
 use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
 use web30::types::{Log, TransactionRequest, TransactionResponse};
@@ -23,10 +23,12 @@ pub use error::TokenBridgeError;
 pub static UNISWAP_GAS_LIMIT: u128 = 150_000;
 pub static ERC20_GAS_LIMIT: u128 = 40_000;
 pub static XDAI_FUNDS_UNLOCK_GAS: u128 = 180_000;
-/// Minimum transfer is $5 dai which has 18 decimal precision
-pub static MINIMUM_DAI_TO_SEND: u128 = 2_000_000_000_000_000_000;
-/// Minimum transfer is $15 USDC which has 6 decimal precision
-pub static MINIMUM_USDC_TO_CONVERT: u128 = 15_000_000;
+/// Minimum transfer is 50c usds which has 18 decimal precision
+pub static MINIMUM_USDS_TO_SEND: u128 = 500_000_000_000_000_000;
+/// Minimum swap is 50c USDC which has 6 decimal precision
+pub static MINIMUM_USDC_TO_CONVERT: u128 = 500_000;
+/// Minimum swap 50c DAI which has 18 decimal precision
+pub static MINIMUM_DAI_TO_CONVERT: u128 = 500_000_000_000_000_000;
 
 fn default_helper_on_xdai_address() -> Address {
     default_bridge_addresses().helper_on_xdai
@@ -53,9 +55,7 @@ pub struct TokenBridgeAddresses {
 }
 
 pub fn get_usdt_address() -> Address {
-    "0xdAC17F958D2ee523a2206206994597C13D831ec7"
-        .parse()
-        .unwrap()
+    *web30::amm::USDT_CONTRACT_ADDRESS
 }
 
 /// Just a little helper struct to keep us from getting
@@ -108,10 +108,10 @@ impl TokenBridge {
         }
     }
 
-    /// Bridge `dai_amount` dai to xdai
-    pub async fn dai_to_xdai_bridge(
+    /// Bridge `usds_amount` usds to xdai
+    pub async fn usds_to_xdai_bridge(
         &self,
-        dai_amount: Uint256,
+        usds_amount: Uint256,
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
         let secret = self.eth_privatekey;
@@ -119,20 +119,20 @@ impl TokenBridge {
         let allowance = self
             .eth_web3
             .get_erc20_allowance(
-                *DAI_CONTRACT_ON_ETH,
+                *USDS_CONTRACT_ON_ETH,
                 self.eth_privatekey.to_address(),
                 self.xdai_bridge_on_eth,
                 vec![],
             )
             .await?;
-        trace!("Current DAI allowance on the bridge is {}", allowance);
-        if dai_amount > allowance {
-            trace!("Executing approval for DAI transfer");
-            // approve 1000 dai at a time, this reduces gas costs for the user
+        trace!("Current USDS allowance on the bridge is {}", allowance);
+        if usds_amount > allowance {
+            trace!("Executing approval for USDS transfer");
+            // approve 1000 usds at a time, this reduces gas costs for the user
             self.eth_web3
                 .erc20_approve(
-                    *DAI_CONTRACT_ON_ETH,
-                    // 1000 dai
+                    *USDS_CONTRACT_ON_ETH,
+                    // 1000 usds
                     1000000000000000000000u128.into(),
                     self.eth_privatekey,
                     self.xdai_bridge_on_eth,
@@ -148,7 +148,7 @@ impl TokenBridge {
                 self.xdai_bridge_on_eth,
                 encode_call(
                     "relayTokens(address,uint256)",
-                    &[self.eth_privatekey.to_address().into(), dai_amount.into()],
+                    &[self.eth_privatekey.to_address().into(), usds_amount.into()],
                 )
                 .unwrap(),
                 0u32.into(),
@@ -162,14 +162,14 @@ impl TokenBridge {
             .wait_for_transaction(tx_hash, timeout, None)
             .await?;
 
-        Ok(dai_amount)
+        Ok(usds_amount)
     }
 
-    pub async fn get_dai_balance(&self) -> Result<Uint256, TokenBridgeError> {
-        let dai_address = *DAI_CONTRACT_ON_ETH;
+    pub async fn get_usds_balance(&self) -> Result<Uint256, TokenBridgeError> {
+        let usds_address = *USDS_CONTRACT_ON_ETH;
         Ok(self
             .eth_web3
-            .get_erc20_balance(dai_address, self.own_address, vec![])
+            .get_erc20_balance(usds_address, self.own_address, vec![])
             .await?)
     }
 
@@ -182,10 +182,19 @@ impl TokenBridge {
     }
 
     pub async fn get_usdt_balance(&self) -> Result<Uint256, TokenBridgeError> {
-        let usdt_address = get_usdt_address();
+        let usdt_address = *web30::amm::USDT_CONTRACT_ADDRESS;
         Ok(self
             .eth_web3
             .get_erc20_balance(usdt_address, self.own_address, vec![])
+            .await?)
+    }
+
+    /// DAI is a token we support swapping to USDS before bridging over to xdai (now Gnosischain)
+    pub async fn get_dai_balance(&self) -> Result<Uint256, TokenBridgeError> {
+        let dai_address = *web30::amm::DAI_CONTRACT_ADDRESS;
+        Ok(self
+            .eth_web3
+            .get_erc20_balance(dai_address, self.own_address, vec![])
             .await?)
     }
 
@@ -743,7 +752,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn test_dai_to_xdai_bridge() {
+    fn test_usds_to_xdai_bridge() {
         let runner = actix::System::new();
 
         let token_bridge = new_token_bridge();
@@ -752,7 +761,7 @@ mod tests {
             // All we can really do here is test that it doesn't throw. Check your balances in
             // 5-10 minutes to see if the money got transferred.
             token_bridge
-                .dai_to_xdai_bridge(eth_to_wei(0.01f64), TIMEOUT)
+                .usds_to_xdai_bridge(eth_to_wei(0.01f64), TIMEOUT)
                 .await
                 .unwrap();
         });
