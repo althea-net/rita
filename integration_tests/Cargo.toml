@@ -33,7 +33,7 @@ num256 = {workspace = true}
 num-traits="0.2"
 web30 = {workspace = true}
 lazy_static = "1.4"
-actix-web = { version = "4.3", default_features = false, features = [
+actix-web = { version = "4.3", default-features = false, features = [
     "openssl",
 ] }
 phonenumber = "0.3.5"
