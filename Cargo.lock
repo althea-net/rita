@@ -3099,7 +3099,7 @@ dependencies = [
 
 [[package]]
 name = "rita_bin"
-version = "0.22.8"
+version = "0.22.9"
 dependencies = [
  "actix",
  "actix-rt",
@@ -3135,7 +3135,7 @@ dependencies = [
 
 [[package]]
 name = "rita_client"
-version = "0.22.8"
+version = "0.22.9"
 dependencies = [
  "actix",
  "actix-rt",
@@ -3194,7 +3194,7 @@ dependencies = [
 
 [[package]]
 name = "rita_common"
-version = "0.22.8"
+version = "0.22.9"
 dependencies = [
  "actix",
  "actix-service",
@@ -3236,7 +3236,7 @@ dependencies = [
 
 [[package]]
 name = "rita_exit"
-version = "0.22.8"
+version = "0.22.9"
 dependencies = [
  "actix",
  "actix-web",
@@ -3266,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "rita_extender"
-version = "0.22.8"
+version = "0.22.9"
 dependencies = [
  "actix",
  "actix-web",
@@ -4563,9 +4563,9 @@ dependencies = [
 
 [[package]]
 name = "web30"
-version = "1.12.2"
+version = "1.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad686550d0772f37ae1938fc073a5f9da4c0e6773c0ab31c6321ab1b35ef7789"
+checksum = "a0778903c457d27dbd7b9a945416dfeaebf5eb919ed4487908599e34d96f8c22"
 dependencies = [
  "awc",
  "clarity",

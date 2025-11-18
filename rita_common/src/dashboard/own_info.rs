@@ -7,7 +7,7 @@ use actix_web_async::HttpResponse;
 use clarity::Address;
 use num256::{Int256, Uint256};
 
-pub static READABLE_VERSION: &str = "Beta 22 RC8";
+pub static READABLE_VERSION: &str = "Beta 22 RC9";
 
 #[derive(Serialize)]
 pub struct OwnInfo {
