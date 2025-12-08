@@ -3,16 +3,16 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-use clarity::abi::{encode_call, Token};
+use clarity::abi::{encode_call, AbiToken};
 use clarity::utils::bytes_to_hex_str;
 use clarity::{Address, PrivateKey};
 use num256::Uint256;
 use std::collections::HashSet;
-use std::time::Duration;
-use web30::amm::{DAI_CONTRACT_ADDRESS as DAI_CONTRACT_ON_ETH, USDC_CONTRACT_ADDRESS};
+use std::time::{Duration, Instant};
+use web30::amm::{USDC_CONTRACT_ADDRESS, USDS_CONTRACT_ADDRESS as USDS_CONTRACT_ON_ETH};
 use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
-use web30::types::Log;
+use web30::types::{Log, TransactionRequest, TransactionResponse};
 
 mod error;
 pub use error::TokenBridgeError;
@@ -23,10 +23,12 @@ pub use error::TokenBridgeError;
 pub static UNISWAP_GAS_LIMIT: u128 = 150_000;
 pub static ERC20_GAS_LIMIT: u128 = 40_000;
 pub static XDAI_FUNDS_UNLOCK_GAS: u128 = 180_000;
-/// Minimum transfer is $5 dai which has 18 decimal precision
-pub static MINIMUM_DAI_TO_SEND: u128 = 2_000_000_000_000_000_000;
-/// Minimum transfer is $15 USDC which has 6 decimal precision
-pub static MINIMUM_USDC_TO_CONVERT: u128 = 15_000_000;
+/// Minimum transfer is 50c usds which has 18 decimal precision
+pub static MINIMUM_USDS_TO_SEND: u128 = 500_000_000_000_000_000;
+/// Minimum swap is 50c USDC which has 6 decimal precision
+pub static MINIMUM_USDC_TO_CONVERT: u128 = 500_000;
+/// Minimum swap 50c DAI which has 18 decimal precision
+pub static MINIMUM_DAI_TO_CONVERT: u128 = 500_000_000_000_000_000;
 
 fn default_helper_on_xdai_address() -> Address {
     default_bridge_addresses().helper_on_xdai
@@ -53,9 +55,7 @@ pub struct TokenBridgeAddresses {
 }
 
 pub fn get_usdt_address() -> Address {
-    "0xdAC17F958D2ee523a2206206994597C13D831ec7"
-        .parse()
-        .unwrap()
+    *web30::amm::USDT_CONTRACT_ADDRESS
 }
 
 /// Just a little helper struct to keep us from getting
@@ -108,46 +108,68 @@ impl TokenBridge {
         }
     }
 
-    /// Bridge `dai_amount` dai to xdai
-    pub async fn dai_to_xdai_bridge(
+    /// Bridge `usds_amount` usds to xdai
+    pub async fn usds_to_xdai_bridge(
         &self,
-        dai_amount: Uint256,
+        usds_amount: Uint256,
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
-        let own_address = self.own_address;
         let secret = self.eth_privatekey;
 
-        // You basically just send it some dai to the bridge address and they show
-        // up in the same address on the xdai side we have no idea when this has succeeded
-        // since the events are not indexed
-        let tx_hash = self
+        let allowance = self
             .eth_web3
-            .send_transaction(
-                *DAI_CONTRACT_ON_ETH,
+            .get_erc20_allowance(
+                *USDS_CONTRACT_ON_ETH,
+                self.eth_privatekey.to_address(),
+                self.xdai_bridge_on_eth,
+                vec![],
+            )
+            .await?;
+        trace!("Current USDS allowance on the bridge is {}", allowance);
+        if usds_amount > allowance {
+            trace!("Executing approval for USDS transfer");
+            // approve 1000 usds at a time, this reduces gas costs for the user
+            self.eth_web3
+                .erc20_approve(
+                    *USDS_CONTRACT_ON_ETH,
+                    // 1000 usds
+                    1000000000000000000000u128.into(),
+                    self.eth_privatekey,
+                    self.xdai_bridge_on_eth,
+                    Some(timeout),
+                    vec![],
+                )
+                .await?;
+        }
+
+        let tx = self
+            .eth_web3
+            .prepare_transaction(
+                self.xdai_bridge_on_eth,
                 encode_call(
-                    "transfer(address,uint256)",
-                    &[self.xdai_bridge_on_eth.into(), dai_amount.clone().into()],
+                    "relayTokens(address,uint256)",
+                    &[self.eth_privatekey.to_address().into(), usds_amount.into()],
                 )
                 .unwrap(),
                 0u32.into(),
-                own_address,
                 secret,
-                Vec::new(),
+                vec![],
             )
             .await?;
+        let tx_hash = self.eth_web3.send_prepared_transaction(tx).await?;
 
         self.eth_web3
             .wait_for_transaction(tx_hash, timeout, None)
             .await?;
 
-        Ok(dai_amount)
+        Ok(usds_amount)
     }
 
-    pub async fn get_dai_balance(&self) -> Result<Uint256, TokenBridgeError> {
-        let dai_address = *DAI_CONTRACT_ON_ETH;
+    pub async fn get_usds_balance(&self) -> Result<Uint256, TokenBridgeError> {
+        let usds_address = *USDS_CONTRACT_ON_ETH;
         Ok(self
             .eth_web3
-            .get_erc20_balance(dai_address, self.own_address)
+            .get_erc20_balance(usds_address, self.own_address, vec![])
             .await?)
     }
 
@@ -155,15 +177,24 @@ impl TokenBridge {
         let usdc_address = *USDC_CONTRACT_ADDRESS;
         Ok(self
             .eth_web3
-            .get_erc20_balance(usdc_address, self.own_address)
+            .get_erc20_balance(usdc_address, self.own_address, vec![])
             .await?)
     }
 
     pub async fn get_usdt_balance(&self) -> Result<Uint256, TokenBridgeError> {
-        let usdt_address = get_usdt_address();
+        let usdt_address = *web30::amm::USDT_CONTRACT_ADDRESS;
         Ok(self
             .eth_web3
-            .get_erc20_balance(usdt_address, self.own_address)
+            .get_erc20_balance(usdt_address, self.own_address, vec![])
+            .await?)
+    }
+
+    /// DAI is a token we support swapping to USDS before bridging over to xdai (now Gnosischain)
+    pub async fn get_dai_balance(&self) -> Result<Uint256, TokenBridgeError> {
+        let dai_address = *web30::amm::DAI_CONTRACT_ADDRESS;
+        Ok(self
+            .eth_web3
+            .get_erc20_balance(dai_address, self.own_address, vec![])
             .await?)
     }
 
@@ -173,7 +204,6 @@ impl TokenBridge {
         data: HelperWithdrawInfo,
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
-        let own_address = self.own_address;
         let payload = get_payload_for_funds_unlock(&data);
         trace!(
             "bridge unlocking funds with! {} bytes payload! {}",
@@ -181,21 +211,21 @@ impl TokenBridge {
             bytes_to_hex_str(&payload),
         );
 
-        let txid = self
+        let tx = self
             .eth_web3
-            .send_transaction(
+            .prepare_transaction(
                 self.xdai_bridge_on_eth,
                 payload,
                 0u32.into(),
-                own_address,
                 self.eth_privatekey,
                 Vec::new(),
             )
             .await?;
+        let txid = self.eth_web3.send_prepared_transaction(tx).await?;
 
         let _ = self
             .eth_web3
-            .wait_for_transaction(txid.clone(), timeout, None)
+            .wait_for_transaction(txid, timeout, None)
             .await;
         Ok(txid)
     }
@@ -221,7 +251,7 @@ pub async fn get_relay_message_hash(
         &[
             dest_address.into(),
             amount_sent.into(),
-            Token::Bytes(xdai_withdraw_txid.to_bytes_be()),
+            AbiToken::Bytes(xdai_withdraw_txid.to_be_bytes().to_vec()),
         ],
     ) {
         Ok(a) => a,
@@ -232,11 +262,15 @@ pub async fn get_relay_message_hash(
         }
     };
     let msg_hash = xdai_web3
-        .simulate_transaction(helper_on_xdai, 0_u32.into(), payload, own_address, None)
+        .simulate_transaction(
+            TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            vec![],
+            None,
+        )
         .await?;
     // this may return 0x0 if the value is not yet ready, in this case
     // we fail with a not ready error
-    let payload = match encode_call("getMessage(bytes32)", &[Token::Bytes(msg_hash.clone())]) {
+    let payload = match encode_call("getMessage(bytes32)", &[AbiToken::Bytes(msg_hash.clone())]) {
         Ok(a) => a,
         Err(e) => {
             return Err(TokenBridgeError::Web3Error(Web3Error::BadInput(format!(
@@ -245,14 +279,18 @@ pub async fn get_relay_message_hash(
         }
     };
     let msg = xdai_web3
-        .simulate_transaction(helper_on_xdai, 0_u32.into(), payload, own_address, None)
+        .simulate_transaction(
+            TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            vec![],
+            None,
+        )
         .await?;
 
     if msg == vec![0] || msg.len() <= 64 {
         return Err(TokenBridgeError::HelperMessageNotReady);
     }
 
-    let payload = match encode_call("getSignatures(bytes32)", &[Token::Bytes(msg_hash)]) {
+    let payload = match encode_call("getSignatures(bytes32)", &[AbiToken::Bytes(msg_hash)]) {
         Ok(a) => a,
         Err(e) => {
             return Err(TokenBridgeError::Web3Error(Web3Error::BadInput(format!(
@@ -261,7 +299,11 @@ pub async fn get_relay_message_hash(
         }
     };
     let sigs_payload = xdai_web3
-        .simulate_transaction(helper_on_xdai, 0_u32.into(), payload, own_address, None)
+        .simulate_transaction(
+            TransactionRequest::quick_tx(own_address, helper_on_xdai, payload),
+            vec![],
+            None,
+        )
         .await?;
     if sigs_payload == vec![0] || sigs_payload.len() <= 64 {
         return Err(TokenBridgeError::HelperMessageNotReady);
@@ -274,8 +316,8 @@ pub async fn get_relay_message_hash(
     //  1. discard the first uint256 type specifier, we know what we have
     //  2. take the second uint256 it's the length in bytes of the rest of the message
     //  3. take the bytes between START (2 uint256 offset) and END (offset plus message length)
-    let msg_len = Uint256::from_bytes_be(&msg[32..64]);
-    let sigs_len = Uint256::from_bytes_be(&sigs_payload[32..64]);
+    let msg_len = Uint256::from_be_bytes(&msg[32..64]);
+    let sigs_len = Uint256::from_be_bytes(&sigs_payload[32..64]);
     if msg_len > usize::MAX.into() || sigs_len > usize::MAX.into() {
         return Err(TokenBridgeError::HelperMessageIncorrect);
     }
@@ -300,8 +342,8 @@ pub fn get_payload_for_funds_unlock(data: &HelperWithdrawInfo) -> Vec<u8> {
     encode_call(
         "executeSignatures(bytes,bytes)",
         &[
-            Token::UnboundedBytes(data.msg.clone()),
-            Token::UnboundedBytes(data.sigs.clone()),
+            AbiToken::UnboundedBytes(data.msg.clone()),
+            AbiToken::UnboundedBytes(data.sigs.clone()),
         ],
     )
     .unwrap()
@@ -338,7 +380,11 @@ pub async fn check_relayed_message(
     };
 
     let res = web3
-        .simulate_transaction(contract, 0_u32.into(), payload, own_address, None)
+        .simulate_transaction(
+            TransactionRequest::quick_tx(own_address, contract, payload),
+            vec![],
+            None,
+        )
         .await?;
 
     // if last entry of vector is 1, true, else false
@@ -361,17 +407,17 @@ pub async fn encode_relaytokens(
     let payload = encode_call("relayTokens(address)", &[dest_address.into()]).unwrap();
     let options = Vec::new();
 
-    let tx_hash = bridge
+    let tx = bridge
         .xdai_web3
-        .send_transaction(
+        .prepare_transaction(
             bridge.xdai_bridge_on_xdai,
             payload,
             amount,
-            bridge.own_address,
             bridge.eth_privatekey,
             options,
         )
         .await?;
+    let tx_hash = bridge.xdai_web3.send_prepared_transaction(tx).await?;
 
     bridge
         .xdai_web3
@@ -388,11 +434,11 @@ fn compute_start_end(
     total_blocks: u64,
     max_iter: u64,
 ) -> (Uint256, Uint256) {
-    let start_block = (latest_block.clone() - total_blocks.into()) + (max_iter * iter).into();
-    let end_block = if start_block.clone() + max_iter.into() > latest_block {
+    let start_block = (latest_block - total_blocks.into()) + (max_iter * iter).into();
+    let end_block = if start_block + max_iter.into() > latest_block {
         latest_block
     } else {
-        start_block.clone() + max_iter.into()
+        start_block + max_iter.into()
     };
 
     (start_block, end_block)
@@ -434,11 +480,16 @@ pub async fn check_withdrawals(
     contract: Address,
     xdai_web3: Web3,
     search_addresses: HashSet<Address>,
+    // The total amount of time this operation has to complete
+    // during that time failed requests will be retried
+    // if None exit will occur on the first error
+    retry_timeout: Option<Duration>,
 ) -> Result<Vec<WithdrawEvent>, Web3Error> {
     /// Total number of blocks on the xdai blockchain we retrieve at once. If the blocks to check is greater than this we loop.
-    const MAX_ITER: u64 = 10_000;
+    const MAX_ITER: u64 = 500;
     let mut blocks_left: u64 = blocks_to_check;
     let mut vec_of_withdraws = Vec::new();
+    let start_time = Instant::now();
 
     //get latest xdai block
     let xdai_client = xdai_web3;
@@ -447,18 +498,24 @@ pub async fn check_withdrawals(
 
     // iterate MAX_ITER blocks at a time
     loop {
-        let (start, end) =
-            compute_start_end(iter, xdai_latest_block.clone(), blocks_to_check, MAX_ITER);
+        let (start, end) = compute_start_end(iter, xdai_latest_block, blocks_to_check, MAX_ITER);
         iter += 1;
 
         //We search for the phrase UserRequestForSignature(_receiver,valueToTransfer)
         let phrase_sig = "UserRequestForSignature(address,uint256)";
 
-        let logs = xdai_client
+        let mut logs = xdai_client
             .check_for_events(start, Some(end), vec![contract], vec![phrase_sig])
-            .await?;
+            .await;
+        if let Some(timeout) = retry_timeout {
+            while logs.is_err() && (Instant::now() - start_time) < timeout {
+                logs = xdai_client
+                    .check_for_events(start, Some(end), vec![contract], vec![phrase_sig])
+                    .await;
+            }
+        }
 
-        for log in logs.iter() {
+        for log in logs?.iter() {
             let withdraw_event = parse_withdraw_event(log, &xdai_client).await?;
             for &search_address in search_addresses.iter() {
                 if withdraw_event.sender == search_address {
@@ -492,7 +549,7 @@ fn parse_receiver_data(data: &[u8]) -> Result<(Address, Uint256), Web3Error> {
 
     // The next word in payload represents the ammount. this is bytes 32 - 64
     let ammount_bytes = &data[32..64];
-    let ammount = Uint256::from_bytes_be(ammount_bytes);
+    let ammount = Uint256::from_be_bytes(ammount_bytes);
 
     Ok((address, ammount))
 }
@@ -507,8 +564,8 @@ async fn parse_sender_data(data: &[u8], client: &Web3) -> Result<(Address, Uint2
         ));
     }
 
-    let tx_hash = Uint256::from_bytes_be(data);
-    let response = client.eth_get_transaction_by_hash(tx_hash.clone()).await?;
+    let tx_hash = Uint256::from_be_bytes(data);
+    let response = client.eth_get_transaction_by_hash(tx_hash).await?;
 
     let tx_res = match response {
         Some(a) => a,
@@ -519,7 +576,11 @@ async fn parse_sender_data(data: &[u8], client: &Web3) -> Result<(Address, Uint2
         }
     };
 
-    let sender = tx_res.from;
+    let sender = match tx_res {
+        TransactionResponse::Eip1559 { from, .. } => from,
+        TransactionResponse::Eip2930 { from, .. } => from,
+        TransactionResponse::Legacy { from, .. } => from,
+    };
     Ok((sender, tx_hash))
 }
 
@@ -691,7 +752,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn test_dai_to_xdai_bridge() {
+    fn test_usds_to_xdai_bridge() {
         let runner = actix::System::new();
 
         let token_bridge = new_token_bridge();
@@ -700,7 +761,7 @@ mod tests {
             // All we can really do here is test that it doesn't throw. Check your balances in
             // 5-10 minutes to see if the money got transferred.
             token_bridge
-                .dai_to_xdai_bridge(eth_to_wei(0.01f64), TIMEOUT)
+                .usds_to_xdai_bridge(eth_to_wei(0.01f64), TIMEOUT)
                 .await
                 .unwrap();
         });
@@ -713,7 +774,7 @@ mod tests {
 
         let token_bridge = new_token_bridge();
 
-        let blocks_to_check = 10000;
+        let blocks_to_check = 100_000;
         runner.block_on(async move {
             let mut h = HashSet::new();
             h.insert(token_bridge.own_address);
@@ -723,6 +784,7 @@ mod tests {
                 token_bridge.xdai_bridge_on_xdai,
                 token_bridge.xdai_web3,
                 h,
+                Some(Duration::from_secs(600)),
             )
             .await
             .unwrap();
@@ -752,7 +814,7 @@ mod tests {
         let (address, ammount) = parse_receiver_data(&data).unwrap();
 
         assert_eq!(address, Address::from_slice(&address_bytes).unwrap());
-        assert_eq!(ammount, Uint256::from_bytes_be(&ammount_bytes));
+        assert_eq!(ammount, Uint256::from_be_bytes(&ammount_bytes));
 
         assert_eq!(address.as_bytes(), address_bytes);
     }
@@ -768,31 +830,26 @@ mod tests {
             let xdai_client = Web3::new("https://dai.althea.net", Duration::from_secs(5));
             let latest_block = xdai_client.eth_block_number().await.unwrap();
 
-            let (start, end) =
-                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
-            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            let (start, end) = compute_start_end(0, latest_block, blocks_to_search, max_iter);
+            assert_eq!(start, latest_block - blocks_to_search.into());
             assert_eq!(end, start + max_iter.into());
 
             blocks_to_search = 9999;
-            let (start, end) =
-                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
-            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            let (start, end) = compute_start_end(0, latest_block, blocks_to_search, max_iter);
+            assert_eq!(start, latest_block - blocks_to_search.into());
             assert_eq!(end, start + blocks_to_search.into());
 
             blocks_to_search = 10000;
-            let (start, end) =
-                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
-            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            let (start, end) = compute_start_end(0, latest_block, blocks_to_search, max_iter);
+            assert_eq!(start, latest_block - blocks_to_search.into());
             assert_eq!(end, start + blocks_to_search.into());
 
             blocks_to_search = 10001;
-            let (start, end) =
-                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
-            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            let (start, end) = compute_start_end(0, latest_block, blocks_to_search, max_iter);
+            assert_eq!(start, latest_block - blocks_to_search.into());
             assert_eq!(end, start + max_iter.into());
 
-            let (start, end) =
-                compute_start_end(1, latest_block.clone(), blocks_to_search, max_iter);
+            let (start, end) = compute_start_end(1, latest_block, blocks_to_search, max_iter);
             assert_eq!(start, latest_block - 1u32.into());
             assert_eq!(end, start + 1u32.into());
         });

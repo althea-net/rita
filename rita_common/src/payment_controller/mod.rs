@@ -187,18 +187,32 @@ async fn make_payment(
     let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
 
     let tx = web3
-        .send_transaction(
+        .prepare_legacy_transaction(
             pmt.to.eth_address,
             Vec::new(),
             pmt.amount.clone(),
             our_private_key.to_address(),
             *our_private_key,
-            vec![],
+            vec![web30::types::SendTxOption::GasPriceMultiplier(1.2)],
         )
         .await;
 
     match tx {
-        Ok(tx_id) => {
+        Ok(tx) => {
+            let transaction_status = web3.send_prepared_transaction(tx.clone()).await;
+            let tx_id = match transaction_status {
+                Ok(tx_id) => tx_id,
+                Err(e) => {
+                    error!(
+                        "Failed to send payment {:?} to {:?} with {:?}",
+                        pmt, pmt.to, e
+                    );
+                    // it is now possible that this transaction has been published
+                    // so we have to try and determine what happened
+                    // the published state of the tx is ambiguous, now we have to pretend like we sent it.
+                    tx.txid()
+                }
+            };
             info!("Sending bw payment with txid {:#066x} current balance: {:?}, payment of {:?}, from address {} to address {}",
                             tx_id, balance, pmt.amount, our_address, pmt.to.eth_address);
 

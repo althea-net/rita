@@ -9,14 +9,14 @@ althea_types = { path = "../althea_types"}
 babel_monitor = { path = "../babel_monitor"}
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 auto-bridge = { path = "../auto_bridge" }
-num256 = "0.3"
+num256 = { workspace = true }
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 toml = "0.5"
 log = "0.4"
 lazy_static = "1.4"
-clarity = "0.5"
+clarity = { workspace = true }
 arrayvec = {version= "0.7", features = ["serde"]}
 phonenumber = "0.3"
 ipnetwork = "0.20"

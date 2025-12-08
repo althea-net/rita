@@ -15,7 +15,7 @@ use std::fs::File;
 use std::io::Read;
 use std::net::IpAddr;
 use std::path::Path;
-use std::{str, thread};
+use std::thread;
 
 mod error;
 pub use error::NewCluError;
@@ -44,6 +44,18 @@ pub fn generate_mesh_ip() -> Result<IpAddr, NewCluError> {
     info!("Generated a new mesh IP address: {}", mesh_ip);
 
     Ok(mesh_ip)
+}
+
+pub fn generate_eth_key() -> PrivateKey {
+    // this loop should never execute more than twice, if it does the random number generator
+    // is in poor shape
+    loop {
+        let key_buf: [u8; 32] = rand::random();
+        let new_private_key = PrivateKey::from_bytes(key_buf);
+        if let Ok(key) = new_private_key {
+            return key;
+        }
+    }
 }
 
 pub fn validate_mesh_ip(ip: &IpAddr) -> bool {
@@ -94,9 +106,9 @@ pub fn del_multiple_interfaces_sync(interfaces: Vec<String>) -> Result<(), NewCl
 pub fn del_multiple_interfaces(interfaces: Vec<String>) {
     const BATCH_SIZE: usize = 50;
     let mut batched_interfaces: Vec<Vec<String>> = Vec::new();
-    let mut iter = interfaces.iter();
+    let iter = interfaces.iter();
     let mut current_batch = Vec::new();
-    while let Some(name) = iter.next() {
+    for name in iter {
         current_batch.push(name.clone());
         if current_batch.len() >= BATCH_SIZE {
             batched_interfaces.push(current_batch);
@@ -227,11 +239,9 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, NewClu
         }
         None => {
             info!("Eth key details not configured, generating");
-            let key_buf: [u8; 32] = rand::random();
-            let new_private_key = PrivateKey::from_slice(&key_buf)?;
+            let new_private_key = generate_eth_key();
             payment_settings.eth_private_key = Some(new_private_key);
-
-            payment_settings.eth_address = Some(new_private_key.to_address())
+            payment_settings.eth_address = Some(new_private_key.to_address());
         }
     }
 
@@ -310,15 +320,17 @@ fn linux_exit_init(
         None => {
             info!("Eth key details not configured, generating");
             let key_buf: [u8; 32] = rand::random();
-            let new_private_key = PrivateKey::from_slice(&key_buf)?;
+            let new_private_key = PrivateKey::from_bytes(key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
 
             payment_settings.eth_address = Some(new_private_key.to_address())
         }
     }
+
     settings.payment = payment_settings;
     settings.network = network_settings;
     settings.exit_network = exit_network_settings;
+
     trace!("Starting with settings (after clu) : {:?}", settings);
     assert!(settings.get_identity().is_some());
     Ok(settings)
@@ -327,14 +339,14 @@ fn linux_exit_init(
 pub fn init(platform: &str, settings: RitaClientSettings) -> RitaClientSettings {
     match platform {
         "linux" => linux_init(settings).unwrap(),
-        _ => unimplemented!(),
+        _ => panic!("Platform not supported"),
     }
 }
 
 pub fn exit_init(platform: &str, settings: RitaExitSettingsStruct) -> RitaExitSettingsStruct {
     match platform {
         "linux" => linux_exit_init(settings).unwrap(),
-        _ => unimplemented!(),
+        _ => panic!("Platform not supported"),
     }
 }
 
@@ -353,7 +365,7 @@ mod tests {
         let mut history = HashSet::new();
         for _ in 0..1000 {
             let ip = generate_mesh_ip().unwrap();
-            if history.get(&ip).is_some() {
+            if history.contains(&ip) {
                 panic!("Got duplicate ip {}", ip)
             } else {
                 history.insert(ip);

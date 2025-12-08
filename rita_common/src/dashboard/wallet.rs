@@ -1,6 +1,5 @@
 use crate::blockchain_oracle::get_oracle_balance;
 use crate::blockchain_oracle::get_oracle_latest_gas_price;
-use crate::blockchain_oracle::get_oracle_nonce;
 use crate::rita_loop::get_web3_server;
 use crate::token_bridge::setup_withdraw as bridge_withdraw;
 use crate::token_bridge::Withdraw as WithdrawMsg;
@@ -14,7 +13,6 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 use web30::client::Web3;
-use web30::types::SendTxOption;
 
 // this is required until we migrate our endpoints to async actix
 // this way we can queue a withdraw from the old futures endpoint
@@ -114,19 +112,23 @@ pub async fn eth_compatible_withdraw() {
     let payment_settings = settings::get_rita_common().payment;
 
     if let Some((dest, amount)) = get_withdraw_queue() {
-        let transaction_status = web3
-            .send_transaction(
+        let tx = web3
+            .prepare_transaction(
                 dest,
                 Vec::new(),
                 amount.clone(),
-                payment_settings.eth_address.unwrap(),
                 payment_settings.eth_private_key.unwrap(),
-                vec![
-                    SendTxOption::Nonce(get_oracle_nonce()),
-                    SendTxOption::GasPrice(get_oracle_latest_gas_price()),
-                ],
+                vec![],
             )
             .await;
+        let tx = match tx {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!("Failed to prepare withdrawal transaction: {:?}", e);
+                return;
+            }
+        };
+        let transaction_status = web3.send_prepared_transaction(tx).await;
         if let Err(e) = transaction_status {
             error!("Withdraw failed with {:?} retrying later!", e);
         } else {

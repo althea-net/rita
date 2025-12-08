@@ -171,7 +171,7 @@ pub mod test {
         ip.copy_from_slice(&secret[0..16]);
 
         // the starting location of the funds
-        let eth_key = PrivateKey::from_slice(&secret).unwrap();
+        let eth_key = PrivateKey::from_bytes(secret).unwrap();
         let eth_address = eth_key.to_address();
 
         Identity {

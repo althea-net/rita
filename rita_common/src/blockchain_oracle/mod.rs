@@ -6,7 +6,7 @@
 use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use clarity::Address;
-use futures::future::join4;
+use futures::future::join3;
 use num256::Int256;
 use num256::Uint256;
 use settings::payment::PaymentSettings;
@@ -251,10 +251,9 @@ async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: Str
 
     let balance = web3.eth_get_balance(our_address);
     let nonce = web3.eth_get_transaction_count(our_address);
-    let net_version = web3.net_version();
     let gas_price = web3.eth_gas_price();
-    let (balance, nonce, net_version, gas_price) =
-        join4(balance, nonce, net_version, gas_price).await;
+    let (balance, nonce, gas_price) =
+        join3(balance, nonce, gas_price).await;
 
     let mut settings = settings::get_rita_common();
 
@@ -265,12 +264,6 @@ async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: Str
     match gas_price {
         Ok(gas_price) => update_gas_price(&full_node, gas_price, &mut settings.payment),
         Err(e) => warn!("Failed to update gas price with {:?}", e),
-    }
-    match net_version {
-        Ok(net_version) => {
-            check_net_version(&full_node, ORACLE.read().unwrap().net_version, net_version)
-        }
-        Err(e) => warn!("Failed to update net_version with {:?}", e),
     }
     match nonce {
         Ok(nonce) => update_nonce(&full_node, nonce, &mut ORACLE.write().unwrap().nonce),

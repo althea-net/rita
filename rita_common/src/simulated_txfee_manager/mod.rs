@@ -1,7 +1,5 @@
 //! The maintainer fee is a fraction of all payments that is sent to the firmware maintainer
 
-use crate::blockchain_oracle::get_oracle_latest_gas_price;
-use crate::blockchain_oracle::get_oracle_nonce;
 use crate::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
@@ -13,7 +11,6 @@ use num_traits::{Signed, Zero};
 use std::sync::Arc;
 use std::sync::RwLock;
 use web30::client::Web3;
-use web30::types::SendTxOption;
 
 lazy_static! {
     static ref AMOUNT_OWED: Arc<RwLock<Uint256>> = Arc::new(RwLock::new(Uint256::zero()));
@@ -40,13 +37,10 @@ pub fn add_tx_to_total(amount: Uint256) {
 pub async fn tick_simulated_tx() {
     let payment_settings = settings::get_rita_common().payment;
     let eth_private_key = payment_settings.eth_private_key.unwrap();
-    let eth_address = eth_private_key.to_address();
     let our_id = match settings::get_rita_common().get_identity() {
         Some(id) => id,
         None => return,
     };
-    let gas_price = get_oracle_latest_gas_price();
-    let nonce = get_oracle_nonce();
     let pay_threshold: Int256 = ONE_CENT.into();
     let simulated_transaction_fee_address = payment_settings.simulated_transaction_fee_address;
     let simulated_transaction_fee = payment_settings.simulated_transaction_fee;
@@ -77,21 +71,27 @@ pub async fn tick_simulated_tx() {
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
 
-    let transaction_status = web3.send_transaction(
-        simulated_transaction_fee_address,
-        Vec::new(),
-        amount_to_pay.clone(),
-        eth_address,
-        eth_private_key,
-        vec![
-            SendTxOption::Nonce(nonce.clone()),
-            SendTxOption::GasPrice(gas_price),
-        ],
-    );
+    let tx = web3
+        .prepare_transaction(
+            simulated_transaction_fee_address,
+            Vec::new(),
+            amount_to_pay.clone(),
+            eth_private_key,
+            vec![],
+        )
+        .await;
+    let tx = match tx {
+        Ok(tx) => tx,
+        Err(e) => {
+            error!("Failed to prepare simulated tx fee payment: {:?}", e);
+            return;
+        }
+    };
+    let transaction_status = web3.send_prepared_transaction(tx).await;
 
     // in theory this may fail, for now there is no handler and
     // we will just underpay when that occurs
-    match transaction_status.await {
+    match transaction_status {
         Ok(txid) => {
             info!("Successfully paid the simulated txfee {:#066x}!", txid);
             update_payments(PaymentTx {

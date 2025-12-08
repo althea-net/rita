@@ -401,12 +401,29 @@ async fn validate_transaction(ts: ToValidate) -> Option<(ToValidate, TxValidatio
 fn get_xdai_transaction_details(
     transaction: TransactionResponse,
 ) -> (Option<Address>, Address, Uint256, Option<Uint256>) {
-    (
-        transaction.to,
-        transaction.from,
-        transaction.value,
-        transaction.block_number,
-    )
+    match transaction {
+        TransactionResponse::Eip1559 {
+            to,
+            from,
+            value,
+            block_number,
+            ..
+        } => (to, from, value, block_number),
+        TransactionResponse::Legacy {
+            to,
+            from,
+            value,
+            block_number,
+            ..
+        } => (to, from, value, block_number),
+        TransactionResponse::Eip2930 {
+            to,
+            from,
+            value,
+            block_number,
+            ..
+        } => (to, from, value, block_number),
+    }
 }
 
 /// A quick internal enum to encode the status of a transaction validation

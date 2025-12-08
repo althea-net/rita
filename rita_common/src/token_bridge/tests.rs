@@ -210,7 +210,7 @@ fn test_transfer_dai() {
 
     let runner = actix_async::System::new();
     runner.block_on(async move {
-        let res = transfer_dai(bridge.clone(), bridge.get_dai_balance().await.unwrap()).await;
+        let res = transfer_usds(bridge.clone(), bridge.get_dai_balance().await.unwrap()).await;
         if res.is_err() {
             panic!("Failed to rescue dai with {:?}", res);
         }

@@ -1,30 +1,34 @@
 use crate::token_bridge::*;
 use auto_bridge::check_relayed_message;
 use auto_bridge::get_payload_for_funds_unlock;
-use auto_bridge::get_usdt_address;
 use auto_bridge::HelperWithdrawInfo;
-use auto_bridge::MINIMUM_DAI_TO_SEND;
+use auto_bridge::MINIMUM_DAI_TO_CONVERT;
 use auto_bridge::MINIMUM_USDC_TO_CONVERT;
+use auto_bridge::MINIMUM_USDS_TO_SEND;
 use auto_bridge::{check_withdrawals, get_relay_message_hash};
 use auto_bridge::{TokenBridge as TokenBridgeCore, TokenBridgeError};
 use clarity::utils::display_uint256_as_address;
-use futures::future::join3;
+use futures::future::join4;
 use num256::Uint256;
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
+use std::vec;
 use web30::amm::DAI_CONTRACT_ADDRESS;
 use web30::amm::USDC_CONTRACT_ADDRESS;
+use web30::amm::USDS_CONTRACT_ADDRESS;
+use web30::amm::USDT_CONTRACT_ADDRESS;
 use web30::jsonrpc::error::Web3Error;
+use web30::types::TransactionRequest;
 
-/// Transfers dai present in eth address from previous xdai_bridge iterations to the xdai chain.
-/// This also assists in rescuing any stranded dai balance because of failures in depositing flow.
-pub async fn transfer_dai(
+/// Transfers usds present in eth address from previous xdai_bridge iterations to the xdai chain.
+/// This also assists in rescuing any stranded usds balance because of failures in depositing flow.
+pub async fn transfer_usds(
     bridge: TokenBridgeCore,
-    dai_balance: Uint256,
+    usds_balance: Uint256,
 ) -> Result<(), TokenBridgeError> {
-    info!("Our DAI balance is {}, sending to xDai!", dai_balance);
-    detailed_state_change(DetailedBridgeState::DaiToXdai {
-        amount: dai_balance.clone(),
+    info!("Our USDS balance is {}, sending to xDai!", usds_balance);
+    detailed_state_change(DetailedBridgeState::UsdsToXdai {
+        amount: usds_balance,
     });
 
     // Remove up to U16_MAX wei from this transaction, this is well under a cent.
@@ -34,11 +38,11 @@ pub async fn transfer_dai(
     // this is the only transaction that will be exactly the same for a very long period.
     let mut rng = thread_rng();
     let some_wei: u16 = rng.gen();
-    let amount = dai_balance - Uint256::from(some_wei);
+    let amount = usds_balance - Uint256::from(some_wei);
 
     // Over the bridge into xDai
     bridge
-        .dai_to_xdai_bridge(amount, ETH_TRANSFER_TIMEOUT)
+        .usds_to_xdai_bridge(amount, ETH_TRANSFER_TIMEOUT)
         .await?;
     Ok(())
 }
@@ -56,7 +60,7 @@ pub async fn process_withdraws(bridge: &TokenBridgeCore) -> bool {
                 return false;
             }
         };
-        let amount = withdraw_details.amount.clone();
+        let amount = withdraw_details.amount;
         let address = withdraw_details.to;
         match withdraw(withdraw_details).await {
             Ok(_) => {
@@ -96,16 +100,17 @@ pub async fn process_withdraws(bridge: &TokenBridgeCore) -> bool {
 /// on the xdai blockchain to find any withdrawals related to us, and if so we unlock these funds.
 /// We then rescue any stuck dai and send any eth that we have over to the xdai chain.
 pub async fn xdai_bridge(bridge: TokenBridgeCore) {
-    let (our_dai_balance, our_usdc_balance, our_usdt_balance) = join3(
-        bridge.get_dai_balance(),
+    let (our_usds_balance, our_usdc_balance, our_usdt_balance, our_dai_balance) = join4(
+        bridge.get_usds_balance(),
         bridge.get_usdc_balance(),
         bridge.get_usdt_balance(),
+        bridge.get_dai_balance(),
     )
     .await;
-    let our_dai_balance = match our_dai_balance {
+    let our_usds_balance = match our_usds_balance {
         Ok(val) => val,
         Err(e) => {
-            warn!("Failed to get our dai balance with {}", e);
+            warn!("Failed to get our usds balance with {}", e);
             return;
         }
     };
@@ -123,6 +128,13 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
             return;
         }
     };
+    let our_dai_balance = match our_dai_balance {
+        Ok(val) => val,
+        Err(e) => {
+            warn!("Failed to get our dai balance with {}", e);
+            return;
+        }
+    };
 
     // process withdraws, if any are processed be done for this iteration
     if process_withdraws(&bridge).await {
@@ -130,17 +142,24 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
     }
 
     info!(
-        "Our USDC balance is {} Our USDT balance is {} Minimum to convert is {}",
-        our_usdc_balance, our_usdt_balance, MINIMUM_USDC_TO_CONVERT
+        "Our USDC balance is {} Our USDT balance is {} our DAI balance is {} Minimum to convert is {}",
+        our_usdc_balance, our_usdt_balance, our_dai_balance, MINIMUM_USDC_TO_CONVERT
     );
     let mut token_to_swap = None;
+    let mut decimals_of_token_to_swap = 0u8;
     let mut token_amount = None;
     if our_usdc_balance >= MINIMUM_USDC_TO_CONVERT.into() {
         token_to_swap = Some(*USDC_CONTRACT_ADDRESS);
         token_amount = Some(our_usdc_balance);
+        decimals_of_token_to_swap = 6u8;
     } else if our_usdt_balance >= MINIMUM_USDC_TO_CONVERT.into() {
-        token_to_swap = Some(get_usdt_address());
+        token_to_swap = Some(*USDT_CONTRACT_ADDRESS);
         token_amount = Some(our_usdt_balance);
+        decimals_of_token_to_swap = 6u8;
+    } else if our_dai_balance >= MINIMUM_DAI_TO_CONVERT.into() {
+        token_to_swap = Some(*DAI_CONTRACT_ADDRESS);
+        token_amount = Some(our_dai_balance);
+        decimals_of_token_to_swap = 18u8;
     }
 
     if let (Some(token), Some(token_amount)) = (token_to_swap, token_amount) {
@@ -149,11 +168,11 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
             .swap_uniswap_v3(
                 bridge.eth_privatekey,
                 token,
-                *DAI_CONTRACT_ADDRESS,
-                Some(100u16.into()),
-                token_amount.clone(),
+                *USDS_CONTRACT_ADDRESS,
                 None,
-                Some(get_min_amount_out(token_amount)),
+                token_amount,
+                None,
+                Some(get_min_amount_out(token_amount, decimals_of_token_to_swap)),
                 None,
                 None,
                 None,
@@ -161,20 +180,20 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
             )
             .await;
         info!(
-            "Swap from {} to dai on uniswap returned with {:?}",
+            "Swap from {} to usds on uniswap returned with {:?}",
             token, res
         );
         detailed_state_change(DetailedBridgeState::Swap);
     }
 
     info!(
-        "Our dai balance {} minimum dai to send {}",
-        our_dai_balance, MINIMUM_DAI_TO_SEND
+        "Our usds balance {} minimum usds to send {}",
+        our_usds_balance, MINIMUM_USDS_TO_SEND
     );
-    if our_dai_balance >= MINIMUM_DAI_TO_SEND.into() {
-        // transfer dai exchanged from eth during previous iterations
-        let res = transfer_dai(bridge.clone(), our_dai_balance).await;
-        info!("DAI send to xdai returned with {:?}", res);
+    if our_usds_balance >= MINIMUM_USDS_TO_SEND.into() {
+        // transfer usds exchanged from eth during previous iterations
+        let res = transfer_usds(bridge.clone(), our_usds_balance).await;
+        info!("USDS send to xdai returned with {:?}", res);
         return;
     }
 
@@ -182,7 +201,7 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
 }
 
 /// This function is called inside the bridge loop. It retrieves the 'n' most recent blocks
-/// (where 'n' is the const 'BLOCKS' that is currently set to 40,032, which represents 1 week of blocks on xdai chain) that
+/// (where 'n' is the const 'BLOCKS' that is currently set to 720, which represents 1 hour of blocks on xdai chain) that
 /// have withdraw events related to our address. It then simulates these events and submits
 /// the signatures needed to unlock the funds.
 pub async fn simulated_withdrawal_on_eth(bridge: &TokenBridgeCore) -> Result<(), TokenBridgeError> {
@@ -190,25 +209,25 @@ pub async fn simulated_withdrawal_on_eth(bridge: &TokenBridgeCore) -> Result<(),
     let mut h = HashSet::new();
     h.insert(bridge.own_address);
 
-    let events = check_withdrawals(BLOCKS, bridge.xdai_bridge_on_xdai, client, h).await?;
+    let events = check_withdrawals(BLOCKS, bridge.xdai_bridge_on_xdai, client, h, None).await?;
 
     for event in events.iter() {
-        let txid = event.txid.clone();
-        let amount = event.amount.clone();
+        let txid = event.txid;
+        let amount = event.amount;
 
         let withdraw_info = get_relay_message_hash(
             bridge.own_address,
             bridge.xdai_web3.clone(),
             bridge.helper_on_xdai,
             event.receiver,
-            txid.clone(),
-            amount.clone(),
+            txid,
+            amount,
         )
         .await?;
 
         // check if the event has already unlocked the funds or not
         let res = match check_relayed_message(
-            event.txid.clone(),
+            event.txid,
             bridge.eth_web3.clone(),
             bridge.own_address,
             bridge.xdai_bridge_on_eth,
@@ -228,21 +247,21 @@ pub async fn simulated_withdrawal_on_eth(bridge: &TokenBridgeCore) -> Result<(),
         if res {
             trace!(
                 "Transaction with Id: {} has already been unlocked, skipping",
-                display_uint256_as_address(txid.clone())
+                display_uint256_as_address(txid)
             );
             continue;
         } else {
             //unlock this transaction
             trace!(
                 "Tx Hash is {} with the amount of {} for a withdraw event",
-                display_uint256_as_address(txid.clone()),
+                display_uint256_as_address(txid),
                 amount
             );
             let _res = bridge
                 .submit_signatures_to_unlock_funds(withdraw_info, SIGNATURES_TIMEOUT)
                 .await?;
-            detailed_state_change(DetailedBridgeState::DaiToDest {
-                amount_of_dai: amount,
+            detailed_state_change(DetailedBridgeState::UsdsToDest {
+                amount_of_usds: amount,
                 dest_address: event.receiver,
             });
         }
@@ -251,14 +270,16 @@ pub async fn simulated_withdrawal_on_eth(bridge: &TokenBridgeCore) -> Result<(),
     Ok(())
 }
 
-/// In order to avoid Ethereum dex sandwitch attacks we need to specify a minimum amount out of DAI
+/// In order to avoid Ethereum dex sandwitch attacks we need to specify a minimum amount out of USDS
 /// since both USDT and USDC are 6 decimal tokens this function simply does the decimal conversion to ensure
-/// we get 99% of the vlaue of our USDC or UDST out in DAI. If either token is depegged this will result in problems
-fn get_min_amount_out(mut input: Uint256) -> Uint256 {
-    // multiply by 1*10^12 to go from 1*10^6 value to -> 1*10^18 value
-    input *= 1_000_000_000_000u128.into();
-    // remove 2.5% off the top, so we need at least 95% of the face value of the USDC or USDT
-    input = input.clone() - input.clone() / 40u8.into();
+/// we get 99% of the vlaue of our USDC or UDST out in USDS. If either token is depegged this will result in problems
+/// decimals are the input token decimals, could be 6 for USDC/USDT or 18 for DAI
+fn get_min_amount_out(mut input: Uint256, decimals: u8) -> Uint256 {
+    // Convert to 18 decimals (USDS standard) by multiplying by 10^(18 - decimals)
+    let decimal_multiplier = 10u128.pow((18 - decimals) as u32);
+    input *= decimal_multiplier.into();
+    // remove 2.5% off the top, so we need at least 97.5% of the face value of the input token
+    input = input - input / 40u8.into();
     input
 }
 
@@ -274,10 +295,8 @@ pub async fn simulate_signature_submission(
     bridge
         .eth_web3
         .simulate_transaction(
-            bridge.xdai_bridge_on_eth,
-            0_u32.into(),
-            payload,
-            bridge.own_address,
+            TransactionRequest::quick_tx(bridge.own_address, bridge.xdai_bridge_on_eth, payload),
+            vec![],
             None,
         )
         .await

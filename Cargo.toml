@@ -7,9 +7,15 @@ edition = "2018"
 [workspace]
 members = ["althea_kernel_interface", "settings", "clu", "exit_db", "antenna_forwarding_client", "antenna_forwarding_protocol", "auto_bridge","rita_common","rita_exit","rita_client", "rita_bin", "test_runner"]
 
+[workspace.dependencies]
+clarity = "1.5.5"
+num256 = "0.6.0"
+web30 = "1.12.4"
+
 [profile.release]
 opt-level = "z"
 strip = true
 lto = true
 codegen-units=1
 incremental = false
+
