@@ -252,8 +252,7 @@ async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: Str
     let balance = web3.eth_get_balance(our_address);
     let nonce = web3.eth_get_transaction_count(our_address);
     let gas_price = web3.eth_gas_price();
-    let (balance, nonce, gas_price) =
-        join3(balance, nonce, gas_price).await;
+    let (balance, nonce, gas_price) = join3(balance, nonce, gas_price).await;
 
     let mut settings = settings::get_rita_common();
 

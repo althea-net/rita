@@ -103,7 +103,6 @@ pub fn init_db_pool(db_uri: String, workers: u32) -> Pool<ConnectionManager<PgCo
         .max_size(workers + 1)
         .build(manager)
         .expect("Failed to create pool. Check exit IP is trusted to access postgresql")
-
 }
 
 lazy_static! {
