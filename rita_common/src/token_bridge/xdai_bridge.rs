@@ -163,27 +163,43 @@ pub async fn xdai_bridge(bridge: TokenBridgeCore) {
     }
 
     if let (Some(token), Some(token_amount)) = (token_to_swap, token_amount) {
-        let res = bridge
-            .eth_web3
-            .swap_uniswap_v3(
-                bridge.eth_privatekey,
-                token,
-                *USDS_CONTRACT_ADDRESS,
-                None,
-                token_amount,
-                None,
-                Some(get_min_amount_out(token_amount, decimals_of_token_to_swap)),
-                None,
-                None,
-                None,
-                Some(ETH_TRANSFER_TIMEOUT),
-            )
-            .await;
-        info!(
-            "Swap from {} to usds on uniswap returned with {:?}",
-            token, res
-        );
-        detailed_state_change(DetailedBridgeState::Swap);
+        let expected_out = get_min_amount_out(token_amount, decimals_of_token_to_swap);
+        // uniswap v3 swap with different fee tiers to find one that works
+        // Standard fee tiers: 0.01% (100), 0.05% (500), 0.3% (3000), 1% (10000)
+        // Try stable pair pools first (500, 100) since we're swapping stablecoins
+        let fees_to_try = vec![
+            100u32.into(),
+            500u32.into(),
+            3000u32.into(),
+            10000u32.into(),
+        ];
+        for fee in fees_to_try {
+            let res = bridge
+                .eth_web3
+                .swap_uniswap_v3(
+                    bridge.eth_privatekey,
+                    token,
+                    *USDS_CONTRACT_ADDRESS,
+                    Some(fee),
+                    token_amount,
+                    None,
+                    Some(expected_out),
+                    None,
+                    None,
+                    None,
+                    Some(ETH_TRANSFER_TIMEOUT),
+                )
+                .await;
+            info!(
+                "Swap from {} to usds expecting {} with fee tier {} out on uniswap returned with {:?}",
+                token, expected_out, fee, res
+            );
+            detailed_state_change(DetailedBridgeState::Swap);
+            // break when we have a successful swap
+            if res.is_ok() {
+                break;
+            }
+        }
     }
 
     info!(
