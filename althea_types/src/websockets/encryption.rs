@@ -17,6 +17,7 @@ use std::fmt::Display;
 pub enum WebsocketEncryptionError {
     DecryptionError { e: String },
     Utf8Error { e: String },
+    NoKeyError,
 }
 
 impl Display for WebsocketEncryptionError {
@@ -27,6 +28,9 @@ impl Display for WebsocketEncryptionError {
             }
             WebsocketEncryptionError::Utf8Error { e } => {
                 write!(f, "UTF-8 Conversion error: {}", e)
+            }
+            WebsocketEncryptionError::NoKeyError => {
+                write!(f, "No key available for encryption/decryption")
             }
         }
     }
