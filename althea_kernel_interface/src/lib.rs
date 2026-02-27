@@ -40,7 +40,7 @@ mod ip_addr;
 pub mod ip_neigh;
 mod ip_route;
 mod iptables;
-mod is_openwrt;
+pub mod is_openwrt;
 mod link_local_tools;
 mod manipulate_uci;
 mod netfilter;
