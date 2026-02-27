@@ -667,7 +667,6 @@ pub struct HeartbeatMessage {
     /// The router version stored in semver format as found in the Cargo.toml
     pub version: String,
     /// Structured firmware version for better operator server decision making
-    #[serde(default)]
     pub version_struct: crate::firmware_version::FirmwareVersion,
 }
 
