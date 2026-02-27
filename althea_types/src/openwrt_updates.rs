@@ -31,6 +31,7 @@ impl From<UpdateTypeLegacy> for UpdateType {
                         OpkgCommandTypeLegacy::Update => commands.push(OpkgCommand::Update {
                             feed: legacy_opkg.feed.clone(),
                             feed_name: FEED_NAME.to_string(),
+                            old_feed_name: None,
                             arguments: item.arguments.unwrap_or_default(),
                         }),
                     }

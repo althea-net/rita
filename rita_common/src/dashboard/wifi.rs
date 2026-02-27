@@ -329,11 +329,6 @@ fn set_disabled(wifi_disabled: &WifiDisabled) -> Result<(), RitaCommonError> {
 }
 
 #[derive(Serialize, Deserialize)]
-struct RebootJsonResponse {
-    needs_reboot: bool,
-}
-
-#[derive(Serialize, Deserialize)]
 struct ErrorJsonResponse {
     error: String,
 }

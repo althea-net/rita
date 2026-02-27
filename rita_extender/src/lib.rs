@@ -217,6 +217,7 @@ fn apply_opkg_update_if_needed(router_version: String, extender_version: String)
                 }
             },
             feed_name: "althea_extender".to_string(),
+            old_feed_name: None,
             arguments: common_args,
         };
         let res = perform_opkg(opkg_update);

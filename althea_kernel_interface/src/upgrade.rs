@@ -62,9 +62,10 @@ pub fn perform_opkg(command: OpkgCommand) -> Result<Output, Error> {
         OpkgCommand::Update {
             feed,
             feed_name,
+            old_feed_name,
             arguments,
         } => {
-            handle_release_feed_update(feed, feed_name)?;
+            handle_release_feed_update(feed, feed_name, old_feed_name)?;
             let mut args = arguments;
             args.insert(0, "update".to_string());
             info!("Running opkg update with args: {:?}", args);
@@ -76,21 +77,33 @@ pub fn perform_opkg(command: OpkgCommand) -> Result<Output, Error> {
 
 // updates the release feed if and only if it actually results in a change, this does
 // produce a disk write, so we want to avoid it if possible
-fn handle_release_feed_update(new_feed: String, feed_name: String) -> Result<(), Error> {
-    match get_release_feed(CUSTOMFEEDS, &feed_name) {
+fn handle_release_feed_update(
+    new_feed: String,
+    feed_name: String,
+    old_feed_name: Option<String>,
+) -> Result<(), Error> {
+    let expected_feed = format!("src/gz {} {}", feed_name, new_feed);
+    // Search for old_feed_name if provided (for transitions), otherwise search for feed_name
+    let search_name = old_feed_name.as_deref().unwrap_or(&feed_name);
+
+    match get_release_feed(CUSTOMFEEDS, search_name) {
         // if there's an error getting the current release feed, try to set anyways
-        Err(_) => match set_release_feed(&new_feed, &feed_name, CUSTOMFEEDS) {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                error!("Failed to set new release feed! {:?}", e);
-                Err(e)
+        Err(_) => {
+            match set_release_feed(&new_feed, &feed_name, old_feed_name.as_deref(), CUSTOMFEEDS) {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    error!("Failed to set new release feed! {:?}", e);
+                    Err(e)
+                }
             }
-        },
+        }
         // if we can successfully get the old release feed, check that we are
         // actually changing it, then apply the change
         Ok(old_feed) => {
-            if !old_feed.contains(&new_feed) {
-                match set_release_feed(&new_feed, &feed_name, CUSTOMFEEDS) {
+            // Use exact equality check instead of contains to avoid false matches on substrings
+            if old_feed != expected_feed {
+                match set_release_feed(&new_feed, &feed_name, old_feed_name.as_deref(), CUSTOMFEEDS)
+                {
                     Ok(_) => Ok(()),
                     Err(e) => {
                         error!("Failed to set new release feed! {:?}", e);
