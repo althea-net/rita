@@ -188,7 +188,7 @@ pub async fn deploy_contracts() -> Address {
     );
     let contract_addr = from_utf8(&res.stdout).unwrap();
     info!("Contract is: {}", contract_addr);
-    let mut res = contract_addr.split(' ').last().unwrap().to_string();
+    let mut res = contract_addr.split(' ').next_back().unwrap().to_string();
     res.pop();
     res.parse().unwrap()
 }

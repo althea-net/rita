@@ -452,7 +452,7 @@ fn sanity_check_balance(
             } else if pmt.amount == 0u32.into() {
                 // in this case we just drop the tx, no retry no other messages
                 error!("Trying to pay nothing!");
-                return Err(PaymentControllerError::ZeroPayment);
+                Err(PaymentControllerError::ZeroPayment)
             } else {
                 Ok(())
             }

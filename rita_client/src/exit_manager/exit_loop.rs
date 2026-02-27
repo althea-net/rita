@@ -236,7 +236,7 @@ pub fn start_exit_manager_loop() {
                         let servers = { settings::get_rita_client().exit_client.exits };
                         for (k, s) in servers {
                             match s.info {
-                                ExitState::New { .. } => {
+                                ExitState::New => {
                                     trace!("Exit {} is in state NEW, calling general details", k);
                                     general_requests.push(exit_general_details_request(k.clone()))
                                 },

@@ -141,8 +141,7 @@ impl UsageTrackerStorage {
         let settings = settings::get_rita_common();
 
         if self.check_unsaved_payments() || self.check_unsaved_usage() {
-            return Err(RitaCommonError::StdError(IOError::new(
-                ErrorKind::Other,
+            return Err(RitaCommonError::StdError(IOError::other(
                 "Too little data for writing",
             )));
         }

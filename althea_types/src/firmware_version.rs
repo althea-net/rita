@@ -180,7 +180,6 @@ impl std::str::FromStr for FirmwareVersion {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let lat_tag = s.to_lowercase();
 
-
         let lat_tag = lat_tag.trim_start_matches('v');
         let lat_tag = lat_tag.replace("beta", "");
 

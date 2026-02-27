@@ -100,10 +100,9 @@ pub async fn eth_compatible_withdraw(dest: Address, amount: Uint256) -> HttpResp
         .await;
     match tx {
         Ok(tx) => match web3.send_prepared_transaction(tx).await {
-            Ok(transaction_status) => HttpResponse::Ok().json(format!(
-                "{}",
-                display_uint256_as_address(transaction_status)
-            )),
+            Ok(transaction_status) => {
+                HttpResponse::Ok().json(display_uint256_as_address(transaction_status).to_string())
+            }
             Err(e) => HttpResponse::InternalServerError()
                 .json(format!("Withdraw failed with {:?} try again!", e)),
         },

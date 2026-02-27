@@ -15,16 +15,12 @@ impl dyn KernelInterface {
                     let string_to_parse = String::from_utf8_lossy(&output.stdout).to_string();
                     Ok(parse_ip_neigh(string_to_parse))
                 } else {
-                    Err(Error::new(
-                        ErrorKind::Other,
-                        "Empty ip neigh command. Failed".to_string(),
-                    ))
+                    Err(Error::other("Empty ip neigh command. Failed".to_string()))
                 }
             }
-            Err(e) => Err(Error::new(
-                ErrorKind::Other,
-                format!("Unable to grab ip neigh from router. Failed with error {e:?}"),
-            )),
+            Err(e) => Err(Error::other(format!(
+                "Unable to grab ip neigh from router. Failed with error {e:?}"
+            ))),
         }
     }
 }
