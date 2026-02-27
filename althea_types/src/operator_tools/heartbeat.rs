@@ -1,3 +1,4 @@
+use crate::firmware_version::FirmwareVersion;
 use crate::Identity;
 use babel_monitor::structs::Neighbor;
 use babel_monitor::structs::Route;
@@ -33,4 +34,6 @@ pub struct HeartbeatMessage {
     pub notify_balance: bool,
     /// The router version stored in semver format as found in the Cargo.toml
     pub version: String,
+    /// Structured firmware version for upgrade decision making
+    pub version_struct: FirmwareVersion,
 }

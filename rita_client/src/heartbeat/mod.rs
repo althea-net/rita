@@ -323,6 +323,11 @@ fn send_udp_heartbeat_packet(
         "Sending heartbeat to {:?} from {:?}",
         remote, local_socketaddr
     );
+    let mut version = env!("CARGO_PKG_VERSION")
+        .parse::<althea_types::FirmwareVersion>().unwrap();
+    version.firmware_type = althea_types::RitaType::Router;
+    version.variant = althea_types::FirmwareVariant::Public;
+    
     let mut rita_client = settings::get_rita_client();
     let payment = rita_client.payment;
     let message = HeartbeatMessage {
@@ -335,6 +340,7 @@ fn send_udp_heartbeat_packet(
         exit_neighbor,
         notify_balance: low_balance_notification,
         version: env!("CARGO_PKG_VERSION").to_string(),
+        version_struct: version,
     };
     // serde will only fail under specific circumstances with specific structs
     // given the fixed nature of our application here I think this is safe
