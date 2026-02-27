@@ -3,6 +3,7 @@ use crate::RitaCommonError;
 use actix_web::http::StatusCode;
 use actix_web::{web::Json, HttpRequest, HttpResponse};
 use althea_kernel_interface::fs_sync::fs_sync;
+use althea_kernel_interface::is_openwrt::is_openwrt_2410_plus;
 use althea_kernel_interface::manipulate_uci::{
     del_uci_var, get_uci_var, openwrt_reset_network, set_uci_var, uci_commit, uci_revert, uci_show,
 };
@@ -159,7 +160,9 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
 /// Set mode for an individual interface
 fn set_interface_mode(iface_name: String, mode: InterfaceMode) -> Result<(), RitaCommonError> {
     let target_mode = mode;
+    info!("In set interface mode for iface {iface_name:?} to mode {target_mode:?}");
     let interfaces = get_interfaces()?;
+    info!("Current interfaces: {:?}", interfaces);
     let current_mode = get_current_interface_mode(&interfaces, &iface_name);
     if !interfaces.contains_key(&iface_name) {
         return Err(RitaCommonError::InterfaceModeError(
@@ -174,10 +177,12 @@ fn set_interface_mode(iface_name: String, mode: InterfaceMode) -> Result<(), Rit
         // you'll have to handle them here
         for entry in interfaces {
             let mode = entry.1;
-            if matches!(
+            if (matches!(
                 mode,
                 InterfaceMode::Wan | InterfaceMode::StaticWan { .. } | InterfaceMode::LTE
-            ) {
+            ) && entry.0 != iface_name)
+            {
+                info!("Found another WAN or LTE interface: {:?}", entry);
                 return Err(RitaCommonError::InterfaceModeError(
                     "There can only be one WAN or LTE interface!".to_string(),
                 ));
@@ -201,11 +206,8 @@ fn multiset_interfaces(
     // do not allow multiple WANs- this is checked for before we run through the setter so we do
     // not waste time on obviously incorrect configs
     let mut wan_count = 0;
-    for m in mode.iter() {
-        if matches!(m, InterfaceMode::Wan)
-            || matches!(m, InterfaceMode::StaticWan { .. })
-            || matches!(m, InterfaceMode::LTE)
-        {
+    for m in &mode {
+        if matches!(m, InterfaceMode::Wan) || matches!(m, InterfaceMode::StaticWan { .. }) {
             wan_count += 1;
         }
     }
@@ -217,8 +219,10 @@ fn multiset_interfaces(
 
     for (iface, mode) in iface_name.into_iter().zip(mode.into_iter()) {
         let setter = set_interface_mode(iface.clone(), mode);
-        if setter.is_err() {
-            return Err(RitaCommonError::InterfaceModeError(iface));
+        if let Err(e) = setter {
+            return Err(RitaCommonError::InterfaceModeError(format!(
+                "Failed to set {iface:?} to mode {mode:?}: {e:?}"
+            )));
         }
     }
 
@@ -235,12 +239,7 @@ pub fn ethernet_transform_mode(
     a: InterfaceMode,
     b: InterfaceMode,
 ) -> Result<(), RitaCommonError> {
-    trace!(
-        "Ethernet mode transform: ifname {:?}, a {:?}, b {:?}",
-        ifname,
-        a,
-        b,
-    );
+    info!("Ethernet mode transform: ifname {ifname:?}, a {a:?}, b {b:?}",);
     if a == b {
         // noop that was easy!
         return Ok(());
@@ -277,10 +276,45 @@ pub fn ethernet_transform_mode(
         // like WiFi interfaces are attached to it. So we just remove the interface
         // from the list
         InterfaceMode::Lan => {
-            let list = get_uci_var("network.lan.ifname")?;
-            let new_list = list_remove(&list, ifname);
-            let ret = set_uci_var("network.lan.ifname", &new_list);
-            return_codes.push(ret);
+            if is_openwrt_2410_plus() {
+                info!("Detected OpenWRT 24.10+, using device ports for LAN interface management");
+                // Remove from ports list in device section
+                match get_lan_device_section() {
+                    Ok(device_section) => match get_lan_ports_list(&device_section) {
+                        Ok(port_list) => {
+                            let new_list = list_remove(&port_list, ifname);
+                            let ret = set_lan_ports_list(&device_section, &new_list).map_err(|e| {
+                                althea_kernel_interface::KernelInterfaceError::RuntimeError(
+                                    format!("{e:?}"),
+                                )
+                            });
+                            return_codes.push(ret);
+                        }
+                        Err(e) => {
+                            warn!("Failed to get LAN ports list: {e:?}");
+                            return_codes.push(Err(
+                                althea_kernel_interface::KernelInterfaceError::RuntimeError(
+                                    format!("{e:?}"),
+                                ),
+                            ));
+                        }
+                    },
+                    Err(e) => {
+                        warn!("Failed to get LAN device section: {e:?}");
+                        return_codes.push(Err(
+                            althea_kernel_interface::KernelInterfaceError::RuntimeError(format!(
+                                "{e:?}"
+                            )),
+                        ));
+                    }
+                }
+            } else {
+                info!("Using legacy LAN interface management");
+                let list = get_uci_var("network.lan.ifname")?;
+                let new_list = list_remove(&list, ifname);
+                let ret = set_uci_var("network.lan.ifname", &new_list);
+                return_codes.push(ret);
+            }
         }
         // remove the section from the network and rita config, peer listener watches this setting
         // and will yank these interfaces from active listening
@@ -337,24 +371,58 @@ pub fn ethernet_transform_mode(
         }
         // since we left lan mostly unmodified we just pop in the ifname
         InterfaceMode::Lan => {
-            trace!("Converting interface to lan with ifname {:?}", ifname);
-            let ret = get_uci_var("network.lan.ifname");
-            match ret {
-                Ok(list) => {
-                    info!("The existing LAN interfaces list is {:?}", list);
-                    let new_list = list_add(&list, ifname);
-                    trace!("Setting the new list {:?}", new_list);
-                    let ret = set_uci_var("network.lan.ifname", &new_list);
-                    return_codes.push(ret);
+            if is_openwrt_2410_plus() {
+                info!("Setting lan interface on OpenWRT 24.10+");
+                // Add to ports list in device section (OpenWRT 24.10+)
+                match get_lan_device_section() {
+                    Ok(device_section) => match get_lan_ports_list(&device_section) {
+                        Ok(port_list) => {
+                            let new_list = list_add(&port_list, ifname);
+                            let ret = set_lan_ports_list(&device_section, &new_list).map_err(|e| {
+                                althea_kernel_interface::KernelInterfaceError::RuntimeError(
+                                    format!("{e:?}"),
+                                )
+                            });
+                            return_codes.push(ret);
+                        }
+                        Err(e) => {
+                            warn!("Failed to get LAN ports list: {e:?}");
+                            return_codes.push(Err(
+                                althea_kernel_interface::KernelInterfaceError::RuntimeError(
+                                    format!("{e:?}"),
+                                ),
+                            ));
+                        }
+                    },
+                    Err(e) => {
+                        warn!("Failed to get LAN device section: {e:?}");
+                        return_codes.push(Err(
+                            althea_kernel_interface::KernelInterfaceError::RuntimeError(format!(
+                                "{e:?}"
+                            )),
+                        ));
+                    }
                 }
-                Err(e) => {
-                    if e.to_string().contains("Entry not found") {
-                        trace!("No LAN interfaces found, setting one now");
-                        let ret = set_uci_var("network.lan.ifname", ifname);
+            } else {
+                info!("Setting lan interface on OpenWRT before 24.10");
+                let ret = get_uci_var("network.lan.ifname");
+                match ret {
+                    Ok(list) => {
+                        info!("The existing LAN interfaces list is {list:?}");
+                        let new_list = list_add(&list, ifname);
+                        trace!("Setting the new list {new_list:?}");
+                        let ret = set_uci_var("network.lan.ifname", &new_list);
                         return_codes.push(ret);
-                    } else {
-                        warn!("Trying to read lan ifname returned {:?}", e);
-                        return_codes.push(Err(e));
+                    }
+                    Err(e) => {
+                        if e.to_string().contains("Entry not found") {
+                            trace!("No LAN interfaces found, setting one now");
+                            let ret = set_uci_var("network.lan.ifname", ifname);
+                            return_codes.push(ret);
+                        } else {
+                            warn!("Trying to read lan ifname returned {:?}", e);
+                            return_codes.push(Err(e));
+                        }
                     }
                 }
             }
@@ -428,12 +496,14 @@ pub fn list_add(list: &str, entry: &str) -> String {
 pub fn list_remove(list: &str, entry: &str) -> String {
     if !list.is_empty() {
         let split = list.split(' ');
-        let mut new_list = "".to_string();
+        let mut new_list = String::new();
         let mut first = true;
         for item in split {
             let filtered_item = item.trim();
-            if !item.contains(entry) {
-                trace!("{} is not {} it's on the list!", filtered_item, entry);
+            // Remove surrounding single quotes for comparison
+            let stripped = filtered_item.trim_matches('\'');
+            if stripped != entry {
+                trace!("{filtered_item} is not {entry} it's on the list!");
                 let tmp_list = new_list.to_string();
                 if first {
                     new_list = tmp_list + filtered_item;
@@ -447,6 +517,45 @@ pub fn list_remove(list: &str, entry: &str) -> String {
     } else {
         "".to_string()
     }
+}
+
+/// Gets the UCI section name for the LAN bridge device in OpenWRT 24.10+
+/// This searches for the device section that has name='br-lan'
+fn get_lan_device_section() -> Result<String, RitaCommonError> {
+    for (setting_name, value) in uci_show(Some("network"))? {
+        if setting_name.ends_with(".name") && value == "br-lan" {
+            // setting_name is like "network.@device[0].name", we want "network.@device[0]"
+            let section = setting_name.trim_end_matches(".name");
+            return Ok(section.to_string());
+        }
+    }
+    Err(RitaCommonError::MiscStringError(
+        "Could not find LAN bridge device section".to_string(),
+    ))
+}
+
+/// Gets the current ports list from a device section
+fn get_lan_ports_list(device_section: &str) -> Result<String, RitaCommonError> {
+    let ports_key = format!("{device_section}.ports");
+    match get_uci_var(&ports_key) {
+        Ok(ports) => Ok(ports),
+        Err(e) => {
+            if e.to_string().contains("Entry not found") {
+                Ok(String::new())
+            } else {
+                Err(RitaCommonError::MiscStringError(format!(
+                    "Failed to get ports: {e:?}"
+                )))
+            }
+        }
+    }
+}
+
+/// Sets the ports list for a device section
+fn set_lan_ports_list(device_section: &str, new_list: &str) -> Result<(), RitaCommonError> {
+    let ports_key = format!("{device_section}.ports");
+    set_uci_var(&ports_key, new_list)
+        .map_err(|e| RitaCommonError::MiscStringError(format!("Failed to set ports: {e:?}")))
 }
 
 pub fn get_current_interface_mode(
