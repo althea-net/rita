@@ -331,6 +331,7 @@ impl From<UpdateTypeLegacy> for UpdateType {
                         OpkgCommandTypeLegacy::Update => commands.push(OpkgCommand::Update {
                             feed: legacy_opkg.feed.clone(),
                             feed_name: FEED_NAME.to_string(),
+                            old_feed_name: None,
                             arguments: item.arguments.unwrap_or_default(),
                         }),
                     }
@@ -355,6 +356,10 @@ pub enum OpkgCommand {
     Update {
         feed: String,
         feed_name: String,
+        /// Optional old feed name to search for when transitioning feed names, if not provided will update
+        /// the feed_name as normal or add a new feed if one doesn't exist
+        #[serde(default)]
+        old_feed_name: Option<String>,
         arguments: Vec<String>,
     },
 }
@@ -661,6 +666,9 @@ pub struct HeartbeatMessage {
     pub notify_balance: bool,
     /// The router version stored in semver format as found in the Cargo.toml
     pub version: String,
+    /// Structured firmware version for better operator server decision making
+    #[serde(default)]
+    pub version_struct: crate::firmware_version::FirmwareVersion,
 }
 
 /// An exit's unix time stamp that can be queried by a downstream router

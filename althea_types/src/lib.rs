@@ -3,6 +3,7 @@ extern crate serde_derive;
 
 pub mod contact_info;
 pub mod error;
+pub mod firmware_version;
 pub mod identity;
 pub mod interop;
 pub mod legacy;
@@ -13,6 +14,7 @@ pub mod wg_key;
 pub mod wifi_info;
 
 pub use crate::contact_info::*;
+pub use crate::firmware_version::*;
 pub use crate::interop::*;
 pub use crate::monitoring::*;
 pub use crate::user_info::*;
