@@ -142,11 +142,17 @@ pub fn handle_operator_update(
             encrypted_router_websocket_message
         }
     };
+    let ops_pubkey = match ops_publickey {
+        Some(key) => key,
+        None => {
+            error!("Cannot decrypt operator message without ops public key");
+            return Err(RitaClientError::EncryptionError(
+                althea_types::websockets::encryption::WebsocketEncryptionError::NoKeyError,
+            ));
+        }
+    };
     // first try decrypting the message
-    let decrypted_message = match encrypted_message.decrypt(
-        our_secretkey,
-        ops_publickey.expect("Cannot decrypt message without ops public key"),
-    ) {
+    let decrypted_message = match encrypted_message.decrypt(our_secretkey, ops_pubkey) {
         Ok(message) => message,
         Err(e) => {
             error!("Failed to decrypt operator message {:?}", e);
