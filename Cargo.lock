@@ -3030,6 +3030,7 @@ dependencies = [
  "arrayvec",
  "awc",
  "babel_monitor",
+ "bytes",
  "clarity",
  "clu",
  "compressed_log",

@@ -56,6 +56,10 @@ pub enum OpkgCommand {
     Update {
         feed: String,
         feed_name: String,
+        /// Optional old feed name to search for when transitioning feed names, if not provided will update
+        /// the feed_name as normal or add a new feed if one doesn't exist
+        #[serde(default)]
+        old_feed_name: Option<String>,
         arguments: Vec<String>,
     },
 }

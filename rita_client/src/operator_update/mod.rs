@@ -79,6 +79,7 @@ pub fn get_exit_con(exit_reg_ref: ExitState) -> Option<ExitConnection> {
         client_pub_ipv6: get_client_pub_ipv6(exit_reg_ref),
     })
 }
+
 pub fn get_neighbor_info() -> Vec<NeighborStatus> {
     let status = get_neighbor_status();
     let mut neighbor_info = Vec::new();
@@ -151,7 +152,7 @@ pub fn handle_operator_update(
         Some(key) => key,
         None => {
             error!("Cannot decrypt operator message without ops public key");
-            return Err(RitaClientError::EncryptionError(
+            return Err(RitaClientError::WebsocketEncryptionError(
                 althea_types::websockets::encryption::WebsocketEncryptionError::NoKeyError,
             ));
         }
