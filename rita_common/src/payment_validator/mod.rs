@@ -328,8 +328,8 @@ impl PaymentValidator {
         }
 
         let mut payments = Vec::new();
-        payments.extend(outgoing_payments.into_iter());
-        payments.extend(get_incoming_transaction_queue().into_iter());
+        payments.extend(outgoing_payments);
+        payments.extend(get_incoming_transaction_queue());
         for pmt in payments {
             let _ = self.add_to_validation_queue(pmt);
         }

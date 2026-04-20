@@ -17,11 +17,7 @@ impl dyn KernelInterface {
         }
 
         // append path to end of flags
-        let mut args = if command.flags.is_some() {
-            command.flags.unwrap()
-        } else {
-            Vec::new()
-        };
+        let mut args = command.flags.unwrap_or_default();
         args.push(command.url);
         let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
         info!(

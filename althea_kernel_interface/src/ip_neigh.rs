@@ -1,6 +1,6 @@
 use crate::KernelInterface;
 use mac_address::MacAddress;
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 use std::net::IpAddr;
 
 impl dyn KernelInterface {

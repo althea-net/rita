@@ -326,7 +326,25 @@ fn set_exit_state(
         }
         ExitSwitchingCode::ContinueCurrent => {
             // set a degradation values if none, else update the current exit advertised values
-            if full_selected_exit.selected_id_degradation.is_none() {
+            if let Some(degradation) = full_selected_exit.selected_id_degradation {
+                // We have already set a degradation value, so we continue using the same value until the clock reset
+                let res = exit_metrics.cur_exit_babel_met.checked_sub(degradation);
+
+                // We should not be setting 'selected_id_metric' as None. If we do, that means degradation > current_metric, meaning an error with logic somewhere
+                if res.is_none() {
+                    error!("Setting selected_id_metric as none during ExitSwitchingCode::ContinueCurrent. Error with degradation logic");
+                } else {
+                    set_selected_exit(
+                        exit_name,
+                        SelectedExit {
+                            selected_id: full_selected_exit.selected_id,
+                            selected_id_metric: res,
+                            selected_id_degradation: full_selected_exit.selected_id_degradation,
+                            tracking_exit: full_selected_exit.tracking_exit,
+                        },
+                    );
+                }
+            } else {
                 let average_metric = calculate_average(metric_vec.to_vec());
                 // We set degradation value = RelU(average_metric val - our_advertised_metric). Since we know tracking_exit == current_exit,
                 // We can use values in the vector.
@@ -343,26 +361,6 @@ fn set_exit_state(
                         tracking_exit: full_selected_exit.tracking_exit,
                     },
                 );
-            } else {
-                // We have already set a degradation value, so we continue using the same value until the clock reset
-                let res = exit_metrics
-                    .cur_exit_babel_met
-                    .checked_sub(full_selected_exit.selected_id_degradation.unwrap());
-
-                // We should not be setting 'selected_id_metric' as None. If we do, that means degradation > current_metric, meaning an error with logic somewhere
-                if res.is_none() {
-                    error!("Setting selected_id_metric as none during ExitSwitchingCode::ContinueCurrent. Error with degradation logic");
-                } else {
-                    set_selected_exit(
-                        exit_name,
-                        SelectedExit {
-                            selected_id: full_selected_exit.selected_id,
-                            selected_id_metric: res,
-                            selected_id_degradation: full_selected_exit.selected_id_degradation,
-                            tracking_exit: full_selected_exit.tracking_exit,
-                        },
-                    );
-                }
             }
             Ok(exit_metrics
                 .cur_exit

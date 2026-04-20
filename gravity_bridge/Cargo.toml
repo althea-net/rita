@@ -1,0 +1,21 @@
+[package]
+name = "gravity-bridge"
+version = "0.1.0"
+authors = ["Justin Kilpatrick <justin@althea.net>"]
+edition = "2021"
+
+[dependencies]
+web30 = {workspace = true}
+num256 = {workspace = true}
+clarity = {workspace = true}
+deep_space = {workspace = true}
+althea_proto = {workspace = true}
+cosmos-sdk-proto-althea = {workspace = true}
+gravity_proto = {workspace = true}
+log = "0.4"
+serde_derive = "1.0"
+serde = "1.0"
+
+[dev-dependencies]
+actix = "0.13"
+futures = "0.3"
