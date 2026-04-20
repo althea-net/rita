@@ -11,7 +11,8 @@ members = [
     "clu",
     "antenna_forwarding_client",
     "antenna_forwarding_protocol",
-    "auto_bridge",
+    "gnosis_bridge",
+    "gravity_bridge",
     "rita_common",
     "rita_exit",
     "rita_client",
@@ -37,9 +38,13 @@ inherits = "dev"
 opt-level = 2
 
 [workspace.dependencies]
-deep_space = {version = "=2.27.2", features = ["althea"], default-features=false}
-web30 = "1.12"
-clarity = "1.5"
+deep_space = {version = "2.32.1", features = ["althea", "ethermint"]}
+web30 = "1.15"
+clarity = "1.7"
 num256 = "0.6"
 awc = {version = "3.2", default-features = false, features=["openssl", "compress-gzip", "compress-zstd"]}
-althea_proto = "0.9"
+althea_proto = "0.10"
+cosmos-sdk-proto-althea = {version = "0.20", features = ["ethermint"]}
+gravity_proto = "0.7"
+futures = { version = "0.3", features = ["compat"] }
+tokio = "1.40"

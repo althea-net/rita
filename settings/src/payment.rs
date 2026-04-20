@@ -1,8 +1,8 @@
 use althea_types::Denom;
 use althea_types::SystemChain;
-use auto_bridge::default_bridge_addresses;
-use auto_bridge::TokenBridgeAddresses;
 use clarity::{Address, PrivateKey};
+use gnosis_bridge::default_bridge_rpcs;
+use gnosis_bridge::TokenBridgeRpcs;
 use num256::Int256;
 use num256::Uint256;
 
@@ -78,7 +78,7 @@ fn default_enable_enforcement() -> bool {
 }
 
 fn default_node_grpc() -> Vec<String> {
-    vec!["https://althea.zone:9090".to_string()]
+    vec!["https://rpc.althea.zone:9090".to_string()]
 }
 
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
@@ -151,9 +151,9 @@ pub struct PaymentSettings {
     /// on deposit
     #[serde(default = "default_debt_limit_enabled")]
     pub debt_limit_enabled: bool,
-    /// Token Bridge addresses
-    #[serde(default = "default_bridge_addresses")]
-    pub bridge_addresses: TokenBridgeAddresses,
+    /// Token Bridge RPC endpoints
+    #[serde(default = "default_bridge_rpcs")]
+    pub bridge_rpcs: TokenBridgeRpcs,
     /// A fee sent to the maintainers of Althea to simulate transaction fee revenue, computed as a fraction of all transactions
     /// for which this is the denominator. For example a value of '20' would mean 1/20 or 5%
     /// of all transactions would be sent to the simulated_transaction_fee address. Setting the the fee value to zero will disable
@@ -171,11 +171,10 @@ pub struct PaymentSettings {
     pub min_gas: Uint256,
 }
 
-/// TODO this is currently a testnet only placeholder it should be replaced
-/// with a real IBC denom post Althea L1 launch
+/// This struct is the actual IBC USDC denom on Althea L1 mainnet
 fn default_althea_l1_payment_denom() -> Denom {
     Denom {
-        denom: "uUSDC".to_string(),
+        denom: "ibc/17CD484EE7D9723B847D95015FA3EBD1572FD13BC84FB838F55B18A57450F25B".to_string(),
         decimal: 1_000_000u64,
     }
 }
@@ -206,6 +205,13 @@ impl PaymentSettings {
         }
         true
     }
+
+    /// Derives the eth address from the private key. This is the single source of truth
+    /// for our eth address, preventing mismatches between the private key and a separately
+    /// stored address field.
+    pub fn get_eth_address(&self) -> Option<Address> {
+        self.eth_private_key.map(|k| k.to_address())
+    }
 }
 
 impl Default for PaymentSettings {
@@ -228,7 +234,7 @@ impl Default for PaymentSettings {
             bridge_enabled: default_bridge_enabled(),
             debt_limit_enabled: default_debt_limit_enabled(),
             apply_incoming_credit_immediately: default_apply_incoming_credit(),
-            bridge_addresses: default_bridge_addresses(),
+            bridge_rpcs: default_bridge_rpcs(),
             simulated_transaction_fee_address: default_simulated_transaction_fee_address(),
             simulated_transaction_fee: default_simulated_transaction_fee(),
             forgive_on_reboot: default_forgive_on_reboot(),

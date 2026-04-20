@@ -37,6 +37,7 @@ pub enum RitaCommonError {
     DuplicatePayment,
     PaymentFailed(String),
     TunnelManagerError(TunnelManagerError),
+    NoAltheaChainRPCs,
 }
 
 impl From<LoggerError> for RitaCommonError {
@@ -130,6 +131,7 @@ impl Display for RitaCommonError {
             RitaCommonError::BincodeError(e) => write!(f, "{e}"),
             RitaCommonError::SendRequestError(e) => write!(f, "{e}"),
             RitaCommonError::JsonPayloadError(e) => write!(f, "{e}"),
+            RitaCommonError::NoAltheaChainRPCs => write!(f, "No Althea chain RPCs configured (need both althea_grpc_list and eth_node_list)"),
         }
     }
 }
