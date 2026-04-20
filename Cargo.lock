@@ -3294,7 +3294,7 @@ dependencies = [
 
 [[package]]
 name = "rita_bin"
-version = "0.22.11"
+version = "0.22.12"
 dependencies = [
  "actix",
  "actix-rt",
@@ -3330,7 +3330,7 @@ dependencies = [
 
 [[package]]
 name = "rita_client"
-version = "0.22.11"
+version = "0.22.12"
 dependencies = [
  "actix",
  "actix-rt",
@@ -3390,7 +3390,7 @@ dependencies = [
 
 [[package]]
 name = "rita_common"
-version = "0.22.11"
+version = "0.22.12"
 dependencies = [
  "actix",
  "actix-service",
@@ -3433,7 +3433,7 @@ dependencies = [
 
 [[package]]
 name = "rita_exit"
-version = "0.22.11"
+version = "0.22.12"
 dependencies = [
  "actix",
  "actix-web",
@@ -3463,7 +3463,7 @@ dependencies = [
 
 [[package]]
 name = "rita_extender"
-version = "0.22.11"
+version = "0.22.12"
 dependencies = [
  "actix",
  "actix-web",
