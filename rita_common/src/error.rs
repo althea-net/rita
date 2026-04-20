@@ -48,6 +48,7 @@ pub enum RitaCommonError {
     ValidationError(dashboard::wifi::ValidationError),
     ParseIntError(ParseIntError),
     SerdeJsonError(serde_json::Error),
+    NoAltheaChainRPCs,
 }
 
 impl From<LoggerError> for RitaCommonError {
@@ -174,6 +175,7 @@ impl Display for RitaCommonError {
             RitaCommonError::ValidationError(e) => write!(f, "{e}"),
             RitaCommonError::ParseIntError(e) => write!(f, "{e}"),
             RitaCommonError::SerdeJsonError(e) => write!(f, "{e}"),
+            RitaCommonError::NoAltheaChainRPCs => write!(f, "No Althea chain RPCs configured (need both althea_grpc_list and eth_node_list)"),
         }
     }
 }

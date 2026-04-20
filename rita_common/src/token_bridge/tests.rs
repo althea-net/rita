@@ -1,12 +1,11 @@
 use crate::token_bridge::xdai_bridge::*;
 use crate::token_bridge::*;
-use auto_bridge::default_bridge_addresses;
-use auto_bridge::TokenBridge;
-use auto_bridge::{encode_relaytokens, get_relay_message_hash};
 use clarity::Address;
 use clarity::PrivateKey;
+use gnosis_bridge::default_bridge_rpcs;
+use gnosis_bridge::TokenBridge;
+use gnosis_bridge::{encode_relaytokens, get_relay_message_hash};
 use num256::Uint256;
-use serial_test::serial;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -16,7 +15,6 @@ const TIMEOUT: Duration = Duration::from_secs(600);
 /// We call the function with the 'Withdraw' struct and check if the information is being updated correctly. This is necessary
 /// that the correct information about the withdrawal is being processed.
 #[test]
-#[serial]
 fn test_xdai_setup_withdraw() {
     let pk = PrivateKey::from_str(&format!(
         "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",
@@ -24,14 +22,7 @@ fn test_xdai_setup_withdraw() {
     ))
     .unwrap();
 
-    let _bridge = TokenBridge::new(
-        default_bridge_addresses(),
-        pk.to_address(),
-        pk,
-        "https://eth.altheamesh.com".into(),
-        "https://dai.altheamesh.com".into(),
-        TIMEOUT,
-    );
+    let _bridge = TokenBridge::new(default_bridge_rpcs(), pk.to_address(), pk, TIMEOUT);
 
     let address = "0x9CAFD25b8b5982F1edA0691DEF8997C55a4d8188";
     let address = Address::parse_and_validate(address);
@@ -73,14 +64,7 @@ fn test_xdai_transfer_withdraw() {
     ))
     .unwrap();
 
-    let bridge = TokenBridge::new(
-        default_bridge_addresses(),
-        pk.to_address(),
-        pk,
-        "https://eth.altheamesh.com".into(),
-        "https://dai.altheamesh.com".into(),
-        TIMEOUT,
-    );
+    let bridge = TokenBridge::new(default_bridge_rpcs(), pk.to_address(), pk, TIMEOUT);
 
     let address = "0x9CAFD25b8b5982F1edA0691DEF8997C55a4d8188";
     let address = Address::parse_and_validate(address);
@@ -95,7 +79,15 @@ fn test_xdai_transfer_withdraw() {
     let runner = actix::System::new();
     runner.block_on(async move {
         //do encode relay token call with our token bridge
-        let res = encode_relaytokens(bridge, to, amount.into(), Duration::from_secs(600)).await;
+        let res = encode_relaytokens(
+            bridge,
+            to,
+            amount.into(),
+            Duration::from_secs(600),
+            None,
+            None,
+        )
+        .await;
         match res {
             Ok(_) => println!("withdraw successful to address {to}"),
             Err(e) => panic!("Error during withdraw: {}", e),
@@ -114,14 +106,7 @@ fn test_xdai_unlock_withdraw() {
     ))
     .unwrap();
 
-    let bridge = TokenBridge::new(
-        default_bridge_addresses(),
-        pk.to_address(),
-        pk,
-        "https://eth.altheamesh.com".into(),
-        "https://dai.altheamesh.com".into(),
-        TIMEOUT,
-    );
+    let bridge = TokenBridge::new(default_bridge_rpcs(), pk.to_address(), pk, TIMEOUT);
 
     let runner = actix::System::new();
 
@@ -152,14 +137,7 @@ fn test_simulate_unlock_funds() {
     ))
     .unwrap();
 
-    let bridge = TokenBridge::new(
-        default_bridge_addresses(),
-        pk.to_address(),
-        pk,
-        "https://eth.altheamesh.com".into(),
-        "https://dai.altheamesh.com".into(),
-        TIMEOUT,
-    );
+    let bridge = TokenBridge::new(default_bridge_rpcs(), pk.to_address(), pk, TIMEOUT);
 
     let address = "0x9CAFD25b8b5982F1edA0691DEF8997C55a4d8188";
     let address = Address::parse_and_validate(address).unwrap();
@@ -178,6 +156,7 @@ fn test_simulate_unlock_funds() {
             bridge.helper_on_xdai,
             address,
             tx_hash,
+            gnosis_bridge::get_xdai_bridge_on_xdai_address(),
             amount.into(),
         )
         .await
@@ -190,31 +169,30 @@ fn test_simulate_unlock_funds() {
     })
 }
 
-/// Tests that funds in dai are being transfered over to the xdai blockchain as long as dai funds are greater than
-/// minimum amount to exchange (cost of a withdrawal + cost of swap to dai + cost of transfer)
+/// Tests that funds in usds are being transfered over to the xdai blockchain as long as usds funds are greater than
+/// minimum amount to exchange (cost of a withdrawal + cost of swap to usds + cost of transfer)
 #[test]
 #[ignore]
-fn test_transfer_dai() {
+fn test_transfer_token_to_gnosis() {
     let pk = PrivateKey::from_str(&format!(
         "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",
         "632c1e54099", "51b0281"
     ))
     .unwrap();
 
-    let bridge = TokenBridge::new(
-        default_bridge_addresses(),
-        pk.to_address(),
-        pk,
-        "https://eth.altheamesh.com".into(),
-        "https://dai.altheamesh.com".into(),
-        TIMEOUT,
-    );
+    let bridge = TokenBridge::new(default_bridge_rpcs(), pk.to_address(), pk, TIMEOUT);
 
+    let target_token = *web30::amm::USDS_CONTRACT_ADDRESS;
     let runner = actix::System::new();
     runner.block_on(async move {
-        let res = transfer_dai(bridge.clone(), bridge.get_dai_balance().await.unwrap()).await;
+        let balance = bridge
+            .eth_web3
+            .get_erc20_balance(target_token, bridge.own_address, vec![])
+            .await
+            .unwrap();
+        let res = transfer_token_to_gnosis(bridge.clone(), balance, target_token).await;
         if res.is_err() {
-            panic!("Failed to rescue dai with {:?}", res);
+            panic!("Failed to transfer token to gnosis with {:?}", res);
         }
     })
 }

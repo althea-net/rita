@@ -11,7 +11,8 @@ members = [
     "clu",
     "antenna_forwarding_client",
     "antenna_forwarding_protocol",
-    "auto_bridge",
+    "gnosis_bridge",
+    "gravity_bridge",
     "rita_common",
     "rita_exit",
     "rita_client",
@@ -37,16 +38,20 @@ inherits = "dev"
 opt-level = 2
 
 [workspace.dependencies]
-deep_space = {version = "2.27", features = ["althea"], default-features=false}
+deep_space = {version = "2.32.1", features = ["althea", "ethermint"]}
 num256 = "0.6"
-web30 = "1.6"
-clarity = "1.5"
+web30 = "1.15"
+clarity = "1.7"
 awc = {version = "3.5", default-features = false, features=["openssl", "compress-gzip", "compress-zstd"]}
-actix-web = { version = "4.9", default-features = false, features = ["openssl", "compress-gzip", "compress-zstd", "macros"] }
+actix-web = { version = "=4.11.0", default-features = false, features = ["openssl", "compress-gzip", "compress-zstd", "macros"] }
 actix-web-httpauth = {version = "0.8.2"}
 actix = "0.13"
 actix-rt = "2.10"
-althea_proto = "0.9"
+althea_proto = "0.10"
+cosmos-sdk-proto-althea = {version = "0.20", features = ["ethermint"]}
+gravity_proto = "0.7"
+futures = { version = "0.3", features = ["compat"] }
+tokio = "1.40"
 # we don't call or us OpenSSL directly in this codebase, but by adding
 # this dependency with this feature we can enforce that openssl is compiled
 # in 'vendored' mode all the way down the tree. What this means is that we use

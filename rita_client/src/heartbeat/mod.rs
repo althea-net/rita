@@ -324,10 +324,11 @@ fn send_udp_heartbeat_packet(
         remote, local_socketaddr
     );
     let mut version = env!("CARGO_PKG_VERSION")
-        .parse::<althea_types::FirmwareVersion>().unwrap();
+        .parse::<althea_types::FirmwareVersion>()
+        .unwrap();
     version.firmware_type = althea_types::RitaType::Router;
     version.variant = althea_types::FirmwareVariant::Public;
-    
+
     let mut rita_client = settings::get_rita_client();
     let payment = rita_client.payment;
     let message = HeartbeatMessage {

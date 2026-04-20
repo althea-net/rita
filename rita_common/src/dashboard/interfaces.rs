@@ -217,7 +217,7 @@ fn multiset_interfaces(
         ));
     }
 
-    for (iface, mode) in iface_name.into_iter().zip(mode.into_iter()) {
+    for (iface, mode) in iface_name.into_iter().zip(mode) {
         let setter = set_interface_mode(iface.clone(), mode);
         if let Err(e) = setter {
             return Err(RitaCommonError::InterfaceModeError(format!(

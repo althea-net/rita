@@ -11,7 +11,7 @@ use actix_rt::System;
 use althea_kernel_interface::run_command;
 use althea_proto::cosmos_sdk_proto::cosmos::gov::v1beta1::VoteOption;
 use althea_proto::{
-    canto::erc20::v1::RegisterCoinProposal,
+    althea::erc20::v1::RegisterCoinProposal,
     cosmos_sdk_proto::cosmos::bank::v1beta1::{
         query_client::QueryClient, Metadata, QueryDenomMetadataRequest,
     },
@@ -791,6 +791,7 @@ pub async fn vote_yes_with_retry(
         .vote_on_gov_proposal(
             proposal_id,
             VoteOption::Yes,
+            String::new(),
             get_fee(None),
             key.clone(),
             Some(timeout),
@@ -803,6 +804,7 @@ pub async fn vote_yes_with_retry(
             .vote_on_gov_proposal(
                 proposal_id,
                 VoteOption::Yes,
+                String::new(),
                 get_fee(None),
                 key.clone(),
                 Some(timeout),

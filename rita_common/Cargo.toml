@@ -18,7 +18,8 @@ flate2 = { version = "1.0", features = [
     "rust_backend",
 ], default-features = false }
 actix = { workspace = true }
-auto-bridge = { path = "../auto_bridge" }
+gnosis-bridge = { path = "../gnosis_bridge" }
+gravity-bridge = { path = "../gravity_bridge" }
 serde_json = "1.0"
 log = { version = "0.4", features = ["release_max_level_info"] }
 settings = { path = "../settings" }
@@ -38,7 +39,7 @@ web30 = {workspace = true}
 althea_types = { path = "../althea_types" }
 deep_space = {workspace = true}
 prost-types ="0.13"
-cosmos-sdk-proto-althea = {package = "cosmos-sdk-proto-althea", version = "0.18", features = ["ethermint"]} 
+cosmos-sdk-proto-althea = {workspace = true}
 althea_proto = {workspace = true}
 crossbeam = "0.8"
 phonenumber = "0.3.6"
