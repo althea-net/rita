@@ -3,7 +3,6 @@ use crate::operator_update::{
     get_rita_uptime, get_user_bandwidth_usage, handle_operator_update,
 };
 use actix_async::System;
-use actix_web_actors::ws;
 use althea_types::{
     identity::Identity,
     websockets::{
@@ -11,6 +10,7 @@ use althea_types::{
         WsCustomerDetailsStruct, WsOperatorAddressStruct, WsTimeseriesDataStruct,
     },
 };
+use awc::ws;
 use awc::ws::Frame;
 use bytes::Bytes;
 use crypto_box::{PublicKey, SecretKey};
