@@ -105,7 +105,12 @@ impl TokenBridge {
         // Check current allowance and approve if needed before calling relayTokens
         let allowance = self
             .eth_web3
-            .get_erc20_allowance(token, self.eth_privatekey.to_address(), self.xdai_bridge_on_eth, vec![])
+            .get_erc20_allowance(
+                token,
+                self.eth_privatekey.to_address(),
+                self.xdai_bridge_on_eth,
+                vec![],
+            )
             .await?;
         trace!("Current token allowance on the bridge is {}", allowance);
         if token_amount > allowance {
