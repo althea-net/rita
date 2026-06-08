@@ -27,8 +27,6 @@ pub static XDAI_FUNDS_UNLOCK_GAS: u128 = 180_000;
 pub static MINIMUM_DAI_TO_BRIDGE_IN: u128 = 2_000_000_000_000_000_000;
 /// Minimum amount we can transfer out to ETH from Gnosis chain they set this unusaully high IMO
 pub static MINIMUM_DAI_TO_BRIDGE_OUT: u128 = 10_000_000_000_000_000_000;
-/// Minimum transfer is $15 USDC which has 6 decimal precision
-pub static MINIMUM_USDC_TO_CONVERT: u128 = 15_000_000;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct TokenBridgeRpcs {
@@ -104,16 +102,37 @@ impl TokenBridge {
     ) -> Result<Uint256, TokenBridgeError> {
         let secret = self.eth_privatekey;
 
-        // You basically just send it some dai to the bridge address and they show
-        // up in the same address on the xdai side we have no idea when this has succeeded
-        // since the events are not indexed
+        // Check current allowance and approve if needed before calling relayTokens
+        let allowance = self
+            .eth_web3
+            .get_erc20_allowance(token, self.eth_privatekey.to_address(), self.xdai_bridge_on_eth, vec![])
+            .await?;
+        trace!("Current token allowance on the bridge is {}", allowance);
+        if token_amount > allowance {
+            trace!("Executing approval for token transfer");
+            // approve 1000 tokens at a time to reduce gas costs
+            self.eth_web3
+                .erc20_approve(
+                    token,
+                    1000000000000000000000u128.into(),
+                    self.eth_privatekey,
+                    self.xdai_bridge_on_eth,
+                    Some(timeout),
+                    vec![],
+                )
+                .await?;
+        }
+
+        // Use relayTokens(address,uint256) on the bridge contract, not transfer() on the token contract.
+        // The old direct transfer() mechanism only worked for DAI on the legacy xDai bridge.
+        // relayTokens(address _receiver, uint256 _amount) — receiver is our own address on Gnosis.
         let tx = self
             .eth_web3
             .prepare_transaction(
-                token,
+                self.xdai_bridge_on_eth,
                 encode_call(
-                    "transfer(address,uint256)",
-                    &[self.xdai_bridge_on_eth.into(), token_amount.into()],
+                    "relayTokens(address,uint256)",
+                    &[self.eth_privatekey.to_address().into(), token_amount.into()],
                 )
                 .unwrap(),
                 0u32.into(),
@@ -751,7 +770,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn test_dai_to_xdai_bridge() {
+    fn test_bridge_to_gnosis() {
         let runner = actix::System::new();
 
         let token_bridge = new_token_bridge();
