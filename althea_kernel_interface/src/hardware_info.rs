@@ -288,6 +288,13 @@ fn get_sensor_readings() -> Option<Vec<SensorReading>> {
     }
 }
 
+/// Returns true if the named interface exists in the kernel (i.e. has a
+/// `/sys/class/net/{name}` entry). Useful for filtering UCI-configured
+/// interfaces that have no physical backing on the current hardware.
+pub fn iface_exists(name: &str) -> bool {
+    std::fs::metadata(format!("/sys/class/net/{name}")).is_ok()
+}
+
 fn get_ethernet_stats() -> Option<Vec<EthernetStats>> {
     let mut eth = 0;
     let mut ret = Vec::new();

@@ -141,24 +141,32 @@ pub fn start_exit_manager_loop() {
                                 match (signed_up_for_exit, exit_has_changed, correct_default_route) {
                                     (true, true, _) => {
                                         trace!("Exit change, setting up exit tunnel");
-                                        linux_setup_exit_tunnel(
+                                        let res = linux_setup_exit_tunnel(
                                             current_exit,
                                             &general_details.clone(),
                                             exit.info.our_details().unwrap(),
                                             &exit_list,
-                                        )
-                                        .expect("failure setting up exit tunnel");
+                                        );
+                                        if let Err(e) = res {
+                                            error!("Failed to setup exit tunnel: {e:?}");
+                                            thread::sleep(EXIT_LOOP_SPEED);
+                                            continue;
+                                        }
                                         em_state.nat_setup = true;
                                     }
                                     (true, false, false) => {
                                         trace!("DHCP overwrite setup exit tunnel again");
-                                        linux_setup_exit_tunnel(
+                                        let res = linux_setup_exit_tunnel(
                                             current_exit,
                                             &general_details.clone(),
                                             exit.info.our_details().unwrap(),
                                             &exit_list,
-                                        )
-                                        .expect("failure setting up exit tunnel");
+                                        );
+                                        if let Err(e) = res {
+                                            error!("Failed to setup exit tunnel: {e:?}");
+                                            thread::sleep(EXIT_LOOP_SPEED);
+                                            continue;
+                                        }
                                         em_state.nat_setup = true;
                                     }
                                     _ => {}

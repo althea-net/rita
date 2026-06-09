@@ -2,6 +2,7 @@
 use actix_web_async::http::StatusCode;
 use actix_web_async::web::Path;
 use actix_web_async::{web::Json, HttpRequest, HttpResponse};
+use althea_kernel_interface::hardware_info::iface_exists;
 use althea_kernel_interface::is_openwrt::is_openwrt_2410_plus;
 use rita_common::{RitaCommonError, KI};
 use std::collections::HashMap;
@@ -228,21 +229,58 @@ fn multiset_interfaces(
             "Extra mode or iface found!".to_string(),
         ));
     }
-    // do not allow multiple WANs- this is checked for before we run through the setter so we do
-    // not waste time on obviously incorrect configs
+    // Count WANs in this batch
     let mut wan_count = 0;
     for m in &mode {
-        if matches!(m, InterfaceMode::Wan) || matches!(m, InterfaceMode::StaticWan { .. }) {
+        if matches!(m, InterfaceMode::Wan | InterfaceMode::StaticWan { .. }) {
             wan_count += 1;
         }
     }
-    if wan_count > 1 {
+
+    // Count existing WAN/LTE interfaces that are NOT part of this batch and
+    // physically exist in the kernel. These will remain unchanged after the batch.
+    let current_interfaces = get_interfaces().unwrap_or_default();
+    let retained_wans = current_interfaces
+        .iter()
+        .filter(|(iface, mode)| {
+            !iface_name.contains(*iface)
+                && matches!(
+                    mode,
+                    InterfaceMode::Wan | InterfaceMode::StaticWan { .. } | InterfaceMode::LTE
+                )
+                && iface_exists(iface)
+        })
+        .count();
+
+    // At most one WAN in the final state (batch WANs + retained WANs).
+    if wan_count + retained_wans > 1 {
         return Err(RitaClientError::MiscStringError(
-            "Only one WAN interface allowed!".to_string(),
+            "Another WAN interface is already configured. Remove it before assigning a new WAN port.".to_string(),
         ));
     }
 
-    for (iface, mode) in iface_name.into_iter().zip(mode) {
+    // Sort so that WAN-to-non-WAN changes are processed before non-WAN-to-WAN
+    // changes. This ensures the old backhaul UCI section is removed before the
+    // new one is written, preventing spurious "one WAN only" errors when the
+    // frontend happens to send the new-WAN change before the old-WAN removal.
+    let mut pairs: Vec<(String, InterfaceMode)> = iface_name.into_iter().zip(mode).collect();
+    pairs.sort_by_key(|(iface, new_mode)| {
+        let current_mode = current_interfaces
+            .get(iface.as_str())
+            .copied()
+            .unwrap_or(InterfaceMode::Unknown);
+        let is_wan_removal = matches!(
+            current_mode,
+            InterfaceMode::Wan | InterfaceMode::StaticWan { .. } | InterfaceMode::LTE
+        ) && !matches!(
+            new_mode,
+            InterfaceMode::Wan | InterfaceMode::StaticWan { .. } | InterfaceMode::LTE
+        );
+        // WAN removals sort first (key=0), everything else second (key=1)
+        if is_wan_removal { 0u8 } else { 1u8 }
+    });
+
+    for (iface, mode) in pairs {
         let setter = set_interface_mode(iface.clone(), mode);
         if let Err(e) = setter {
             return Err(RitaClientError::InterfaceModeError(format!(
@@ -741,7 +779,12 @@ pub async fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
     debug!("get /interfaces hit");
 
     match get_interfaces() {
-        Ok(val) => HttpResponse::Ok().json(val),
+        Ok(mut val) => {
+            // Filter out UCI-configured interfaces that don't exist in the
+            // kernel (phantom ports on x86 or other variable-port hardware).
+            val.retain(|name, _| iface_exists(name));
+            HttpResponse::Ok().json(val)
+        }
         Err(e) => {
             error!("get_interfaces failed with {:?}", e);
             HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e:?}"))
