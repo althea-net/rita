@@ -1,8 +1,20 @@
 use crate::{run_command, KernelInterfaceError};
 
 /// -I and -A will be checked to see if they already exist before adding.
+/// -F (flush) and -D (delete) are executed directly without checking.
 pub fn add_iptables_rule(command: &str, rule: &[&str]) -> Result<(), KernelInterfaceError> {
-    assert!(rule.contains(&"-A") || rule.contains(&"-I") || rule.contains(&"-D"));
+    assert!(
+        rule.contains(&"-A")
+            || rule.contains(&"-I")
+            || rule.contains(&"-D")
+            || rule.contains(&"-F")
+    );
+
+    // For flush and delete operations, execute directly without idempotency check
+    if rule.contains(&"-F") || rule.contains(&"-D") {
+        run_command(command, rule)?;
+        return Ok(());
+    }
 
     // we replace the add or append commands with a check command so that we can see if the rule is actually present
     // if it is then we don't need to do anything

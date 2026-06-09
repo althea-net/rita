@@ -152,14 +152,18 @@ fn setup_exit_tunnel(
     match (signed_up_for_exit, exit_has_changed, correct_default_route) {
         (Some(details), true, _) => {
             trace!("Exit change, setting up exit tunnel");
-            linux_setup_exit_tunnel(selected_exit, &general_details.clone(), details)
-                .expect("failure setting up exit tunnel");
+            if let Err(e) = linux_setup_exit_tunnel(selected_exit, &general_details.clone(), details) {
+                error!("Failed to setup exit tunnel: {e:?}");
+                return false;
+            }
             true
         }
         (Some(details), false, false) => {
             trace!("DHCP overwrite setup exit tunnel again");
-            linux_setup_exit_tunnel(selected_exit, &general_details.clone(), details)
-                .expect("failure setting up exit tunnel");
+            if let Err(e) = linux_setup_exit_tunnel(selected_exit, &general_details.clone(), details) {
+                error!("Failed to setup exit tunnel: {e:?}");
+                return false;
+            }
             true
         }
         (None, _, _) => {
